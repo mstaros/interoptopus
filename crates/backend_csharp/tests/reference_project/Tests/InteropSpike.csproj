@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Exe</OutputType>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <TestHostRuntime>PatchedCoreRunRequired</TestHostRuntime>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Bindings\Bindings.csproj" />
+    <PackageReference Include="TUnit" Version="1.36.0" />
+    <Compile Include="InteropSpike.cs" />
+  </ItemGroup>
+  <Target Name="BuildRustReferenceProject" BeforeTargets="PrepareForBuild">
+    <Exec
+      Command="cargo build -p reference_project --all-features"
+      WorkingDirectory="$(MSBuildThisFileDirectory)..\..\..\..\.." />
+  </Target>
+</Project>

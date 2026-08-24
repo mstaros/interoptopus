@@ -22,7 +22,11 @@ impl ServiceAsyncWire {
         })
     }
 
-    pub async fn wire_passthrough(_: Async<Self>, x: Wire<HashMap<String, String>>) -> ffi::Result<Wire<HashMap<String, String>>, Error> {
-        ffi::Result::Ok(x)
+    pub async fn wire_passthrough(
+        _: Async<Self>,
+        mut x: Wire<HashMap<String, String>>,
+    ) -> ffi::Result<Wire<HashMap<String, String>>, Error> {
+        let values = x.unwire();
+        ffi::Result::Ok(Wire::from(values))
     }
 }
