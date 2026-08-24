@@ -69,3 +69,96 @@ Filed upstream as `10b7b672` in `rust-mcp-transform`.
 ### Hazard
 
 The previous recommended action — `cargo insta review` — is destructive in that state. Accepting against stub baselines overwrites every LFS pointer with raw generated content, silently un-LFS-ing the snapshots. Before measuring this suite, confirm `crates/backend_csharp/tests/reference_project/snapshots/r#mod__reference_project__interop.snap` is ~847 KB and not three lines.
+## Enum variant discriminant is the declared tag for unit variants but the positional index for payload variants
+
+```issue
+id: 09b82d44
+kind: bug
+severity: high
+status: open
+```
+
+### Symptom
+
+`crates/backend_csharp/src/pass/model/common/types/kind/enum_variants.rs` derives a variant's
+discriminant differently depending on whether the variant carries a payload:
+
+```rust
+VariantKind::Unit(tag)           => (*tag, None),
+VariantKind::Tuple(rust_type_id) => (index.cast_signed(), Some(cs_type_id)),
+```
+
+Unit variants use their declared discriminant. Payload variants use their **positional
+index**. For any enum mixing the two with explicit discriminants, the managed `_variant`
+field and the native Rust tag disagree.
+
+Example: `enum E { A = -1, B(u32) }` gives `A` the declared `-1` and `B` the positional `1`,
+while Rust assigns `B` whatever its own discriminant rules produce.
+
+### Root cause
+
+The information does not exist in the core model. `crates/core/src/lang/types/enums.rs`:
+
+```rust
+pub enum VariantKind {
+    Unit(isize),   // carries a discriminant
+    Tuple(TypeId), // carries none
+}
+```
+
+`Tuple` has nowhere to put a tag, so the backend has no alternative to the index. This is a
+core-model gap, not a backend bug — the backend is doing the only thing it can.
+
+### Impact
+
+Silent at generation time. `_variant` is written into the explicit-layout `Unmanaged` struct
+and read back by `Unmanaged.ToManaged()`, so a mismatch corrupts the round trip for affected
+enums rather than failing loudly.
+
+No enum in `crates/reference_project/src/types/enums.rs` currently triggers it: `EnumNegative`
+uses explicit discriminants but is unit-only, and `EnumPayload` has payloads but no explicit
+discriminants. A single reference-project enum combining both would expose it.
+
+### Proposed fix
+
+Move the discriminant onto `Variant`, leaving `VariantKind` as a pure payload descriptor:
+
+```rust
+pub struct Variant {
+    pub name: String,
+    pub docs: Docs,
+    pub tag: isize,
+    pub kind: VariantKind,
+}
+
+pub enum VariantKind {
+    Unit,
+    Tuple(TypeId),
+}
+```
+
+The alternative — adding a second element to `VariantKind::Tuple` — keeps the discriminant
+conditional on variant shape and would need revisiting when named and multi-field variants
+are added.
+
+### Blast radius
+
+| Location | Change |
+|---|---|
+| `core/src/lang/types/enums.rs` | struct, `VariantKind`, `Variant::new` signature |
+| `proc_macros_impl` | must compute discriminants (see below) |
+| `backend_csharp/.../enum_variants.rs` | read `v.tag` unconditionally |
+| `backend_c`, `backend_cpython` | defunct but still compile against these types |
+| serde inventory shape | changes under the `serde` feature |
+
+The substantive work is in the proc macro: it must replicate Rust's discriminant assignment —
+explicit values where given, previous-plus-one otherwise — across mixed unit and payload
+variants. **Unverified:** whether it currently sees explicit discriminants on payload
+variants at all. That determines whether this is plumbing or real logic.
+
+### Note
+
+Needs a reference-project enum mixing explicit discriminants with payload variants, plus a
+round-trip assertion. This blocks `docs/csharp-unions.md`, whose `ToManaged()` tag validation
+would otherwise validate against the wrong tag set — but it is a correctness bug in its own
+right and should be reviewed independently of that plan.
