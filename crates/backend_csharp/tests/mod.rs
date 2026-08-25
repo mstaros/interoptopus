@@ -129,29 +129,6 @@ fn ensure_plugin_built(base: &Path, name: &str) -> Result<(), Box<dyn Error>> {
     std::fs::create_dir_all(staged_dir)?;
     let _lock = PluginBuildLock::acquire(staged_dir.join(format!(".lock-{name}")))?;
 
-    // TEMPORARY DIAGNOSTIC — remove before commit. Prints on every attempt, not just
-    // failures, so a passing run can be compared against a failing one. `path1` fails
-    // identically on every plugin under the commit validator and on none of them under
-    // run_cargo_tests, in the same worktree, minutes apart.
-    {
-        use std::io::Write;
-        let mut line = format!("[diag] {}\n", csproj.display());
-        line.push_str(&format!("  cwd = {:?}\n", std::env::current_dir().ok()));
-        for var in ["USERPROFILE", "APPDATA", "NUGET_PACKAGES", "DOTNET_CLI_HOME", "TEMP"] {
-            line.push_str(&format!("  {var} = {:?}\n", std::env::var(var).ok()));
-        }
-        for (i, entry) in std::env::var("PATH").unwrap_or_default().split(';').filter(|e| !e.is_empty()).enumerate() {
-            line.push_str(&format!("  PATH[{i}] = {entry}\n"));
-        }
-        line.push_str(&format!("  which dotnet = {:?}\n", std::env::var("PATH").unwrap_or_default().split(';').map(|d| std::path::Path::new(d).join("dotnet.exe")).find(|p| p.exists())));
-        line.push_str(&format!("  obj = {}, assets = {}\n", project_dir.join("obj").exists(), project_dir.join("obj").join("project.assets.json").exists()));
-        // A file, not stderr: nextest discards output for passing tests, and the whole point
-        // is to compare a passing run against a failing one.
-        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(std::env::temp_dir().join("interoptopus-plugin-diag.log")) {
-            let _ = f.write_all(line.as_bytes());
-        }
-    }
-
     let status = std::process::Command::new("dotnet").args(["build", "-c", "Release", "-v", "q"]).arg(&csproj).status()?;
     if !status.success() {
         // NuGet resolves its package root and user-level config from the ambient environment.
