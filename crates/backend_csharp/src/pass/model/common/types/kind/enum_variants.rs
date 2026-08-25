@@ -55,7 +55,7 @@ impl Pass {
                     }
                 };
 
-                cs_variants.push(Variant { name: rust_variant.name.clone(), docs: rust_variant.docs.clone(), tag, ty: cs_variant_type_id });
+                cs_variants.push(Variant { name: rust_variant.name.clone(), docs: rust_variant.docs.clone(), tag, ty: cs_variant_type_id, stem: String::new(), case_type: String::new() });
             }
 
             if !all_variants_available {

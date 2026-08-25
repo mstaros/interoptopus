@@ -49,7 +49,7 @@ impl Pass {
                     let to_managed = managed.to_managed_suffix(variant_ty).to_string();
 
                     let mut m = HashMap::new();
-                    m.insert("name", v.name.clone());
+                    m.insert("name", v.stem.clone());
                     m.insert("id", v.tag.to_string());
                     m.insert("to_managed", to_managed);
                     Some(m)

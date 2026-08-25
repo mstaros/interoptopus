@@ -3,26 +3,32 @@
 //! Union projection adds one nested case type per variant on top of the members the
 //! generator already emits (factory, `IsX`, `AsX`, payload field, unmanaged helper), and
 //! the union contract itself claims a set of fixed names. All of these share a single C#
-//! declaration space, so names have to be allocated centrally rather than formatted
-//! independently in seven templates.
+//! declaration space, so names are allocated centrally rather than formatted
+//! independently in nine output passes.
 //!
 //! The policy is **preservation-biased**: a variant keeps the exact name the generator
 //! emits today unless a fixed union member makes that impossible. New union-only names
 //! (the case type) move on collision instead of forcing a rename of existing public API.
 //!
 //! Stems are the Rust variant name *verbatim*. `enum_variants.rs` clones
-//! `rust_variant.name` and the templates emit `{{ v.name }}` unmodified, so verbatim is
-//! what the generator produces today; re-casing here would silently rename members on
-//! enums that have no collision at all. Templates must not re-sanitize after this pass,
-//! or uniqueness is no longer guaranteed.
+//! `rust_variant.name` and the templates emit it unmodified, so verbatim is what the
+//! generator produces today; re-casing here would silently rename members on enums that
+//! have no collision at all. Templates must not re-sanitize after this pass, or
+//! uniqueness is no longer guaranteed. Keyword escaping is deliberately out of scope --
+//! see `Issues.md` `7c8cb22e`.
+//!
+//! Names are written into `type_kinds`, the source of truth. `type_all` rebuilds its
+//! `Type` values from `type_kinds`, so writing there instead would populate a downstream
+//! copy that is later overwritten -- which is what happened for the `Result` and `Option`
+//! enums synthesised by `fallback.rs` and injected by `type_map_patterns`.
 //!
 //! See `docs/csharp-unions.md`, item 1.
 
 use crate::lang::TypeId;
-use crate::lang::types::kind::TypeKind;
+use crate::lang::types::kind::{DataEnum, TypeKind, TypePattern};
 use crate::pass::Outcome::Unchanged;
 use crate::pass::{ModelResult, PassInfo, model};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 /// Members every generated union declares, which no variant-derived name may take.
 ///
@@ -72,7 +78,29 @@ pub struct VariantNames {
 
 pub struct Pass {
     info: PassInfo,
-    variants: HashMap<TypeId, Vec<VariantNames>>,
+}
+
+/// Borrows the `DataEnum` a kind carries, if any.
+///
+/// A `DataEnum` reaches the model by three routes: directly from `enum_variants` for a
+/// plain `#[ffi]` enum, and wrapped inside `TypePattern::Option` or `TypePattern::Result`
+/// for the shapes `fallback.rs` synthesises and `type_map_patterns` installs. Matching
+/// only the first left `Ok` and `Err` unresolved, which emitted `_` for every payload
+/// field and factory.
+fn data_enum(kind: &TypeKind) -> Option<&DataEnum> {
+    match kind {
+        TypeKind::DataEnum(e) => Some(e),
+        TypeKind::TypePattern(TypePattern::Option(_, e) | TypePattern::Result(_, _, e)) => Some(e),
+        _ => None,
+    }
+}
+
+fn data_enum_mut(kind: &mut TypeKind) -> Option<&mut DataEnum> {
+    match kind {
+        TypeKind::DataEnum(e) => Some(e),
+        TypeKind::TypePattern(TypePattern::Option(_, e) | TypePattern::Result(_, _, e)) => Some(e),
+        _ => None,
+    }
 }
 
 /// Names derived from a stem that the generator already emits today.
@@ -151,37 +179,51 @@ fn resolve(enclosing: &str, stems: &[String]) -> Vec<VariantNames> {
 impl Pass {
     #[must_use]
     pub fn new(_: Config) -> Self {
-        Self { info: PassInfo { name: file!() }, variants: HashMap::default() }
+        Self { info: PassInfo { name: file!() } }
     }
 
-    pub fn process(&mut self, _pass_meta: &mut crate::pass::PassMeta, types: &model::common::types::all::Pass) -> ModelResult {
+    /// Writes resolved names onto each variant of every `DataEnum` in `kinds`.
+    ///
+    /// Names live on the variant rather than in a side table keyed by `TypeId`. Several
+    /// output passes filter variants before emitting -- `body` keeps only disposable
+    /// ones, `body_as_unmanaged` only payload-carrying ones -- so a parallel vector
+    /// indexed positionally would misalign silently after any filter.
+    pub fn process(
+        &mut self,
+        pass_meta: &mut crate::pass::PassMeta,
+        kinds: &mut model::common::types::kind::Pass,
+        names: &model::common::types::names::Pass,
+    ) -> ModelResult {
         let mut outcome = Unchanged;
 
-        for (id, ty) in types.iter() {
-            let TypeKind::DataEnum(data_enum) = &ty.kind else { continue };
+        // An empty stem marks an unresolved variant. Enums with no variants are trivially
+        // resolved and must not re-trigger on every convergence cycle.
+        let pending: Vec<(TypeId, TypeKind)> = kinds
+            .iter()
+            .filter(|(_, kind)| data_enum(kind).is_some_and(|e| e.variants.iter().any(|v| v.stem.is_empty())))
+            .map(|(id, kind)| (*id, kind.clone()))
+            .collect();
 
-            if self.variants.contains_key(id) {
+        for (id, mut kind) in pending {
+            // The enclosing type name is reserved, so wait for it rather than resolving
+            // against a name that is not yet known.
+            let Some(enclosing) = names.get(id).cloned() else {
+                pass_meta.lost_found.missing(self.info, crate::pass::MissingItem::CsType(id));
                 continue;
+            };
+
+            let Some(target) = data_enum_mut(&mut kind) else { continue };
+            let stems: Vec<String> = target.variants.iter().map(|v| v.name.clone()).collect();
+            for (variant, resolved) in target.variants.iter_mut().zip(resolve(&enclosing, &stems)) {
+                variant.stem = resolved.stem;
+                variant.case_type = resolved.case_type;
             }
 
-            let stems: Vec<String> = data_enum.variants.iter().map(|v| v.name.clone()).collect();
-            self.variants.insert(*id, resolve(&ty.name, &stems));
+            kinds.set(id, kind);
             outcome.changed();
         }
 
         Ok(outcome)
-    }
-
-    /// Returns the name family for `ty`, or `None` when the count does not match.
-    ///
-    /// Consumers must index positionally against `DataEnum::variants`. The length check
-    /// exists because `zip` truncates silently: a mismatch would drop a variant from the
-    /// generated output with no error anywhere. Callers should treat `None` as a
-    /// generation failure, not as "no unions here".
-    #[must_use]
-    pub fn get(&self, ty: TypeId, variant_count: usize) -> Option<&[VariantNames]> {
-        let names = self.variants.get(&ty)?;
-        (names.len() == variant_count).then(|| names.as_slice())
     }
 }
 
@@ -216,7 +258,7 @@ mod tests {
     #[test]
     fn existing_value_variant_is_preserved_and_value_moves_past_it() {
         // Declaration order deliberately puts the problematic variant first: pass 1 must
-        // claim `ValueVariant` for the variant that already emits it before pass 2 runs.
+        // claim `ValueVariant` for the variant already emitting it before pass 2 runs.
         let r = names("E", &["Value", "ValueVariant"]);
         assert_eq!(r[1].factory, "ValueVariant");
         assert!(!r[1].renamed);
@@ -277,6 +319,24 @@ mod tests {
         assert_eq!(r[1].factory, "ValueVariant");
         assert_eq!(r[2].factory, "ValueVariant2");
         assert_eq!(r[0].factory, "ValueVariant3");
+    }
+
+    #[test]
+    fn result_and_option_variants_resolve_unchanged() {
+        // The shapes `fallback.rs` synthesises. Regression guard: these reach the model
+        // through `type_map_patterns` rather than `enum_variants`, and an earlier version
+        // of this pass missed them entirely, emitting `_` for every payload field.
+        let r = names("ResultUintError", &["Ok", "Err", "Panic", "Null"]);
+        assert_eq!(r[0].factory, "Ok");
+        assert_eq!(r[0].field, "_Ok");
+        assert_eq!(r[0].unmanaged, "UnmanagedOk");
+        assert_eq!(r[1].field, "_Err");
+        assert!(r.iter().all(|v| !v.renamed));
+
+        let o = names("OptionUint", &["Some", "None"]);
+        assert_eq!(o[0].field, "_Some");
+        assert_eq!(o[1].field, "_None");
+        assert!(o.iter().all(|v| !v.renamed));
     }
 
     #[test]

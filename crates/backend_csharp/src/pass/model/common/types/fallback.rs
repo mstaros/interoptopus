@@ -141,7 +141,7 @@ fn field(name: &str, ty: TypeId) -> Field {
 }
 
 fn variant(name: &str, tag: isize, ty: Option<TypeId>) -> Variant {
-    Variant { name: name.to_string(), docs: Docs::default(), tag, ty }
+    Variant { name: name.to_string(), docs: Docs::default(), tag, ty, stem: String::new(), case_type: String::new() }
 }
 
 /// Resolves a Rust type to an optional C# variant payload.

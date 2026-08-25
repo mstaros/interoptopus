@@ -42,7 +42,7 @@ impl Pass {
                 .iter()
                 .map(|v| {
                     let mut m = HashMap::new();
-                    m.insert("name", Value::normal_string(&v.name));
+                    m.insert("name", Value::normal_string(&v.stem));
                     m.insert("id", Value::from(v.tag as i64));
                     m.insert("has_payload", Value::from(v.ty.is_some()));
                     m

@@ -53,7 +53,7 @@ impl Pass {
                             .unwrap_or_default();
 
                     let mut m = HashMap::new();
-                    m.insert("name", Value::normal_string(&v.name));
+                    m.insert("name", Value::normal_string(&v.stem));
                     m.insert("id", Value::from(v.tag as i64));
                     m.insert("has_payload", Value::from(has_payload));
                     m.insert("type", Value::normal_string(&type_name));

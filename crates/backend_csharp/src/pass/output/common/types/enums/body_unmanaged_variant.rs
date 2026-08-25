@@ -52,7 +52,7 @@ impl Pass {
                 };
 
                 let mut context = Context::new();
-                context.insert("variant", &variant.name);
+                context.insert("variant", &variant.stem);
                 context.insert("unmanaged_name", variant_type);
                 context.insert("discriminant_type", data_enum.discriminant_type.cs_name());
 

@@ -59,7 +59,7 @@ impl Pass {
                     let ty = super::resolve_service_variant(v.ty?, types, mode);
                     let ty_name = types.get(ty).map(|t| &t.name)?;
                     let mut m = HashMap::new();
-                    m.insert("name", v.name.clone());
+                    m.insert("name", v.stem.clone());
                     m.insert("type", ty_name.clone());
                     Some(m)
                 })
