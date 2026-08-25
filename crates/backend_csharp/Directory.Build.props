@@ -1,0 +1,20 @@
+<Project>
+  <!--
+    C# 15 unions are a preview language feature until GA (expected November 2026).
+    Every project under crates/backend_csharp compiles generated bindings that use
+    [Union] / IUnion, so preview is required repo-wide rather than per-project.
+
+    Set here rather than in each .csproj so that new projects inherit it and cannot
+    silently fall back to the stable language version, which would fail with an
+    unhelpful "feature is not available in C# 14" rather than a clear toolchain error.
+
+    Requires a .NET 11 Preview 5+ SDK: UnionAttribute and IUnion ship in the runtime
+    from that preview onward. Remove this file once C# 15 is GA and the SDK default
+    language version covers unions.
+
+    See docs/csharp-unions.md, Step 2.
+  -->
+  <PropertyGroup>
+    <LangVersion>preview</LangVersion>
+  </PropertyGroup>
+</Project>

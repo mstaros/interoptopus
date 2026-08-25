@@ -18,12 +18,12 @@ build-dotnet-plugins: (_bdp_ref "functions_primitive") (_bdp_ref "functions_beha
 # Helper to build a .NET `reference-plugins` plugin.
 _bdp_ref name:
     dotnet build -c Release crates/backend_csharp/tests/reference_plugins/{{ name }}.dll/{{ name }}.csproj -v q 
-    cp crates/backend_csharp/tests/reference_plugins/{{ name }}.dll/bin/Release/net10.0/{{ name }}.dll crates/backend_csharp/tests/reference_plugins/_plugins
+    cp crates/backend_csharp/tests/reference_plugins/{{ name }}.dll/bin/Release/net11.0/{{ name }}.dll crates/backend_csharp/tests/reference_plugins/_plugins
 
 # Helper to build a .NET `plugins` plugin.
 _bdp_p name:
     dotnet build -c Release crates/backend_csharp/tests/backend_plugins/{{ name }}.dll/{{ name }}.csproj -v q
-    cp crates/backend_csharp/tests/backend_plugins/{{ name }}.dll/bin/Release/net10.0/{{ name }}.dll crates/backend_csharp/tests/backend_plugins/_plugins
+    cp crates/backend_csharp/tests/backend_plugins/{{ name }}.dll/bin/Release/net11.0/{{ name }}.dll crates/backend_csharp/tests/backend_plugins/_plugins
 
 # Run unit tests, check semantic correctness.
 [arg("verbose", long="verbose", short="v", value="--verbose")]

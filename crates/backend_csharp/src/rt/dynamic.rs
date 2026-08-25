@@ -19,13 +19,25 @@ use netcorehost::pdcstring::PdCString;
 use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
 
+// The framework version below is deliberately a *pre-release* string.
+//
+// hostfxr will not roll forward from a release request to a pre-release runtime: asking for
+// "11.0.0" excludes every installed 11.0.0-preview.N and fails with "It was not possible to
+// find a compatible framework version", even though a preview is present. Requesting a
+// pre-release enables pre-release resolution, and `rollForward: LatestMajor` then picks the
+// newest installed 11.x.
+//
+// This stays correct after C# 15 / .NET 11 GA: a release version outranks any pre-release, so
+// roll-forward selects the released runtime once one is installed. The string can be
+// simplified to "11.0.0" then, but nothing breaks if it is not.
+
 const DEFAULT_RUNTIME_CONFIG: &str = r#"{
   "runtimeOptions": {
-    "tfm": "net10.0",
+    "tfm": "net11.0",
     "rollForward": "LatestMajor",
     "framework": {
       "name": "Microsoft.NETCore.App",
-      "version": "10.0.0"
+      "version": "11.0.0-preview.1"
     }
   }
 }"#;
