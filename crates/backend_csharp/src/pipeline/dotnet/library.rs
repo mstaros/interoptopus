@@ -373,8 +373,8 @@ impl DotnetLibrary {
         o.delegates_signature.process(&mut pass_meta, &self.output_master, &m.type_all)?;
         o.pattern_bools.process(&mut pass_meta, &self.output_master, &m.type_all)?;
         o.wire_buffer.process(&mut pass_meta, &self.output_master, &m.wire_helpers, &self.inventory.functions, &self.inventory.types)?;
-        o.wire_types.process(&mut pass_meta, &self.output_master, &m.type_all, &m.id_maps, &self.inventory.types)?;
-        o.wire_helper_classes.process(&mut pass_meta, &self.output_master, &m.type_all, &m.id_maps, &self.inventory.types, &o.wire_types)?;
+        o.wire_types.process(&mut pass_meta, &self.output_master, &m.type_all, &m.id_maps, &m.type_struct_class, &self.inventory.types)?;
+        o.wire_helper_classes.process(&mut pass_meta, &self.output_master, &m.type_all, &m.id_maps, &m.type_struct_class, &self.inventory.types, &o.wire_types)?;
         o.wires.process(&mut pass_meta, &self.output_master, &o.wire_types, &o.wire_helper_classes)?;
         o.interop_raw_sync_fn.process(&mut pass_meta, &self.output_master, &m.trampoline, &m.plugin_interface, &m.fns_all, &m.type_all, &o.unmanaged_names, &o.unmanaged_conversion)?;
         o.interop_raw_async_fn.process(&mut pass_meta, &self.output_master, &m.trampoline, &m.plugin_interface, &m.fns_all, &m.type_all, &o.unmanaged_names, &o.unmanaged_conversion)?;

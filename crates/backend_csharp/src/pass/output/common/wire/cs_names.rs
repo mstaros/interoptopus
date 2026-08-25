@@ -68,6 +68,43 @@ impl<'a> CsNames<'a> {
     }
 }
 
+/// Wire's view of one further model decision: does `T?` yield `Nullable<T>`, or a nullable
+/// reference?
+///
+/// Kept separate from [`CsNames`] rather than added to it. That type is named for identifiers
+/// and is deliberately two methods wide; this is a different question with a different
+/// authority, and folding it in would dissolve the boundary `CsNames` exists to hold.
+///
+/// The question matters more than "struct or class" suggests. C# 15 unions must declare
+/// `HasValue` and `Value` (`docs/csharp-unions.md` §"Reserved names"), and wire's `Option`
+/// emission uses those same two identifiers to mean `Nullable<T>`'s members. For a
+/// struct-backed union `Nullable<T>` shadows them and wire is correct. For a class-backed one
+/// nothing shadows, and `.HasValue` binds to the union contract instead — which
+/// `struct_class` deliberately produces for `OptionUtf8String` and owned `Result` types.
+pub struct CsLayout<'a> {
+    id_map: &'a model::common::id_map::Pass,
+    struct_class: &'a model::common::types::info::struct_class::Pass,
+}
+
+impl<'a> CsLayout<'a> {
+    #[must_use]
+    pub fn new(id_map: &'a model::common::id_map::Pass, struct_class: &'a model::common::types::info::struct_class::Pass) -> Self {
+        Self { id_map, struct_class }
+    }
+
+    /// Whether the C# type for `rust_id` is a value type, per the model.
+    ///
+    /// Only meaningful for *nominal* types. `struct_class` answers `false` for anything it has
+    /// not registered, so callers must not hand it primitives or `WireOnly` kinds and read the
+    /// answer as authoritative — a primitive would come back "reference type" and
+    /// `Option<u32>` would emit a null check on a `uint?`.
+    #[must_use]
+    pub fn is_value_type(&self, rust_id: RsTypeId) -> Option<bool> {
+        let cs_id = self.id_map.ty(rust_id)?;
+        Some(self.struct_class.is_struct(cs_id))
+    }
+}
+
 /// Borrows the stem of the variant carrying `tag`, if the kind carries a `DataEnum` at all.
 ///
 /// Split out from [`CsNames`] so it is testable without constructing a pass. Resolution goes

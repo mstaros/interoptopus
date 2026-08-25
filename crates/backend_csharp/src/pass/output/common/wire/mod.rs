@@ -11,7 +11,7 @@ pub mod cs_names;
 pub mod helper_classes;
 pub mod wire_type;
 
-use self::cs_names::CsNames;
+use self::cs_names::{CsLayout, CsNames};
 use interoptopus::inventory::{TypeId, Types as RsTypes};
 use interoptopus::lang::types::{Array, Layout, Primitive, Struct, TypeKind as RsTypeKind, VariantKind, WireOnly};
 
@@ -23,6 +23,9 @@ pub struct WireCodeGen<'a> {
     pub rs_types: &'a RsTypes,
     /// Wire's two-method view of the resolved C# model. Deliberately not the model itself.
     pub cs: CsNames<'a>,
+    /// Whether `T?` yields `Nullable<T>` or a nullable reference. A separate question from
+    /// identifiers, with a separate authority; see `Issues.md` 31248473.
+    pub layout: CsLayout<'a>,
 }
 
 impl WireCodeGen<'_> {
@@ -423,7 +426,7 @@ impl WireCodeGen<'_> {
 
     fn emit_option_serialize(&self, lines: &mut Vec<String>, inner_id: TypeId, val: &str, depth: usize, indent: usize) {
         let p = pad(indent);
-        if is_cs_value_type(inner_id, self.rs_types) {
+        if is_cs_value_type(inner_id, self.rs_types, &self.layout) {
             lines.push(format!("{p}writer.Write((byte)({val}.HasValue ? 1 : 0));"));
             lines.push(format!("{p}if ({val}.HasValue)"));
             lines.push(format!("{p}{{"));
@@ -446,7 +449,7 @@ impl WireCodeGen<'_> {
         lines.push(format!("{pi}var {has_var} = reader.ReadByte() != 0;"));
         lines.push(format!("{pi}if ({has_var})"));
         lines.push(format!("{pi}{{"));
-        if is_cs_value_type(inner_id, self.rs_types) {
+        if is_cs_value_type(inner_id, self.rs_types, &self.layout) {
             let cs_inner = self.cs_type_name(inner_id);
             let tmp_var = format!("_optVal{depth}");
             lines.push(format!("{pi2}{cs_inner} {tmp_var} = default;"));
@@ -466,7 +469,7 @@ impl WireCodeGen<'_> {
     fn emit_option_size(&self, lines: &mut Vec<String>, inner_id: TypeId, val: &str, depth: usize, indent: usize) {
         let p = pad(indent);
         lines.push(format!("{p}_size += 1;"));
-        if is_cs_value_type(inner_id, self.rs_types) {
+        if is_cs_value_type(inner_id, self.rs_types, &self.layout) {
             lines.push(format!("{p}if ({val}.HasValue)"));
             lines.push(format!("{p}{{"));
             self.emit_size(lines, inner_id, &format!("{val}.Value"), depth, indent + 1);
@@ -539,11 +542,23 @@ fn cs_primitive_size(p: Primitive) -> &'static str {
 /// Returns `true` if the Rust type maps to a C# value type (struct/primitive/enum)
 /// rather than a reference type (class, string, List, Dictionary).
 /// Structs with `WireOnly` fields are emitted as C# classes, so they are reference types.
-fn is_cs_value_type(ty_id: TypeId, rs_types: &RsTypes) -> bool {
+fn is_cs_value_type(ty_id: TypeId, rs_types: &RsTypes, layout: &CsLayout<'_>) -> bool {
     let Some(ty) = rs_types.get(&ty_id) else { return false };
     match &ty.kind {
-        RsTypeKind::Primitive(_) | RsTypeKind::Enum(_) | RsTypeKind::Array(_) => true,
-        RsTypeKind::Struct(s) => !s.fields.iter().any(|f| contains_wireonly(f.ty, rs_types, &mut std::collections::HashSet::new())),
+        // Decided here, not by the model: `struct_class` registers only types that reach
+        // `types::all` with a managed conversion, and answers `false` for everything else.
+        // Delegating a primitive would report "reference type" and turn `Option<u32>` into a
+        // null check on a `uint?`.
+        RsTypeKind::Primitive(_) => true,
+        // C# arrays are reference types. This arm said `true` until `Issues.md` 31248473.
+        RsTypeKind::Array(_) => false,
+        // `string`, `List<T>`, `Dictionary<K, V>` — all reference types.
+        RsTypeKind::WireOnly(_) => false,
+        // Nominal types: the model decides, and six other output passes already ask it.
+        // Wire re-deriving this is what 31248473 records; a `DataEnum` with a `WireOnly`
+        // payload is emitted as a class, and the old `Enum(_) => true` made wire emit
+        // `.HasValue`/`.Value` on it.
+        RsTypeKind::Struct(_) | RsTypeKind::Enum(_) => layout.is_value_type(ty_id).unwrap_or(false),
         _ => false,
     }
 }

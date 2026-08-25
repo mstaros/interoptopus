@@ -619,7 +619,7 @@ escaped or cased stem is the cheaper gate.
 id: 31248473
 kind: bug
 severity: medium
-status: open
+status: closed
 ```
 
 ### Symptom
@@ -657,9 +657,32 @@ Counting the whole family: `tag` re-derived three times (`09b82d44`, `c928d53e`)
 
 Thread `struct_class::Pass` to `WireCodeGen` the way `4e9a17c3` threaded the name resolver — as a narrow accessor, not the whole pass — and delete `is_cs_value_type`'s own derivation. Note that `contains_wireonly` is currently duplicated between this file and `types/kind/struct_fields.rs`; the model-side copy is the authority.
 
-### Also here, unrelated to the above
+### Also here, unrelated to the above — RETRACTED
 
-`wire/helper_classes.rs::resolve_field_type_name` degrades gracefully for a missing model entry (`types.get(cs_ty)`, then `"object"`) three lines below a `cs_type_name` call that now panics on that same condition. Two policies for one failure in one function. No reproduction found: the near-miss — `patterns.rs:58` skipping `ffi::Option` over a `WireOnly` inner — routes through `cs_type_name`'s `TypePattern::Option` arm and never reaches the panicking arm. Misleading rather than broken; the fallback reads as if it handles a case its caller no longer reaches.
+This issue claimed `wire/helper_classes.rs::resolve_field_type_name` held "two policies for one failure". **That was wrong, and it was wrong when filed.** The two returns answer different questions. The loop asks which Rust type maps to `cs_ty` and hands the answer to wire, where a missing model entry is an invariant violation and `cs_type_name` panics. The fallback fires when *no* Rust type maps to `cs_ty` at all — which `types::all` documents as normal for synthesized types such as overload siblings. Different conditions, both behaviours correct.
+
+No code change. The fallback's condition was simply never stated, which is what made it read as duplicated error handling; it is now documented in place.
+
+### Resolution
+
+Reproduced before fixing, which is what the ticket demanded. An enum with a `String` payload is `Into`, so `struct_class` emits it as a class; `Option<Choice>` inside a `Wire<T>` produced eight uncompilable lines:
+
+```csharp
+writer.Write((byte)(value.choice.HasValue ? 1 : 0));
+if (value.choice.Value.IsText)
+_size += 4 + ...GetByteCount(value.choice.Value.AsText() ?? "");
+```
+
+Not latent, and worse than predicted — the prediction was the `HasValue` check, not `.Value` threaded through every payload access.
+
+The fix is a hybrid, forced by measurement rather than chosen: `struct_class.is_struct` answers `false` for anything unregistered, so delegating a primitive would report "reference type" and turn `Option<u32>` into a null check on a `uint?`. Primitives and `WireOnly` are still answered locally; only `Struct` and `Enum` go to the model, through a new `CsLayout` — a second narrow view rather than a third method on `CsNames`, since struct-vs-class is not an identifier concern.
+
+`Array(_) => true` was corrected to `false` in passing. C# arrays are reference types. No snapshot moved, so nothing in the corpus exercises it: a latent fix, unverified by test.
+
+Mutation-proven: reverting the delegation reproduces the same eight lines and fails only its own test. Regression test `tests/output/wire/option_value_type.rs`, with a guard asserting the fixture is still class-backed.
+
+**Timing mattered.** After Step 3c a class-backed union declares its own `HasValue`, so `.HasValue` would bind to the union contract's constant-`true` member rather than failing to compile — turning a loud error into a silent one. Fixed before 3c for that reason.
+
 ## wire::nested writes type names, making it a second naming authority alongside names.rs
 
 ```issue

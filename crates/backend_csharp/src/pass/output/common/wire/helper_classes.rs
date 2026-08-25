@@ -8,7 +8,7 @@ use crate::lang::types::kind::TypeKind;
 use crate::lang::types::kind::wire::WireOnly;
 use crate::output::{FileType, Output};
 use crate::pass::output::common::wire::WireCodeGen;
-use crate::pass::output::common::wire::cs_names::CsNames;
+use crate::pass::output::common::wire::cs_names::{CsLayout, CsNames};
 use crate::pass::{OutputResult, PassInfo, model, output};
 use interoptopus::inventory::Types as RsTypes;
 use interoptopus_backends::template::Context;
@@ -34,11 +34,12 @@ impl Pass {
         output_master: &output::common::master::Pass,
         types: &model::common::types::all::Pass,
         id_map: &model::common::id_map::Pass,
+        struct_class: &model::common::types::info::struct_class::Pass,
         rs_types: &RsTypes,
         wire_types: &output::common::wire::wire_type::Pass,
     ) -> OutputResult {
         let templates = output_master.templates();
-        let codegen = WireCodeGen { rs_types, cs: CsNames::new(types, id_map) };
+        let codegen = WireCodeGen { rs_types, cs: CsNames::new(types, id_map), layout: CsLayout::new(id_map, struct_class) };
 
         // Route each helper class to the output file its type is routed to.
         let mut helpers_by_output: HashMap<Output, Vec<String>> = HashMap::new();
@@ -114,6 +115,16 @@ impl Pass {
 /// managed type names (`string`, `List<T>`, `uint?`, etc.) rather than FFI
 /// envelope names (`Utf8String`, `VecU8`, `OptionUint`).  We always prefer the
 /// wire codegen which produces the correct managed C# type name.
+///
+/// The two returns below answer *different* questions, which is worth stating because it reads
+/// like duplicated error handling and was misfiled as such once (`Issues.md` 31248473):
+///
+/// - The loop asks "which Rust type is this C# type?" and hands the answer to wire. A missing
+///   model entry for a type wire reaches is an invariant violation and `cs_type_name` panics.
+/// - The fallback answers a different question: no Rust type maps to `cs_ty` at all. That is
+///   normal, not a failure — `types::all` documents synthesized types such as overload siblings
+///   as absent from the inventory. Their model name is the right answer, and `"object"` covers
+///   a C# id the model does not know either.
 fn resolve_field_type_name(
     cs_ty: crate::lang::TypeId,
     types: &model::common::types::all::Pass,
