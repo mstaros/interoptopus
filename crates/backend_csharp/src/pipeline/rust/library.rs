@@ -414,7 +414,7 @@ impl RustLibrary {
             r.run(m.pattern_string.process(&mut pass_meta, &self.inventory.functions))?;
             r.run(m.pattern_vec.process(&mut pass_meta, &m.id_maps, &self.inventory.functions, &self.inventory.types))?;
             r.run(m.wire_helpers.process(&mut pass_meta, &self.inventory.functions))?;
-            r.run(m.wire_nested.process(&mut pass_meta, &m.id_maps, &mut m.type_kinds, &mut m.type_names, &self.inventory.types))?;
+            r.run(m.wire_nested.process(&mut pass_meta, &m.id_maps, &mut m.type_kinds, &self.inventory.types))?;
             r.run(m.service_all.process(&mut pass_meta, &m.id_maps, &self.inventory.services))?;
             r.run(m.service_ctor_shape.process(&mut pass_meta, &m.service_all, &m.fns_all, &m.type_all))?;
             r.run(m.service_method_names.process(&mut pass_meta, &m.service_all, &m.fns_all, &m.type_all))?;

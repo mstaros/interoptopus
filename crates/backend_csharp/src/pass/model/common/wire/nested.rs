@@ -13,7 +13,6 @@ use crate::pass::Outcome::Unchanged;
 use crate::pass::{ModelResult, PassInfo, model};
 use interoptopus::inventory::{TypeId as RsTypeId, Types as RsTypes};
 use interoptopus::lang::meta::Visibility as RsVisibility;
-use interoptopus_backends::casing::sanitize_rust_name;
 use interoptopus::lang::types::{Repr, Struct, TypeKind as RsTypeKind, WireOnly as RsWireOnly};
 use std::collections::HashSet;
 
@@ -36,7 +35,6 @@ impl Pass {
         _pass_meta: &mut crate::pass::PassMeta,
         id_map: &model::common::id_map::Pass,
         type_kinds: &mut model::common::types::kind::Pass,
-        type_names: &mut model::common::types::names::Pass,
         rs_types: &RsTypes,
     ) -> ModelResult {
         if self.done {
@@ -72,8 +70,12 @@ impl Pass {
 
             let composite = Composite { fields: cs_fields, repr: Repr::c() };
 
+            // Kind only. `names.rs` owns naming and already has a `WireOnly::Composite` arm;
+            // writing here made this a second authority, so a transform added there would
+            // silently not apply to this family (`Issues.md` c33b9cf5). The convergence loop
+            // carries the name on the next iteration — `names.rs` keys off the C# kind, so it
+            // cannot name these before this pass registers them.
             type_kinds.set(cs_id, TypeKind::WireOnly(CsWireOnly::Composite(composite)));
-            type_names.set(cs_id, sanitize_rust_name(&rust_ty.name));
             outcome.changed();
         }
 
@@ -124,7 +126,6 @@ impl Pass {
                 let composite = Composite { fields: cs_fields, repr: Repr::c() };
 
                 type_kinds.set(cs_id, TypeKind::WireOnly(CsWireOnly::Composite(composite)));
-                type_names.set(cs_id, sanitize_rust_name(&nested_ty.name));
                 outcome.changed();
             }
         }

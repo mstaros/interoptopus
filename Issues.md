@@ -689,7 +689,7 @@ Mutation-proven: reverting the delegation reproduces the same eight lines and fa
 id: c33b9cf5
 kind: issue
 severity: low
-status: open
+status: closed
 ```
 
 ### Symptom
@@ -734,9 +734,23 @@ Two things to check first, because they are why this was not done inline:
 
 Both pipeline call sites change, which is why it was out of scope for a naming fix.
 
+### Resolution
+
+Both preconditions checked by reading before any edit, as this issue demanded.
+
+**Ordering — clear, and for a better reason than expected.** `names.rs` keys off the *C# kind* (`kinds.get(cs_id)`), never the Rust kind, so it cannot name a composite before this pass registers one. There is no early write to race against, so first-write-wins never applies here.
+
+**Convergence — clear, and the concern was overcautious.** This issue worried that dropping a write would change what the pass reports as `Changed`. It does not: `outcome.changed()` follows the `type_kinds.set`, not the name write. Removing the latter leaves the signal, and therefore the loop, untouched.
+
+Dropped both `type_names.set` calls and the parameter; both pipeline call sites updated. `names.rs` line 98 is now the sole authority for these names.
+
+**The coverage moved rather than evaporated**, which is the part worth proving. Breaking `names.rs`'s `WireOnly::Composite` arm now fails `nested_wire_composites_get_a_valid_csharp_identifier` with *"the raw inventory name reached the generated C#, which does not compile"*. Before this change that same mutation passed, because `nested` supplied the name and `names.rs` never ran for these types. Restored byte-identical afterwards.
+
+Snapshots unmoved.
+
 ### Related
 
-`4e9a17c3` — the same family, one layer up. `31248473` — the same file, a third thing re-derived.
+`4e9a17c3` — the same family, one layer up. `31248473` — the same file, a third thing re-derived. With this closed, every known instance of the re-derivation family is fixed.
 ## _plugins staging omits NuGet dependencies, so wire::load_plugin is a false green on any fresh checkout
 
 ```issue
