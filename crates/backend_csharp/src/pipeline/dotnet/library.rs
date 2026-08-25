@@ -33,6 +33,7 @@ pub struct DotnetLibraryConfig {
     pub model_fn_originals: model::common::fns::originals::Config,
     pub model_service_map: model::common::service::all::Config,
     pub model_type_util: model::common::types::util::Config,
+    pub model_type_union_names: model::common::types::union_names::Config,
     pub model_trampoline: model::dotnet::trampoline::Config,
     pub model_plugin_interface: model::dotnet::interface::plugin::Config,
     pub model_service_interfaces: model::dotnet::interface::service::Config,
@@ -116,6 +117,7 @@ pub struct ModelPasses {
     pub fn_reflow_vis: model::common::fns::visibility::Pass,
     pub service_all: model::common::service::all::Pass,
     pub type_util: model::common::types::util::Pass,
+    pub type_union_names: model::common::types::union_names::Pass,
     pub trampoline: model::dotnet::trampoline::Pass,
     pub plugin_interface: model::dotnet::interface::plugin::Pass,
     pub service_interfaces: model::dotnet::interface::service::Pass,
@@ -229,6 +231,7 @@ impl DotnetLibrary {
                 fn_reflow_vis: model::common::fns::visibility::Pass::new(Default::default()),
                 service_all: model::common::service::all::Pass::new(config.model_service_map),
                 type_util: model::common::types::util::Pass::new(config.model_type_util),
+                type_union_names: model::common::types::union_names::Pass::new(config.model_type_union_names),
                 trampoline: model::dotnet::trampoline::Pass::new(config.model_trampoline),
                 plugin_interface: model::dotnet::interface::plugin::Pass::new(config.model_plugin_interface),
                 service_interfaces: model::dotnet::interface::service::Pass::new(config.model_service_interfaces),
@@ -324,6 +327,7 @@ impl DotnetLibrary {
             r.run(m.type_disposable.process(&mut pass_meta, &m.type_managed_conversion, &m.type_all))?;
             r.run(m.type_nullable.process(&mut pass_meta, &m.type_all))?;
             r.run(m.type_util.process(&mut pass_meta, &mut m.type_kinds, &mut m.type_names, &mut m.type_all))?;
+            r.run(m.type_union_names.process(&mut pass_meta, &m.type_all))?;
             r.run(m.fn_originals.process(&mut pass_meta, &m.id_maps, &mut m.fns_all, &self.inventory.functions))?;
             r.run(m.fn_reflow_vis.process(&mut pass_meta, &mut m.fns_all, &m.type_all, &m.service_all))?;
             r.run(m.service_all.process(&mut pass_meta, &m.id_maps, &self.inventory.services))?;
