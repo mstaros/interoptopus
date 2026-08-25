@@ -27,7 +27,31 @@ Plan todo: items 0–0e and 1–1c done. **Item 3 is next.**
 
 ---
 
-## 2. Conventions this work established
+## 2. Scope, and what this is not
+
+**Read `docs/csharp-unions.md` § "Two layers, two rules" before writing any code.** It is the
+second section of that file and it is the thing most likely to be misread.
+
+The short version: this work governs the **generated layer** only. Every `DataEnum` goes through
+the union machinery, unit-only ones included, *not* because a union is better for a scalar choice
+but because the generator cannot distinguish a scalar choice from a payload alternative — that is
+domain knowledge it does not have, so any eligibility rule based on variant shape would be a
+guess.
+
+That is not a mandate for the consumer API. GixSharp decides per type: payload or state
+alternatives → union, scalar choice → `enum`, bit combinations → `[Flags]`, product data →
+`record`. The test is whether the product type permits impossible states. `GixHead` should be a
+union because its record admits combinations that cannot exist; `GixObjectType` should stay a
+plain `enum`, and exposing `GixObjectType.CommitCase` would be a straight regression. Where a
+unit-only enum's generated representation becomes union-like, translate at the boundary rather
+than propagating case types outward.
+
+Do not add an eligibility gate to interoptopus to try to enforce the consumer-layer rule. It
+cannot know enough to apply it.
+
+---
+
+## 3. Conventions this work established
 
 **`v.stem`, never `v.name`.** `lang::types::kind::Variant` now carries `stem` and `case_type`
 alongside `name`. Every emitted member derives from `stem`:
@@ -42,7 +66,8 @@ alongside `name`. Every emitted member derives from `stem`:
 | case type (new) | `{case_type}`, normally `{stem}Case` |
 
 `name` is the Rust spelling and is now **only** for diagnostics. Emitting from it reintroduces
-the collisions `union_names` exists to prevent.
+the collisions `union_names` exists to prevent, and no reference-project test would catch it —
+nothing there collides.
 
 **Templates must not re-sanitize.** `union_names` guarantees uniqueness over the exact strings
 it produces. Any casing or escaping applied downstream breaks that guarantee.
@@ -53,7 +78,7 @@ a parallel `Vec<VariantNames>` indexed positionally misaligns silently after any
 
 ---
 
-## 3. Three things that cost time
+## 4. Three things that cost time
 
 **A `DataEnum` reaches the model by three routes.** Directly as `TypeKind::DataEnum` from
 `enum_variants`, and wrapped inside `TypePattern::Option(TypeId, DataEnum)` or
@@ -74,7 +99,7 @@ not converge.
 
 ---
 
-## 4. Next: item 3
+## 5. Next: item 3
 
 The design is written up in `docs/csharp-unions.md` Step 3. Summary of the load-bearing parts,
 because several were argued over and reversed:
@@ -110,7 +135,7 @@ definite assignment — `this = default` first.
 
 ---
 
-## 5. Open decisions
+## 6. Open decisions
 
 **Exception split.** `InvalidOperationException` for a default struct union versus
 `InteropException` for a corrupt native tag. Reviewed both ways; current position is to split,
@@ -125,7 +150,7 @@ deliberate `ArgumentNullException`/`InteropException`? Undecided.
 
 ---
 
-## 6. Environment and workflow
+## 7. Environment and workflow
 
 **Transactions do not work in this repo** — `Issues.md` `1383b84b`. The MCP commit pipeline builds
 its candidate tree without running the Git LFS clean filter, so it would store content where a
@@ -170,7 +195,7 @@ Escaped quotes inside a double-quoted string terminate it early and scatter the 
 
 ---
 
-## 7. Where I was wrong
+## 8. Where I was wrong
 
 Recorded because the same traps are still live.
 

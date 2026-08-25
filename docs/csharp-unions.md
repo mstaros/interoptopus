@@ -1,10 +1,43 @@
 # C# 15 union projection for Rust enums
 
-Status: **plan, not approved.** One blocking decision open (Step 0). No code written.
+Status: **in progress.** Steps 0, 1 and 2 are landed and committed; the suite is green. Step 3
+is next. See `docs/csharp-unions-handoff.md` for current state and traps; this file is the
+design record.
 
-Scope: project `#[ffi]` Rust enums as C# 15 custom unions, opt-in, native ABI unchanged.
-`ffi::Option` / `ffi::Result` are designed for but deliberately out of scope for the first
-implementation.
+Scope: project every Rust `DataEnum` reaching the C# backend as a C# 15 custom union. Native
+ABI unchanged. Not opt-in — the repository targets net11 everywhere and unions are the default
+enum projection (see Decided).
+
+## Two layers, two rules
+
+This plan governs the **generated layer** only. It is not a campaign to replace C# enums.
+
+**Generated layer (this document).** Interoptopus projects Rust sum types faithfully. Every
+`DataEnum` goes through the union machinery, *including unit-only ones* such as
+`FfiObjectType`. Not because a union is better for a scalar choice — it is not — but because
+the generator cannot tell a scalar choice from a payload alternative. That is domain knowledge
+it does not have, so any eligibility rule based on variant shape would be a guess. Uniform
+projection, no eligibility gate.
+
+**Consumer layer (out of scope here).** The public API a consumer such as GixSharp exposes is a
+separate decision, made per type:
+
+| Domain shape | C# form |
+|---|---|
+| Payload or state alternatives | union |
+| Scalar choice | `enum` |
+| Bit combinations | `[Flags]` enum |
+| Product data | `record` / `struct` |
+
+The test is whether the product type permits impossible states. `GixHead` — `Detached(id)`,
+`SymbolicResolved(reference, id)`, `SymbolicUnborn(reference)` — is currently a record with
+`Target`, `Referent`, `IsDetached` and `IsUnborn`, which admits combinations that cannot exist;
+a closed sum type makes them unrepresentable. That is a union. `GixObjectType` is a closed set
+of numeric values with no per-case payload; it stays a plain `enum`, and exposing
+`GixObjectType.CommitCase` would be a straight regression.
+
+Where the generated internal representation of a unit-only enum becomes union-like, the
+consumer translates at the boundary rather than propagating case types outward.
 
 ---
 
@@ -103,144 +136,110 @@ therefore be opt-in; flag-off output stays byte-identical and net10 consumers ar
 
 ## Step 0 — Discriminant becomes an attribute of the variant
 
-**This is a correctness fix that stands alone. It is not union groundwork, and should be
-reviewed as a bug.**
+**Done — `c928d53e`, plus the earlier proc-macro fix. `Issues.md` `09b82d44` is closed.**
 
-`crates/backend_csharp/src/pass/model/common/types/kind/enum_variants.rs`:
+`VariantKind` carried the discriminant for `Unit` and nothing for `Tuple`, so backends
+substituted the positional index for payload variants and the managed `_variant` disagreed with
+the native tag for any enum mixing explicit discriminants with payloads.
 
-```rust
-VariantKind::Unit(tag)          => (*tag, None),
-VariantKind::Tuple(rust_type_id) => (index.cast_signed(), Some(cs_type_id)),
-```
+Three defects, all fixed:
 
-Unit variants carry their declared discriminant; payload variants carry their positional
-index. The backend has no alternative — `crates/core/src/lang/types/enums.rs` defines:
+1. The proc macro never resumed the counter after an explicit discriminant, so
+   `enum E { A = 5, B, C }` produced 5, 1, 2 instead of 5, 6, 7. It could not: the explicit
+   value is emitted as `(#expr) as isize`, a token stream evaluated at the *call site*, so the
+   macro never learns it is `5`. Fixed by carrying the previous discriminant as a `TokenStream`
+   and emitting implicit variants as `((#prev) + 1)`.
+2. Tuple variants discarded their discriminant entirely.
+3. Three consumer sites substituted the positional index — `enum_variants.rs` and both
+   `wire/mod.rs` serialize/deserialize paths, which re-derive independently of the model pass.
 
-```rust
-pub enum VariantKind {
-    Unit(isize),
-    Tuple(TypeId),
-}
-```
+**Resolution.** `tag` is now a field on `Variant`, unconditional and independent of payload
+shape; `VariantKind` is `Unit` / `Tuple(TypeId)`, a pure payload descriptor. Chosen over adding
+a second element to `VariantKind::Tuple` because the measured cost was four one-line match arms
+and the same defect had already appeared independently in three places.
 
-`Tuple` carries no discriminant at all. The information does not exist in the core model.
+Guarded by `EnumExplicitThenImplicit { A = 5, B, C }` and
+`EnumExplicitPayload { A = 10, B(u32), C(Vec3f32), D = 20 }` in the reference project. The
+second is the only enum giving a payload variant a real discriminant, and `D = 20` proves the
+counter resumes across a payload variant.
 
-**Consequence today, without unions:** for any mixed enum with explicit discriminants — e.g.
-`enum E { A = -1, B(u32) }` — managed `_variant` and the native Rust tag disagree. `A` gets
-`-1`, `B` gets positional `1`, and Rust assigns `B` whatever its own rules produce.
-
-**Consequence for this plan:** every downstream step assumes `_variant` is the native
-discriminant. Step 4's validated `ToManaged` switch would validate against the wrong tag set.
-Step 0 must land first.
-
-### Proposed change
-
-Move the discriminant onto `Variant`, leaving `VariantKind` as a pure payload descriptor:
-
-```rust
-pub struct Variant {
-    pub name: String,
-    pub docs: Docs,
-    pub tag: isize,
-    pub kind: VariantKind,
-}
-
-pub enum VariantKind {
-    Unit,
-    Tuple(TypeId),
-}
-```
-
-### Blast radius
-
-| Location | Change |
-|---|---|
-| `core/src/lang/types/enums.rs` | struct + `VariantKind` + `Variant::new` signature |
-| `proc_macros_impl` | must compute discriminants (see below) |
-| `backend_csharp/.../enum_variants.rs` | read `v.tag` unconditionally |
-| `backend_c`, `backend_cpython` | defunct but still compile against these types |
-| serde inventory shape | changes under the `serde` feature |
-
-The real work is in the proc macro: it must replicate Rust's discriminant assignment —
-explicit values where given, previous-plus-one otherwise — across mixed unit and payload
-variants. **Unverified:** whether it currently sees explicit discriminants on payload
-variants at all.
-
-### OPEN DECISION
-
-`tag` as a field on `Variant`, or a second element in `VariantKind::Tuple`?
-
-Recommendation: **field on `Variant`.** It makes the discriminant unconditional and prevents
-the same divergence recurring when named and multi-field variants are added. Cost: it changes
-a public core type and the `Variant::new` signature.
+The API hash changed; consumers must regenerate bindings.
 
 ---
 
-## Step 1 — `union_projection` model pass
+## Step 1 — `union_names` model pass
 
-New pass under `model/common/types/enums/`. It is the single source of truth for both
-*enablement* and *naming*.
+**Done.** Shipped as `pass/model/common/types/union_names.rs`, sibling to `names.rs`. Earlier
+drafts called it `union_projection` and placed it under `types/enums/`; both are stale. It owns
+*naming only* — enablement no longer exists, since unions are the default.
 
-**Enablement is eligibility.** The pass holds an entry only for a `DataEnum` that is both
-enabled and eligible. Output passes ask "does this type have a union projection?" — there is
-no `unions: bool` copied into six or eight output-pass configs, so inconsistent state is
-unrepresentable. This simultaneously gates the feature and excludes `Option` / `Result`,
-which matters because the existing enum passes all match `DataEnum`, `Result` and `Option`
-together.
+`common` here means common to the rust and dotnet pipelines within `backend_csharp`, not
+backend-neutral. `names.rs` already does C# casing there.
 
-### Naming
+### What it produces
 
-Every generated member derives from one collision-free **stem** per variant:
+Resolved names live on `lang::types::kind::Variant` as `stem` and `case_type`, not in a side
+table. Several output passes filter variants before emitting — `body` keeps only disposable
+ones, `body_as_unmanaged` only payload-carrying ones — so a parallel vector indexed positionally
+would misalign silently after any filter.
 
-| Member | Form |
-|---|---|
-| factory | `{Stem}` |
-| case type | `{Stem}Case` |
-| check | `Is{Stem}` |
-| accessor | `As{Stem}` |
-| managed field | `_{Stem}` |
-| unmanaged helper type | `Unmanaged{Stem}` |
-| unmanaged field | `_{Stem}` |
+Every emitted member derives from `stem`: factory `{stem}`, check `Is{stem}`, accessor
+`As{stem}`, field `_{stem}`, unmanaged helper `Unmanaged{stem}`, case type `{case_type}`.
+`Variant::name` is the Rust spelling and is now diagnostics-only.
 
-**The stem is the currently-emitted name, not a re-cased one.** Templates use `v.name`
-verbatim today. Unconditionally pascal-casing would rename existing public members on enums
-that have no collision at all — a silent breaking change. Casing is applied only as part of
-collision resolution.
+### Allocation policy
 
-`names.rs` is not the right home: it is keyed `TypeId -> String`, one name per *type*, and
-has no notion of member names inside a type.
+Preservation-biased: a variant keeps the name the generator emits today unless a fixed union
+member makes that impossible. Three phases, and the ordering is load-bearing:
+
+1. **Preserve.** Claim every stem that can keep its current name.
+2. **Fallback.** Only then allocate `{stem}Variant`, `{stem}Variant2`, … for the rest.
+3. **Case types.** New, so they move on collision rather than disturbing a working stem.
+
+Without phase 1 preceding phase 2, a variant needing a fallback steals a name another variant
+already emits: given `Value` and `ValueVariant`, single-pass allocation hands `ValueVariant` to
+the first and displaces the second, breaking API that had no collision.
+
+Stems are the Rust variant name **verbatim** — the templates emit it unmodified today, so
+re-casing would rename members on enums with no collision at all. Templates must not re-sanitize
+after this pass. Keyword escaping is deliberately out of scope; see `Issues.md` `7c8cb22e`.
 
 ### Reserved names
 
-`Value`, `HasValue`, `Unmanaged`, `Marshaller`, `MarshallerMeta`, `ToUnmanaged`,
-`AsUnmanaged`, `ToManaged`, `ToString`, `Dispose`, `ExceptionForVariant`, `TryGetValue`,
-**and the enclosing enum's own name** (CS0542: a member may not have the same name as its
-enclosing type).
+`Value`, `HasValue`, `TryGetValue`, `Unmanaged`, `Marshaller`, `MarshallerMeta`, `ToUnmanaged`,
+`AsUnmanaged`, `ToString`, `Dispose`, `ExceptionForVariant`, `_variant`, `_hasValue`, plus the
+enclosing type's own name (CS0542).
+
+`ToManaged` is absent on purpose: it is declared inside the nested `Unmanaged` and `Marshaller`
+types and never shares a declaration space with an outer factory.
 
 ### Collision classes
 
-1. **Case type vs. member.** A nested type may not share a name with a non-type member in the
-   same declaration (CS0102). This is why the `Case` suffix exists: it lets
-   `EnumPayload.BCase` coexist with the existing `EnumPayload.B(...)` factory.
-2. **Fold collisions.** Identifiers that sanitize or case-fold to the same C# identifier —
-   `foo_bar` and `FooBar` both reach `FooBar` through the existing
-   `interoptopus_backends::casing` helpers.
-3. **Cross-family collisions.** A variant named `B` and a variant named `IsB`.
-4. **Reserved-set collisions.** A variant named `Value` or `HasValue` produces a factory that
-   clashes with a mandatory union member. This is *new* — no `Value` property exists today,
-   so union mode creates the conflict.
+`Foo`/`IsFoo`, `Foo`/`AsFoo` and `Foo`/`UnmanagedFoo` are **pre-existing broken output** — those
+three names are already emitted today — so the pass fixes them rather than introducing risk.
+Only `{stem}Case` is genuinely new. Twelve unit tests cover these plus the `Value`,
+enclosing-name, `variant`/`_variant` and repeated-fallback cases.
 
-**Policy: prefer disambiguating the new case type over renaming an existing public member.**
-`IsX`, `AsX` and the factory are today's API; the case type is new. Class 4 is the exception —
-there the factory itself is the conflict and must move.
+### Consumers migrated
 
-Appending a disambiguator converges over a finite set. A defensive iteration limit is
-sufficient; a "cannot converge" error is not part of the contract.
+All nine sites now read `v.stem`: `body`, `body_ctors`, `body_tostring`, `body_unmanaged`,
+`body_unmanaged_variant`, `body_to_unmanaged`, `body_as_unmanaged`, `body_exception_for_variant`,
+`definition`. Reference-project output is byte-identical; no snapshot moved.
 
-### Templates that consume raw `v.name` and must be migrated
+### Ordering constraints
 
-`definition.cs`, `body_ctors.cs`, `body_unmanaged.cs`, `body_unmanaged_variant.cs`,
-`body_tostring.cs`, `body_exception_for_variant.cs`, `body.cs` (`disposable_variants`).
+Two, both found by breaking them:
+
+- Write to **`type_kinds`**, not `type_all`. `type_all` rebuilds its `Type` values from
+  `type_kinds`, so writing there populates a copy that is later overwritten.
+- Run **before `type_all.process`** — immediately after `type_names.process` in both pipelines.
+
+And one shape constraint: a `DataEnum` arrives by three routes, not one. `Option` and `Result`
+carry theirs inside `TypePattern`, so matching only `TypeKind::DataEnum` leaves `Ok`/`Err`
+unresolved and emits `_` for every payload field. Use `data_enum` / `data_enum_mut`.
+
+`PostModelPass` was deliberately not extended — it is a narrow extension view, not a mirror of
+every model pass.
 
 ---
 
@@ -458,15 +457,24 @@ are compiler features.
 
 ---
 
-## Step 6 — `Option` / `Result`
+## Step 6 — `Option` / `Result` leftovers
 
-Same representation: `NoneCase` / `SomeCase`, `OkCase` / `ErrCase`. Deferred until the plain
-case is proven. Constraints to preserve now:
+**Not an exclusion.** `Option` and `Result` carry a `DataEnum`, so they get the union projection
+along with everything else — the machinery in Steps 3 and 4 is written generically and does not
+discriminate by type. Naming is *already* done for them: `union_names` resolves all three
+carriers, and `result_and_option_variants_resolve_unchanged` guards it.
 
-- `Result` implements `IResult<T,E>` with `AsOk()` / `AsErr()` and unit-side methods. Case
-  types must coexist with that interface, not replace it.
-- `default(ResultX)` must be **empty**, not `Ok`.
-- `default(OptionX)` must be distinct from `NoneCase`.
+Earlier drafts described this step as "deferred until the plain case is proven", which read as
+"`Result` might not become a union". It will. What is deferred is the `Result`-specific tidying
+that has nothing to do with whether it is a union:
+
+- `Result` implements `IResult<T,E>` with `AsOk()` / `AsErr()` and unit-side methods. Case types
+  must coexist with that interface, not replace it.
+- `body_from_call` constructs `Result` through the factories (`return Ok(func())`,
+  `return Panic`). It never fires for a plain `DataEnum` and needs no Step 4 treatment, but it
+  does consume factory names, so it is a naming consumer to re-check here.
+- `default(ResultX)` must be **empty**, not `Ok`. `default(OptionX)` must be distinct from
+  `NoneCase`.
 
 Retiring `IsOk` / `AsOk` is a separate breaking change and is not in scope.
 

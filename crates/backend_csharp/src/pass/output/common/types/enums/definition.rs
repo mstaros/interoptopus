@@ -50,7 +50,8 @@ impl Pass {
             let is_disposable = disposable.is_disposable(*type_id).unwrap_or(false);
 
             let ty = *type_id;
-            let struct_or_class = if struct_class.is_struct(ty) { "struct" } else { "class" };
+            let is_struct = struct_class.is_struct(ty);
+            let struct_or_class = if is_struct { "struct" } else { "class" };
 
             let variants: Vec<HashMap<&str, String>> = data_enum
                 .variants
@@ -72,6 +73,7 @@ impl Pass {
             context.insert("docs", &docs);
             context.insert("is_disposable", &is_disposable);
             context.insert("visibility", &visibility);
+            context.insert("is_struct", &is_struct);
             context.insert("discriminant_type", data_enum.discriminant_type.cs_name());
 
             let rendered = templates.render("common/types/enums/definition.cs", &context)?;
