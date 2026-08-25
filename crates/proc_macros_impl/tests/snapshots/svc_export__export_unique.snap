@@ -1,3 +1,82 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:3a17c51329b5f919115bfcb6d4938f160b072cba658f6f125c324eec4e675045
-size 3161
+---
+source: crates/proc_macros_impl/tests/svc_export.rs
+expression: expand_ffi!(item)
+---
+#[allow(clippy::used_underscore_items)]
+const _: () = {
+    const fn _assert_type_info<T: ::interoptopus::lang::types::TypeInfo>() {}
+    _assert_type_info::<Service>();
+    ::interoptopus::lang::types::assert_service_type::<Service>();
+    ::interoptopus::lang::types::assert_service_ctor_safe::<
+        ffi::Result<Service, Error>,
+    >();
+};
+impl Service {
+    fn create() -> ffi::Result<Self, Error> {}
+    fn method(&self, x: u32) -> u32 {}
+}
+#[::interoptopus::ffi(export = "service_create_21426")]
+unsafe fn service_create() -> <::interoptopus::ffi::Result<
+    (),
+    Error,
+> as ::interoptopus::pattern::result::ResultAs>::AsT<*const Service> {
+    let result = Service::create();
+    match result {
+        ::interoptopus::ffi::Ok(service_instance) => {
+            ::interoptopus::ffi::Ok(
+                ::std::sync::Arc::into_raw(::std::sync::Arc::new(service_instance))
+                    as *mut _,
+            )
+        }
+        ::interoptopus::ffi::Err(err) => ::interoptopus::ffi::Err(err),
+        ::interoptopus::ffi::Result::Panic => ::interoptopus::ffi::Result::Panic,
+        ::interoptopus::ffi::Result::Null => ::interoptopus::ffi::Result::Null,
+    }
+}
+#[allow(clippy::ptr_cast_constness)]
+#[::interoptopus::ffi(export = "service_destroy_21426")]
+fn service_destroy(instance: *const Service) {
+    if !instance.is_null() {
+        unsafe {
+            let _ = ::std::sync::Arc::from_raw(instance);
+        }
+    }
+}
+#[::interoptopus::ffi(export = "service_method_21426")]
+unsafe fn service_method(instance: *const Service, x: u32) -> u32 {
+    unsafe {
+        let instance_ref = &*instance;
+        instance_ref.method(x)
+    }
+}
+unsafe impl ::interoptopus::lang::service::ServiceInfo for Service {
+    fn id() -> ::interoptopus::inventory::ServiceId {
+        ::interoptopus::inventory::ServiceId::from_id(::interoptopus::id!(Service))
+    }
+    fn service() -> ::interoptopus::lang::service::Service {
+        ::interoptopus::lang::service::Service::new(
+            <Service as ::interoptopus::lang::types::TypeInfo>::id(),
+            vec![
+                < service_create as ::interoptopus::lang::function::FunctionInfo > ::id()
+            ],
+            <service_destroy as ::interoptopus::lang::function::FunctionInfo>::id(),
+            vec![
+                < service_method as ::interoptopus::lang::function::FunctionInfo > ::id()
+            ],
+        )
+    }
+    fn register(inventory: &mut impl ::interoptopus::inventory::Inventory) {
+        <Service as ::interoptopus::lang::types::TypeInfo>::register(inventory);
+        <service_create as ::interoptopus::lang::function::FunctionInfo>::register(
+            inventory,
+        );
+        <service_destroy as ::interoptopus::lang::function::FunctionInfo>::register(
+            inventory,
+        );
+        <service_method as ::interoptopus::lang::function::FunctionInfo>::register(
+            inventory,
+        );
+        inventory.register_service(Self::id(), Self::service());
+    }
+}
+unsafe impl ::interoptopus::pattern::asynk::AsyncRuntimeService for Service {}

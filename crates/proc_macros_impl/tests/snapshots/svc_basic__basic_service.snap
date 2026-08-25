@@ -1,3 +1,10 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:eef275f1f5ed25481773514d7166cfa9347bfd8e6d999f6b266ad6377e3bc62b
-size 243
+---
+source: crates/proc_macros_impl/tests/svc_basic.rs
+expression: expand_ffi!(item)
+---
+impl Service {
+    fn new() -> ffi::Result<Self, Error> {}
+}
+::core::compile_error! {
+    "Using the name 'new' can cause conflicts in generated code."
+}

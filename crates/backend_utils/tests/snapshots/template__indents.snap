@@ -1,3 +1,10 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:84187ad3be504a9f50bb971df74d39b9b7a731bb579684fe9f5ce3d0dd806fee
-size 159
+---
+source: crates/backend_utils/tests/template.rs
+expression: "engine.render(\"indented.cs\", &context).unwrap()"
+---
+// Foo
+
+namespace A {
+    f32
+    u32
+}

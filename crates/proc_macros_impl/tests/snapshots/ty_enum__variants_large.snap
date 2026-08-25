@@ -1,3 +1,101 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:d35a117a798905abf2bed27fe93174220ab4f26180e3b5fe0649d838a50aa054
-size 3823
+---
+source: crates/proc_macros_impl/tests/ty_enum.rs
+expression: expand_ffi!(item)
+---
+#[repr(u32)]
+enum Foo {
+    A,
+    B = 16_000_000,
+}
+#[allow(
+    clippy::eq_op,
+    clippy::type_repetition_in_bounds,
+    clippy::used_underscore_binding
+)]
+unsafe impl ::interoptopus::lang::types::TypeInfo for Foo {
+    const WIRE_SAFE: bool = true;
+    const RAW_SAFE: bool = true;
+    const ASYNC_SAFE: bool = true;
+    const SERVICE_SAFE: bool = false;
+    const SERVICE_CTOR_SAFE: bool = false;
+    const OPTION_PTR_SAFE: bool = false;
+    fn id() -> ::interoptopus::inventory::TypeId {
+        ::interoptopus::inventory::TypeId::from_id(::interoptopus::id!(Foo))
+    }
+    fn kind() -> ::interoptopus::lang::types::TypeKind {
+        ::interoptopus::lang::types::TypeKind::Enum(::interoptopus::lang::types::Enum {
+            variants: vec![
+                ::interoptopus::lang::types::Variant { name : "A".to_string(), docs :
+                ::interoptopus::lang::meta::Docs::from_line(""), tag : 0isize, kind :
+                ::interoptopus::lang::types::VariantKind::Unit, },
+                ::interoptopus::lang::types::Variant { name : "B".to_string(), docs :
+                ::interoptopus::lang::meta::Docs::from_line(""), tag : {
+                #[allow(clippy::unnecessary_cast)] { (16_000_000) as isize } }, kind :
+                ::interoptopus::lang::types::VariantKind::Unit, }
+            ],
+            repr: ::interoptopus::lang::types::Repr {
+                layout: ::interoptopus::lang::types::Layout::Primitive(
+                    ::interoptopus::lang::types::Primitive::U32,
+                ),
+                alignment: ::std::option::Option::None,
+            },
+        })
+    }
+    fn ty() -> ::interoptopus::lang::types::Type {
+        ::interoptopus::lang::types::Type {
+            name: "Foo".to_string(),
+            visibility: ::interoptopus::lang::meta::Visibility::Public,
+            docs: ::interoptopus::lang::meta::Docs::from_line(""),
+            emission: ::interoptopus::lang::meta::Emission::FileEmission(
+                ::interoptopus::lang::meta::FileEmission::Default,
+            ),
+            kind: Self::kind(),
+        }
+    }
+    fn register(inventory: &mut impl ::interoptopus::inventory::Inventory) {
+        inventory.register_type(Self::id(), Self::ty());
+    }
+}
+#[allow(clippy::used_underscore_binding, clippy::type_repetition_in_bounds)]
+unsafe impl ::interoptopus::lang::types::WireIO for Foo {
+    fn write(
+        &self,
+        out: &mut impl ::std::io::Write,
+    ) -> ::std::result::Result<(), ::interoptopus::wire::SerializationError> {
+        match self {
+            Foo::A => {
+                <u32 as ::interoptopus::lang::types::WireIO>::write(&(0 as u32), out)?;
+            }
+            Foo::B => {
+                <u32 as ::interoptopus::lang::types::WireIO>::write(
+                    &(16000000 as u32),
+                    out,
+                )?;
+            }
+        }
+        ::std::result::Result::Ok(())
+    }
+    fn read(
+        input: &mut impl ::std::io::Read,
+    ) -> ::std::result::Result<Self, ::interoptopus::wire::SerializationError>
+    where
+        Self: Sized,
+    {
+        let __discriminant = <u32 as ::interoptopus::lang::types::WireIO>::read(input)?;
+        match __discriminant {
+            x if x == (0 as u32) => ::std::result::Result::Ok(Foo::A),
+            x if x == (16000000 as u32) => ::std::result::Result::Ok(Foo::B),
+            _ => {
+                ::std::result::Result::Err(
+                    ::interoptopus::wire::SerializationError::invalid_discriminant(
+                        stringify!(Foo),
+                        __discriminant as isize,
+                    ),
+                )
+            }
+        }
+    }
+    fn live_size(&self) -> usize {
+        ::std::mem::size_of::<u32>()
+    }
+}

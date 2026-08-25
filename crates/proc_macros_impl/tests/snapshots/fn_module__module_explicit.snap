@@ -1,3 +1,36 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:cbde5c0d9a4329b1494ff6f4756d5edfdf3ad9b08b74187ffd65eaea95985e58
-size 1479
+---
+source: crates/proc_macros_impl/tests/fn_module.rs
+expression: expand_ffi!(item)
+---
+#[unsafe(export_name = "foo")]
+extern "C-unwind" fn foo() {}
+#[allow(non_camel_case_types)]
+struct foo {}
+unsafe impl ::interoptopus::lang::function::FunctionInfo for foo {
+    fn id() -> ::interoptopus::inventory::FunctionId {
+        ::interoptopus::inventory::FunctionId::from_id(::interoptopus::id!(foo))
+    }
+    fn signature() -> ::interoptopus::lang::function::Signature {
+        ::interoptopus::lang::function::Signature {
+            arguments: vec![],
+            rval: <() as ::interoptopus::lang::types::TypeInfo>::id(),
+        }
+    }
+    fn function() -> ::interoptopus::lang::function::Function {
+        ::interoptopus::lang::function::Function {
+            name: "foo".to_string(),
+            visibility: ::interoptopus::lang::meta::Visibility::Private,
+            docs: ::interoptopus::lang::meta::Docs::from_lines(vec![]),
+            emission: ::interoptopus::lang::meta::Emission::FileEmission(
+                ::interoptopus::lang::meta::FileEmission::CustomModule(
+                    ::interoptopus::lang::meta::Module::from_string("foo"),
+                ),
+            ),
+            signature: Self::signature(),
+        }
+    }
+    fn register(inventory: &mut impl ::interoptopus::inventory::Inventory) {
+        <() as ::interoptopus::lang::types::TypeInfo>::register(inventory);
+        inventory.register_function(Self::id(), Self::function());
+    }
+}

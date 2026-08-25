@@ -1,3 +1,153 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:b8ee9d611cbecb27b240deb8ed48741b0efae7372d4834f7d5f4fa6a0be970fc
-size 6352
+---
+source: crates/proc_macros_impl/tests/svc_async.rs
+expression: expand_ffi!(item)
+---
+#[allow(clippy::used_underscore_items)]
+const _: () = {
+    const fn _assert_type_info<T: ::interoptopus::lang::types::TypeInfo>() {}
+    _assert_type_info::<Service>();
+    ::interoptopus::lang::types::assert_service_type::<Service>();
+    const fn _assert_async<T: ::interoptopus::pattern::asynk::AsyncRuntime>() {}
+    _assert_async::<Service>();
+    ::interoptopus::lang::types::assert_service_ctor_safe::<
+        ffi::Result<Service, Error>,
+    >();
+    {
+        const fn _assert_async_rval_type_info<T: ::interoptopus::lang::types::TypeInfo>() {}
+        _assert_async_rval_type_info::<ffi::Result<u8, Error>>();
+    }
+    {
+        const fn _assert_async_rval_type_info<T: ::interoptopus::lang::types::TypeInfo>() {}
+        _assert_async_rval_type_info::<ffi::Result<u8, Error>>();
+    }
+};
+impl Service {
+    pub fn create() -> ffi::Result<Self, Error> {
+        ffi::Ok(Self)
+    }
+    pub async fn compute1(_: Async<Self>) -> ffi::Result<u8, Error> {
+        ffi::Ok(0)
+    }
+    pub async fn compute2(_: Async<Self>) -> ffi::Result<u8, Error> {
+        ffi::Ok(0)
+    }
+}
+#[::interoptopus::ffi]
+unsafe fn service_create() -> <::interoptopus::ffi::Result<
+    (),
+    Error,
+> as ::interoptopus::pattern::result::ResultAs>::AsT<*const Service> {
+    let result = Service::create();
+    match result {
+        ::interoptopus::ffi::Ok(service_instance) => {
+            ::interoptopus::ffi::Ok(
+                ::std::sync::Arc::into_raw(::std::sync::Arc::new(service_instance))
+                    as *mut _,
+            )
+        }
+        ::interoptopus::ffi::Err(err) => ::interoptopus::ffi::Err(err),
+        ::interoptopus::ffi::Result::Panic => ::interoptopus::ffi::Result::Panic,
+        ::interoptopus::ffi::Result::Null => ::interoptopus::ffi::Result::Null,
+    }
+}
+#[allow(clippy::ptr_cast_constness)]
+#[::interoptopus::ffi]
+fn service_destroy(instance: *const Service) {
+    if !instance.is_null() {
+        unsafe {
+            let _ = ::std::sync::Arc::from_raw(instance);
+        }
+    }
+}
+#[allow(clippy::used_underscore_items, clippy::forget_non_drop, forgetting_copy_types)]
+#[::interoptopus::ffi]
+unsafe fn service_compute1(
+    instance: *const Service,
+    callback: ::interoptopus::pattern::asynk::AsyncCallback<ffi::Result<u8, Error>>,
+) -> ::interoptopus::pattern::asynk::TaskHandle {
+    const { ::interoptopus::lang::types::assert_send_sync::<ffi::Result<u8, Error>>() }
+    unsafe {
+        use ::interoptopus::pattern::asynk::AsyncRuntime;
+        let _instance_arc = ::std::sync::Arc::from_raw(instance);
+        let _instance_invoke = ::std::sync::Arc::clone(&_instance_arc);
+        let _instance_inside = ::std::sync::Arc::clone(&_instance_arc);
+        ::std::mem::forget(_instance_arc);
+        let _guard = ::interoptopus::pattern::asynk::AsyncCallbackGuard::new(callback);
+        _instance_invoke
+            .spawn(move |_ctx| async move {
+                let _guard = _guard;
+                let _async_this = ::interoptopus::pattern::asynk::Async::new(
+                    _instance_inside,
+                    _ctx,
+                );
+                let _result = Service::compute1(_async_this).await;
+                _guard.mark_completed();
+                callback.call_ok(&raw const _result);
+                ::std::mem::forget(_result);
+            })
+    }
+}
+#[allow(clippy::used_underscore_items, clippy::forget_non_drop, forgetting_copy_types)]
+#[::interoptopus::ffi]
+unsafe fn service_compute2(
+    instance: *const Service,
+    callback: ::interoptopus::pattern::asynk::AsyncCallback<ffi::Result<u8, Error>>,
+) -> ::interoptopus::pattern::asynk::TaskHandle {
+    const { ::interoptopus::lang::types::assert_send_sync::<ffi::Result<u8, Error>>() }
+    unsafe {
+        use ::interoptopus::pattern::asynk::AsyncRuntime;
+        let _instance_arc = ::std::sync::Arc::from_raw(instance);
+        let _instance_invoke = ::std::sync::Arc::clone(&_instance_arc);
+        let _instance_inside = ::std::sync::Arc::clone(&_instance_arc);
+        ::std::mem::forget(_instance_arc);
+        let _guard = ::interoptopus::pattern::asynk::AsyncCallbackGuard::new(callback);
+        _instance_invoke
+            .spawn(move |_ctx| async move {
+                let _guard = _guard;
+                let _async_this = ::interoptopus::pattern::asynk::Async::new(
+                    _instance_inside,
+                    _ctx,
+                );
+                let _result = Service::compute2(_async_this).await;
+                _guard.mark_completed();
+                callback.call_ok(&raw const _result);
+                ::std::mem::forget(_result);
+            })
+    }
+}
+unsafe impl ::interoptopus::lang::service::ServiceInfo for Service {
+    fn id() -> ::interoptopus::inventory::ServiceId {
+        ::interoptopus::inventory::ServiceId::from_id(::interoptopus::id!(Service))
+    }
+    fn service() -> ::interoptopus::lang::service::Service {
+        ::interoptopus::lang::service::Service::new(
+            <Service as ::interoptopus::lang::types::TypeInfo>::id(),
+            vec![
+                < service_create as ::interoptopus::lang::function::FunctionInfo > ::id()
+            ],
+            <service_destroy as ::interoptopus::lang::function::FunctionInfo>::id(),
+            vec![
+                < service_compute1 as ::interoptopus::lang::function::FunctionInfo >
+                ::id(), < service_compute2 as
+                ::interoptopus::lang::function::FunctionInfo > ::id()
+            ],
+        )
+    }
+    fn register(inventory: &mut impl ::interoptopus::inventory::Inventory) {
+        <Service as ::interoptopus::lang::types::TypeInfo>::register(inventory);
+        <service_create as ::interoptopus::lang::function::FunctionInfo>::register(
+            inventory,
+        );
+        <service_destroy as ::interoptopus::lang::function::FunctionInfo>::register(
+            inventory,
+        );
+        <service_compute1 as ::interoptopus::lang::function::FunctionInfo>::register(
+            inventory,
+        );
+        <service_compute2 as ::interoptopus::lang::function::FunctionInfo>::register(
+            inventory,
+        );
+        inventory.register_service(Self::id(), Self::service());
+    }
+}
+unsafe impl ::interoptopus::pattern::asynk::AsyncRuntimeService for Service {}

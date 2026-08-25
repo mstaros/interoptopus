@@ -1,3 +1,34 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:b8c5b78a1a535b1e7b6ff3de9bf84cceb9c8c857499ad90cf9c0f412607f8a97
-size 1414
+---
+source: crates/proc_macros_impl/tests/fn_async.rs
+expression: expand_ffi!(item)
+---
+#[unsafe(export_name = "async_foo")]
+extern "C-unwind" fn async_foo() {}
+#[allow(non_camel_case_types)]
+struct async_foo {}
+unsafe impl ::interoptopus::lang::function::FunctionInfo for async_foo {
+    fn id() -> ::interoptopus::inventory::FunctionId {
+        ::interoptopus::inventory::FunctionId::from_id(::interoptopus::id!(async_foo))
+    }
+    fn signature() -> ::interoptopus::lang::function::Signature {
+        ::interoptopus::lang::function::Signature {
+            arguments: vec![],
+            rval: <() as ::interoptopus::lang::types::TypeInfo>::id(),
+        }
+    }
+    fn function() -> ::interoptopus::lang::function::Function {
+        ::interoptopus::lang::function::Function {
+            name: "async_foo".to_string(),
+            visibility: ::interoptopus::lang::meta::Visibility::Private,
+            docs: ::interoptopus::lang::meta::Docs::from_lines(vec![]),
+            emission: ::interoptopus::lang::meta::Emission::FileEmission(
+                ::interoptopus::lang::meta::FileEmission::Default,
+            ),
+            signature: Self::signature(),
+        }
+    }
+    fn register(inventory: &mut impl ::interoptopus::inventory::Inventory) {
+        <() as ::interoptopus::lang::types::TypeInfo>::register(inventory);
+        inventory.register_function(Self::id(), Self::function());
+    }
+}

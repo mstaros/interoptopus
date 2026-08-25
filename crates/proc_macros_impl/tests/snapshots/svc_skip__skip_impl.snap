@@ -1,3 +1,43 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:4561b1729f305388cdfb63d2b15ba5fd116ee26b9e6a16dccc3a7a2a83c96580
-size 1585
+---
+source: crates/proc_macros_impl/tests/svc_skip.rs
+expression: expand_ffi!(item)
+---
+#[allow(clippy::used_underscore_items)]
+const _: () = {
+    const fn _assert_type_info<T: ::interoptopus::lang::types::TypeInfo>() {}
+    _assert_type_info::<Service>();
+    ::interoptopus::lang::types::assert_service_type::<Service>();
+};
+impl Service {
+    fn new() -> ffi::Result<Self, Error> {}
+}
+#[allow(clippy::ptr_cast_constness)]
+#[::interoptopus::ffi]
+fn service_destroy(instance: *const Service) {
+    if !instance.is_null() {
+        unsafe {
+            let _ = ::std::sync::Arc::from_raw(instance);
+        }
+    }
+}
+unsafe impl ::interoptopus::lang::service::ServiceInfo for Service {
+    fn id() -> ::interoptopus::inventory::ServiceId {
+        ::interoptopus::inventory::ServiceId::from_id(::interoptopus::id!(Service))
+    }
+    fn service() -> ::interoptopus::lang::service::Service {
+        ::interoptopus::lang::service::Service::new(
+            <Service as ::interoptopus::lang::types::TypeInfo>::id(),
+            vec![],
+            <service_destroy as ::interoptopus::lang::function::FunctionInfo>::id(),
+            vec![],
+        )
+    }
+    fn register(inventory: &mut impl ::interoptopus::inventory::Inventory) {
+        <Service as ::interoptopus::lang::types::TypeInfo>::register(inventory);
+        <service_destroy as ::interoptopus::lang::function::FunctionInfo>::register(
+            inventory,
+        );
+        inventory.register_service(Self::id(), Self::service());
+    }
+}
+unsafe impl ::interoptopus::pattern::asynk::AsyncRuntimeService for Service {}
