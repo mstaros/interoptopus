@@ -246,30 +246,56 @@ sufficient; a "cannot converge" error is not part of the contract.
 
 ## Step 2 — Target framework (replaces the builder flag)
 
-**This step was originally an opt-in `RustLibraryBuilder::unions(bool)`. That is dropped.**
-See Decided: the repository targets net11 everywhere and unions are the default enum
-projection, so there is no flag, no eligibility gate, and no flag-off output to preserve.
+**Done — `9d664613`.** This step was originally an opt-in `RustLibraryBuilder::unions(bool)`;
+that is dropped. See Decided: the repository targets net11 everywhere and unions are the default
+enum projection, so there is no flag, no eligibility gate, and no flag-off output to preserve.
 
-What remains is a framework migration, landing as its own commit before any union code:
+What landed:
 
-- **13 `.csproj` files** move `net10.0` → `net11.0` and gain
-  `<LangVersion>preview</LangVersion>`: the 9 `tests/reference_plugins/*.dll/*.csproj`, the 2
-  `tests/backend_plugins/*.dll/*.csproj`, `tests/reference_project/Bindings/Bindings.csproj`,
-  and `tests/reference_project/Tests/Tests.csproj`. `benches/dotnet/dotnet_benchmarks.csproj`
-  makes 14 if benchmarks are kept current. `tests/reference_project/Tests/InteropSpike.csproj`
-  is already `net11.0` and needs only `LangVersion`.
-- **Justfile** — `_bdp_ref` and `_bdp_p` copy from `bin/Release/net10.0/`; both become
-  `net11.0`.
-- **Rebuild the 11 plugin DLLs.** .NET output is not reproducible, so all 11 LFS-tracked
-  binaries change even where behaviour does not. That is why the Justfile keeps the plugin
-  build as a separate step.
+- **14 `.csproj` files** moved `net10.0` → `net11.0`.
+- **`crates/backend_csharp/Directory.Build.props`** (new) sets
+  `<LangVersion>preview</LangVersion>` for everything beneath it. Chosen over 14 per-project
+  elements so that `InteropSpike.csproj` — already `net11.0`, so it would not have matched a
+  retarget pattern — is covered, new projects inherit it, and there is one place to delete at GA.
+- **Justfile** — `_bdp_ref` and `_bdp_p` copied from `bin/Release/net10.0/`; now `net11.0`.
+- **`crates/backend_csharp/src/rt/dynamic.rs`** — see below.
+- **11 plugin DLLs** rebuilt against net11.
 
 `crates/backend_csharp/global.json` pins no SDK — it only selects
-`Microsoft.Testing.Platform` as the test runner — so nothing there blocks the retarget.
+`Microsoft.Testing.Platform` as the test runner — so nothing there blocked the retarget.
 
-Requires a .NET 11 Preview 5+ SDK for `UnionAttribute` / `IUnion`. Until C# 15 goes GA
-(expected November 2026) `LangVersion` must stay `preview`, and the union spec still carries
-open questions that could move the emitted shape before then.
+### The runtime config, which this plan originally missed
+
+`rt/dynamic.rs` holds `DEFAULT_RUNTIME_CONFIG`, a hard-coded hostfxr runtime config pinned at
+`tfm: net10.0` and `framework.version: 10.0.0`. It is written to a temp file and passed to
+`initialize_for_runtime_config`, so it decides which runtime the plugin host boots.
+
+The original Step 2 inventory listed the build configuration — `.csproj` files and the Justfile —
+and never asked what pins the framework at *runtime*. Retargeting without it left all 12
+plugin-load tests failing with `SymbolNotFound` for eleven different symbols, which reads like a
+codegen fault rather than an assembly that never loaded. Diagnosis required tracing
+`symbol_not_found` back to `loader(#symbol)` returning null in `proc_macros_impl/src/plugin/emit.rs`.
+
+Setting the version to a plain `11.0.0` then produced a second, sharper failure: *"It was not
+possible to find a compatible framework version"*, listing `11.0.0-preview.7.26381.103` among the
+installed frameworks. **hostfxr will not roll forward from a release request to a pre-release
+runtime.** The version is therefore `11.0.0-preview.1` — requesting a pre-release enables
+pre-release resolution, and `rollForward: LatestMajor` picks the newest installed 11.x. It stays
+correct after GA, since a release version outranks any pre-release.
+
+Generalising: a framework retarget in this repo has **three** classes of pin, not two — build
+configuration, build tooling, and the runtime config the Rust host boots. Only the third has
+teeth at test time.
+
+### Toolchain
+
+Requires a .NET 11 Preview 5+ SDK for `UnionAttribute` / `IUnion`; verified against
+`11.0.100-preview.7.26381.103`. Until C# 15 goes GA (expected November 2026) `LangVersion` must
+stay `preview`, and the union spec still carries open questions that could move the emitted shape
+before then.
+
+Nothing yet verifies that `LangVersion=preview` is doing anything. The suite passing proves net11
+works; the preview gate is untested until Step 3 emits `[Union]`.
 
 ---
 
@@ -484,10 +510,7 @@ Execution state. Rationale lives in the step sections above; this tracks only wh
 
 | # | Status | Item | Gate |
 |---|---|---|---|
-| R | open | Retarget 13 `.csproj` to `net11.0` + `<LangVersion>preview</LangVersion>` | — |
-| Ra | open | Justfile `net10.0` → `net11.0` output paths | R |
-| Rb | open | Rebuild the 11 plugin DLLs against net11 | Ra |
-| 1 | open | `union_projection` model pass — name resolution only | R green |
+| 1 | open | `union_projection` model pass — name resolution only | — |
 | 1a | open | Reserved-name set incl. enclosing type name (CS0542) | 1 |
 | 1b | open | Stem = currently-emitted name, not re-cased | 1 |
 | 1c | open | Migrate 7 templates off raw `v.name` | 1 |
@@ -507,6 +530,8 @@ Execution state. Rationale lives in the step sections above; this tracks only wh
 | 5g | open | Default disposable `Dispose()` no-op | 3 |
 | 5h | open | Managed-only `DataEnum` case | 3c |
 | 6 | deferred | `Option` / `Result` — incl. `body_from_call` factory names | 5 green |
+
+Item R (net11 retarget) is done — `9d664613`; see Step 2. Item 1 is unblocked.
 
 ### Decided
 
