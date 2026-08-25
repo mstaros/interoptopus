@@ -295,3 +295,75 @@ Two smaller observations from the same investigation:
 - `add_markdown_section` on the FileMcp server returns `No approval received` with no approval
   prompt shown to the user, while `replace_markdown_section` on the same file succeeds. Possibly
   related tooling inconsistency; recorded here only so it is not lost.
+## Enum variant names are never sanitized, so a C# keyword variant emits uncompilable bindings
+
+```issue
+id: 7c8cb22e
+kind: bug
+severity: low
+status: open
+```
+
+### Symptom
+
+A Rust enum variant whose name is a C# reserved keyword emits invalid C#:
+
+```rust
+#[ffi]
+pub enum E {
+    class,
+    event,
+}
+```
+
+produces
+
+```csharp
+public static E class => new() { _variant = 0 };
+public bool Isclass => _variant == 0;
+```
+
+`class` is a C# reserved keyword and cannot be an identifier, so the generated bindings do not
+compile. The generator reports no error.
+
+### Why variants but not type names
+
+Type names go through `sanitize_rust_name` (`crates/backend_utils/src/casing.rs`), which
+PascalCases the result. Since every C# reserved keyword is lowercase, a Rust type named `class`
+emits `Class` and is incidentally safe.
+
+Variant names take a different path and are never sanitized:
+
+- `crates/backend_csharp/src/pass/model/common/types/kind/enum_variants.rs` does
+  `name: rust_variant.name.clone()`
+- the enum templates emit `{{ v.name }}` verbatim
+
+So variants are the only identifier class in the C# backend with no keyword protection.
+
+### Scope
+
+Requires an unconventional Rust variant name: Rust style is PascalCase, and `Class` is not a C#
+keyword. Legal Rust, and it silently produces broken output, but unlikely to be hit by accident.
+Affects reserved keywords only — contextual keywords such as `type`, `value` and `record` are
+valid C# identifiers in these positions.
+
+Escaping with `@class`, or PascalCasing variant stems, would both fix it.
+
+### Explicitly not fixed by `union_names`
+
+`pass/model/common/types/union_names.rs` allocates collision-free variant names, but only against
+*other generated members* and the fixed union contract. It deliberately keeps stems **verbatim**,
+because the templates emit them verbatim today and re-casing would rename members on enums that
+have no collision at all. Keyword escaping is a separate concern and was left out of that pass on
+purpose; see `docs/csharp-unions.md` item 1b.
+
+For contrast, three collision classes that *are* fixed by `union_names` once the templates are
+migrated (item 1c) — `Foo`/`IsFoo`, `Foo`/`AsFoo`, `Foo`/`UnmanagedFoo`. Those are also
+pre-existing breakage in the current generator, since `IsX`, `AsX` and `Unmanaged{X}` are already
+emitted; they are noted here only so the distinction is on record.
+
+### Verification
+
+A reference-project enum with a keyword variant would need the fix in place first, since adding
+one now would break the build rather than a test. A `union_names`-level unit test asserting the
+escaped or cased stem is the cheaper gate.
