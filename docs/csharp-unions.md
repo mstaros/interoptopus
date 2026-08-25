@@ -224,9 +224,20 @@ enclosing-name, `variant`/`_variant` and repeated-fallback cases.
 
 ### Consumers migrated
 
-All nine sites now read `v.stem`: `body`, `body_ctors`, `body_tostring`, `body_unmanaged`,
+Nine sites read `v.stem`: `body`, `body_ctors`, `body_tostring`, `body_unmanaged`,
 `body_unmanaged_variant`, `body_to_unmanaged`, `body_as_unmanaged`, `body_exception_for_variant`,
 `definition`. Reference-project output is byte-identical; no snapshot moved.
+
+**There is a tenth site, and it was missed** — `pass/output/common/wire/mod.rs` still emits
+`Is{name}`, `As{name}()` and the factory from the raw Rust `variant.name`, at six places. It is
+not a rename: `WireCodeGen` holds only `&RsTypes` and cannot reach the C# model at all, so it
+also skips the `sanitize_rust_name` that every `names.rs` path applies to type names.
+
+Latent today because `stem == name` throughout the reference project, and it becomes a compile
+error in the generated file once a stem moves — `body.cs` emits `Is{stem}` while wire emits
+`Is{name}`. Items 3b and 3c both add collision surface, so this fires as Step 3 lands. Tracked
+as `Issues.md` `4e9a17c3`; item 1d.
+
 
 ### Ordering constraints
 
@@ -559,12 +570,14 @@ the pass is `union_names`, it owns naming only, and there is no gate — see Dec
 
 ### Remaining
 
-Items 0–1c, R and 3 are done; **3a and 3b are next.**
+Items 0–1c, R and 3 are done. **1d is the first thing to fix** — it is a correctness hole that
+3b and 3c will convert into a build break. 3a can proceed in parallel.
 
 | # | Status | Item | Gate |
 |---|---|---|---|
+| 1d | open | **`wire/mod.rs` bypasses the C# model.** Six sites emit `v.name`; `cs_type_name` skips `sanitize_rust_name`. `Issues.md` `4e9a17c3` | — |
 | 3a | open | Class: private parameterless ctor, no `_hasValue` | — |
-| 3b | open | Nested `{case_type}` case types | — |
+| 3b | open | Nested `{case_type}` case types | 1d |
 | 3c | open | `Value` / `HasValue` / `TryGetValue` — consumes `_hasValue`, clears CS0169 | 3a, 3b |
 | 3d | open | `[Union]` + `IUnion` via joined interface list | 3c |
 | 3e | open | **Case→enum conversion** — decide whether the compiler synthesises it from `[Union]` or we emit operators | 3b |
@@ -573,8 +586,9 @@ Items 0–1c, R and 3 are done; **3a and 3b are next.**
 | 4a | open | `ToManaged` constructs via case ctors + validates tag | 3c |
 | 4b | open | Exception split (decided in Step 4; implementation only) | 4, 4a |
 | 4c | open | `default(ResultX)` empty not `Ok`; `default(OptionX)` ≠ `NoneCase` | 3c, 4a |
+| 4d | open | Wire's enum serializer honours `ExceptionForVariant()` instead of its own "Unknown variant" | 1d, 4b |
 | 5 | open | Snapshots move once; consumer projects compile the output | 3d, 4b |
-| 5c | open | Collision cases: `Value`, casing-fold, `B`/`IsB` | — |
+| 5c | open | Collision cases: `Value`, casing-fold, `B`/`IsB` — **write early; this is what catches 1d** | 1d |
 | 5d | open | `default(struct).ToUnmanaged()` throws | 4 |
 | 5e | open | Class union cannot produce non-null empty | 3a |
 | 5f | open | Invalid native tag throws | 4a |
@@ -583,10 +597,15 @@ Items 0–1c, R and 3 are done; **3a and 3b are next.**
 | 5i | open | `default(ResultX)`/`default(OptionX)` tests; `AsOk()` on default | 4c |
 | 6 | open | `Result` leftovers: `IResult<T,E>` coexistence, `body_from_call` factory names | 5 green |
 
+Item 1d gates 3b because 3b introduces `{case_type}`, a new collision class — every collision it
+resolves moves a stem, and every moved stem is a place `wire` and `body.cs` disagree. 5c is gated
+on 1d rather than the reverse because a colliding variant is exactly the test that exposes it.
+
 Item 6 is **not** an exclusion — `Option` and `Result` are projected in this pass, and `8c70868d`
 already emits `_hasValue` on `Result` carriers (`ResultVoidError`, `ResultVec3f32Error`,
 `ResultUintDotnetException`) alongside plain enums. Only the `Result`-specific tidying is
 deferred; see Step 6. `body_from_call` is a naming consumer and moves here from the Closed list.
+
 
 ### Decided
 

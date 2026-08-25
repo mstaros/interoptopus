@@ -80,28 +80,50 @@ An earlier revision of this file claimed `name` was "only for diagnostics". **Th
 The nine sites under `pass/output/common/types/enums/*` were migrated; these were not.
 
 **This is not a one-word fix.** `wire/mod.rs` takes `e: &interoptopus::lang::types::Enum` — the
-*Rust inventory* type, which has no `stem` field at all. Resolving it needs either the C#
-variant threaded in, or a lookup from Rust variant to resolved C# name. That is a design
-decision, not a rename.
+*Rust inventory* type, which has no `stem` field at all. The root cause is one level up:
+`WireCodeGen` holds only `rs_types: &RsTypes`, so no emitter in that file can reach the C# model.
+Resolving it needs a model reference threaded into the struct. That is a design decision, not a
+rename.
+
+**There is a second family, from the same cause.** `cs_type_name` returns `ty.name.clone()` for
+`Struct` and `Enum`, skipping the `sanitize_rust_name` that every path through `names.rs` applies
+(line 134 is the catch-all: `_ => sanitize_rust_name(&ty.name)`). The comment at `names.rs:113`
+does **not** license this — it says to resolve the Wire inner *name* from the Rust inventory, and
+then still applies `sanitize_rust_name` and `rust_to_pascal` to it. Reading the source string from
+`rs_types` is not the same as using the Rust name verbatim.
 
 **Why no test catches it.** `stem == name` for every reference-project enum, because none
 collide. The invariant is unenforced. A colliding enum would generate a managed type using
 `IsFooVariant` while the wire serializer emits `IsFoo` — two halves of the same file
 disagreeing, silently, and only for enums nobody has written yet.
 
-**Fix this before item 3.** Adding case types on top of a half-migrated naming layer buries the
-inconsistency deeper.
+**Fix this before item 3b.** Items 3b and 3c both *add* collision surface — `{stem}Case` is a new
+collision class, and 3c reserves `Value`/`HasValue`/`TryGetValue` — so the rate of `stem != name`
+goes up as Step 3 lands. Adding case types on top of a half-migrated naming layer buries the
+inconsistency deeper. Tracked as `Issues.md` `4e9a17c3`; plan item 1d, which now gates 3b.
+
+**When fixing, match variants by `tag`, not by index or name.** Since Step 0 both the Rust and C#
+variant carry the same authoritative discriminant. Index is positional and brittle; name is the
+thing being corrected.
+
+**A third gap, same file, different contract.** `emit_enum_serialize` falls through to
+`throw new InvalidOperationException("Unknown variant")`. Once item 3c consumes `_hasValue`,
+every `IsX` returns false for a default struct union, so wire reaches that fallback for an empty
+enum. Step 4 routes empty-state and corrupt-tag through `ExceptionForVariant()` with different
+exception types; wire honours neither. Plan item 4d.
 
 ### Once that is done
 
 **Templates must not re-sanitize.** `union_names` guarantees uniqueness over the exact strings
-it produces. Any casing or escaping applied downstream breaks that guarantee.
+it produces. Any casing or escaping applied downstream breaks that guarantee. `wire` currently
+breaks the same invariant from the other direction, by under-sanitizing off a different source.
 
 **Names live on the variant, not in a side table.** Several output passes filter variants before
 emitting — `body` keeps only disposable ones, `body_as_unmanaged` only payload-carrying ones — so
 a parallel `Vec<VariantNames>` indexed positionally misaligns silently after any filter.
 
 ---
+
 ## 4. Three things that cost time
 
 **A `DataEnum` reaches the model by three routes.** Directly as `TypeKind::DataEnum` from
