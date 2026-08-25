@@ -45,3 +45,6 @@ Interop.Common.cs
 Interop.Plugin.cs
 Interop.User.cs
 website/public
+
+# Plugin DLLs are built by the test suite (see tests/mod.rs).
+**/_plugins/*.dll
