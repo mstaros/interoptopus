@@ -268,7 +268,7 @@ impl TypeModel {
                     let kind = match &variant.data {
                         VariantData::Unit => {
                             quote_spanned! { variant.name.span() =>
-                                ::interoptopus::lang::types::VariantKind::Unit(#disc)
+                                ::interoptopus::lang::types::VariantKind::Unit
                             }
                         }
                         VariantData::Tuple(ty) => {
@@ -284,6 +284,7 @@ impl TypeModel {
                         ::interoptopus::lang::types::Variant {
                             name: #variant_name.to_string(),
                             docs: ::interoptopus::lang::meta::Docs::from_line(#variant_docs),
+                            tag: #disc,
                             kind: #kind,
                         }
                     }

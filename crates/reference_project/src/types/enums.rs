@@ -46,3 +46,19 @@ pub enum EnumExplicitThenImplicit {
     B,
     C,
 }
+
+/// Explicit discriminants mixed with payload-carrying variants.
+///
+/// Rust assigns 10, 11, 12, 20. This is the only reference enum that gives a
+/// payload variant a real discriminant: `EnumNegative` is explicit but unit-only,
+/// and `EnumPayload` has payloads but no explicit discriminants. Without this,
+/// nothing distinguishes a variant's tag from its positional index.
+/// See `Issues.md` `09b82d44` defects 2 and 3.
+#[ffi]
+#[derive(Clone)]
+pub enum EnumExplicitPayload {
+    A = 10,
+    B(u32),
+    C(Vec3f32),
+    D = 20,
+}

@@ -314,8 +314,8 @@ impl WireCodeGen<'_> {
         for (index, variant) in e.variants.iter().enumerate() {
             let kw = if index == 0 { "if" } else { "else if" };
             let (tag, payload) = match &variant.kind {
-                VariantKind::Unit(t) => (*t, None),
-                VariantKind::Tuple(t) => (index.cast_signed(), Some(*t)),
+                VariantKind::Unit => (variant.tag, None),
+                VariantKind::Tuple(t) => (variant.tag, Some(*t)),
             };
             lines.push(format!("{p}{kw} ({val}.Is{name})", name = variant.name));
             lines.push(format!("{p}{{"));
@@ -348,8 +348,8 @@ impl WireCodeGen<'_> {
         for (index, variant) in e.variants.iter().enumerate() {
             let kw = if index == 0 { "if" } else { "else if" };
             let (tag, payload) = match &variant.kind {
-                VariantKind::Unit(t) => (*t, None),
-                VariantKind::Tuple(t) => (index.cast_signed(), Some(*t)),
+                VariantKind::Unit => (variant.tag, None),
+                VariantKind::Tuple(t) => (variant.tag, Some(*t)),
             };
             lines.push(format!("{pi}{kw} ({tag_var} == ({prim_cs}){tag})", prim_cs = cs_primitive_name(prim)));
             lines.push(format!("{pi}{{"));
@@ -379,7 +379,7 @@ impl WireCodeGen<'_> {
 
         for variant in &e.variants {
             let payload = match &variant.kind {
-                VariantKind::Unit(_) => continue,
+                VariantKind::Unit => continue,
                 VariantKind::Tuple(t) => *t,
             };
             lines.push(format!("{p}if ({val}.Is{name})", name = variant.name));

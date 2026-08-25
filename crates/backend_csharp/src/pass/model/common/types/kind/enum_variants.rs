@@ -40,18 +40,18 @@ impl Pass {
             let mut cs_variants = Vec::new();
             let mut all_variants_available = true;
 
-            for (index, rust_variant) in rust_enum.variants.iter().enumerate() {
+            for rust_variant in &rust_enum.variants {
                 let (tag, cs_variant_type_id) = match &rust_variant.kind {
-                    lang::types::VariantKind::Unit(tag) => (*tag, None),
+                    lang::types::VariantKind::Unit => (rust_variant.tag, None),
                     lang::types::VariantKind::Tuple(rust_type_id) => {
-                        // Tuple variant: use index as tag, look up the C# TypeId
+                        // Tag comes from the variant, never its position. See `Issues.md` `09b82d44`.
                         let Some(cs_type_id) = id_map.ty(*rust_type_id) else {
                             // Variant type not yet mapped, skip this enum for now
                             pass_meta.lost_found.missing(self.info, crate::pass::MissingItem::RustType(*rust_type_id));
                             all_variants_available = false;
                             break;
                         };
-                        (index.cast_signed(), Some(cs_type_id))
+                        (rust_variant.tag, Some(cs_type_id))
                     }
                 };
 
