@@ -720,7 +720,7 @@ Both pipeline call sites change, which is why it was out of scope for a naming f
 id: e235bc7d
 kind: bug
 severity: medium
-status: open
+status: closed
 ```
 
 ### Symptom
@@ -762,6 +762,24 @@ Stage the build output directory rather than the single DLL — copy the `.cspro
 
 Verification is cheap and specific: delete `tests/reference_plugins/_plugins/Newtonsoft.Json.dll` in the main checkout and confirm the test fails before the fix and passes after. Do not verify on a tree that has run the suite before.
 
+### Resolution — closed by removing the need, not by implementing the fix
+
+The dependency itself was unnecessary. `Plugin.cs` used `JsonConvert` only to round-trip a
+`Dictionary<string, string>` through a string; `System.Text.Json` does that identically and is
+in the BCL, so nothing needs staging. The fixture was ported, both `PackageReference`s were
+removed — the second, in `Tests.csproj` at a different version, had zero usages in any `.cs`
+file — and `Newtonsoft.Json` is now absent from the repository.
+
+Building a dependency-staging mechanism to support one fixture's convenience import would have
+been engineering around a problem instead of deleting it. The staging gap is real and would
+return the moment a plugin fixture takes a third-party `PackageReference` again; that
+constraint is now recorded in `docs/csharp-unions-handoff.md` §7 rather than defended by code.
+
 ### Note
 
-Found while measuring 1d's test failures (`4e9a17c3`). It was the one failure that did not clear on a re-run, which is what separated it from the six first-run plugin-build ordering failures around it.
+Found while measuring 1d's test failures (`4e9a17c3`). It was the one failure that did not clear
+on a re-run, which is what separated it from the six first-run plugin-build ordering failures
+around it.
+
+Those six, and a later run of nineteen, turned out to be two further and entirely separate
+defects — neither in interoptopus. See the transaction that closed this issue.
