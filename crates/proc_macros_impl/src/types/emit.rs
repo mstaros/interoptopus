@@ -233,28 +233,45 @@ impl TypeModel {
                 }
             }
             TypeData::Enum(enum_data) => {
-                let mut next_discriminant: isize = 0;
+                // Rust's rule: an implicit discriminant is the previous one plus one, and an
+                // explicit one restarts the sequence. Explicit values are arbitrary const
+                // expressions emitted as tokens and evaluated at the call site, so the macro
+                // never learns their value and cannot track this as a plain counter. Carry the
+                // last explicit expression as `base` and count variants since it in `offset`,
+                // emitting `base + offset` for implicit ones.
+                //
+                // `offset` advances for every variant regardless of payload, so a tuple variant
+                // between two unit variants still consumes its discriminant.
+                // See `Issues.md` `09b82d44` defect 1.
+                let mut base: Option<TokenStream> = None;
+                let mut offset: isize = 0;
                 let variants = enum_data.variants.iter().map(|variant| {
                     let variant_name = variant.name.to_string();
                     let variant_docs = variant.docs.join("\n");
+                    let disc = match (&variant.discriminant, &base) {
+                        (Some(expr), _) => {
+                            base = Some(quote_spanned! { variant.name.span() => #expr });
+                            offset = 0;
+                            quote_spanned! { variant.name.span() => {
+                                #[allow(clippy::unnecessary_cast)]
+                                { (#expr) as isize }
+                            }}
+                        }
+                        (None, Some(prev)) => quote_spanned! { variant.name.span() => {
+                            #[allow(clippy::unnecessary_cast)]
+                            { ((#prev) as isize) + #offset }
+                        }},
+                        (None, None) => quote_spanned! { variant.name.span() => #offset },
+                    };
+                    offset += 1;
+
                     let kind = match &variant.data {
                         VariantData::Unit => {
-                            let disc = if let Some(expr) = &variant.discriminant {
-                                quote_spanned! { variant.name.span() => {
-                                    #[allow(clippy::unnecessary_cast)]
-                                    { (#expr) as isize }
-                                }}
-                            } else {
-                                let d = next_discriminant;
-                                quote_spanned! { variant.name.span() => #d }
-                            };
-                            next_discriminant += 1;
                             quote_spanned! { variant.name.span() =>
                                 ::interoptopus::lang::types::VariantKind::Unit(#disc)
                             }
                         }
                         VariantData::Tuple(ty) => {
-                            next_discriminant += 1;
                             quote_spanned! { variant.name.span() =>
                                 ::interoptopus::lang::types::VariantKind::Tuple(
                                     <#ty as ::interoptopus::lang::types::TypeInfo>::id()

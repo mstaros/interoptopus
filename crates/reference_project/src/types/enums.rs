@@ -35,3 +35,14 @@ pub enum EnumNegative {
     B = -0,
     C = 1,
 }
+
+/// Explicit discriminant followed by implicit ones.
+///
+/// Rust assigns 5, 6, 7 here: an implicit discriminant is the previous one plus one.
+/// Present to pin down what the generator actually assigns. See `Issues.md` `09b82d44`.
+#[ffi]
+pub enum EnumExplicitThenImplicit {
+    A = 5,
+    B,
+    C,
+}
