@@ -140,7 +140,10 @@ fn ensure_plugin_built(base: &Path, name: &str) -> Result<(), Box<dyn Error>> {
         for var in ["USERPROFILE", "APPDATA", "NUGET_PACKAGES", "DOTNET_CLI_HOME", "TEMP"] {
             line.push_str(&format!("  {var} = {:?}\n", std::env::var(var).ok()));
         }
-        line.push_str(&format!("  PATH len = {:?}\n", std::env::var("PATH").map(|p| p.len()).ok()));
+        for (i, entry) in std::env::var("PATH").unwrap_or_default().split(';').filter(|e| !e.is_empty()).enumerate() {
+            line.push_str(&format!("  PATH[{i}] = {entry}\n"));
+        }
+        line.push_str(&format!("  which dotnet = {:?}\n", std::env::var("PATH").unwrap_or_default().split(';').map(|d| std::path::Path::new(d).join("dotnet.exe")).find(|p| p.exists())));
         line.push_str(&format!("  obj = {}, assets = {}\n", project_dir.join("obj").exists(), project_dir.join("obj").join("project.assets.json").exists()));
         // A file, not stderr: nextest discards output for passing tests, and the whole point
         // is to compare a passing run against a failing one.
