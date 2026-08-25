@@ -244,27 +244,32 @@ sufficient; a "cannot converge" error is not part of the contract.
 
 ---
 
-## Step 2 — Builder flag
+## Step 2 — Target framework (replaces the builder flag)
 
-`RustLibraryBuilder::unions(bool)`, default off, consumed by the projection pass.
-`RustLibraryConfig` is internal; `RustLibraryBuilder` is the public surface.
+**This step was originally an opt-in `RustLibraryBuilder::unions(bool)`. That is dropped.**
+See Decided: the repository targets net11 everywhere and unions are the default enum
+projection, so there is no flag, no eligibility gate, and no flag-off output to preserve.
 
-**Verified.** `pipeline/rust/builder.rs` exposes `#[must_use]` fluent setters that each write
-into `self.config.<pass_config>.<field>` — `dispatch`, `dll_name`, `headers`, `search_path`.
-The projection pass therefore gets a `Config { enabled: bool }` field on `RustLibraryConfig`,
-set the same way:
+What remains is a framework migration, landing as its own commit before any union code:
 
-```rust
-/// Enables C# 15 union projection for eligible enums.
-#[must_use]
-pub fn unions(mut self, enabled: bool) -> Self {
-    self.config.model_union_projection.enabled = enabled;
-    self
-}
-```
+- **13 `.csproj` files** move `net10.0` → `net11.0` and gain
+  `<LangVersion>preview</LangVersion>`: the 9 `tests/reference_plugins/*.dll/*.csproj`, the 2
+  `tests/backend_plugins/*.dll/*.csproj`, `tests/reference_project/Bindings/Bindings.csproj`,
+  and `tests/reference_project/Tests/Tests.csproj`. `benches/dotnet/dotnet_benchmarks.csproj`
+  makes 14 if benchmarks are kept current. `tests/reference_project/Tests/InteropSpike.csproj`
+  is already `net11.0` and needs only `LangVersion`.
+- **Justfile** — `_bdp_ref` and `_bdp_p` copy from `bin/Release/net10.0/`; both become
+  `net11.0`.
+- **Rebuild the 11 plugin DLLs.** .NET output is not reproducible, so all 11 LFS-tracked
+  binaries change even where behaviour does not. That is why the Justfile keeps the plugin
+  build as a separate step.
 
-This does not contradict "one source of truth": the config field only seeds the pass. Output
-passes query the *pass*, never the config.
+`crates/backend_csharp/global.json` pins no SDK — it only selects
+`Microsoft.Testing.Platform` as the test runner — so nothing there blocks the retarget.
+
+Requires a .NET 11 Preview 5+ SDK for `UnionAttribute` / `IUnion`. Until C# 15 goes GA
+(expected November 2026) `LangVersion` must stay `preview`, and the union spec still carries
+open questions that could move the emitted shape before then.
 
 ---
 
@@ -460,33 +465,41 @@ a nested declaration is a compile error, not merely wasted work.
 
 ## Todo
 
-Execution state. Rationale for every item lives in the step sections above; this table tracks
-only what is done. Step 0 is tracked as `Issues.md` `09b82d44`, not here.
+Execution state. Rationale lives in the step sections above; this tracks only what is done.
+
+### Done
+
+| # | Item | Landed |
+|---|---|---|
+| 0a | Proc macro resumes implicit discriminants from the previous value | `09b82d44` defect 1 |
+| 0d | `EnumExplicitThenImplicit { A = 5, B, C }` — regression test | same commit |
+| 0 | Discriminant moved onto `Variant.tag`; `VariantKind` is payload-only | `c928d53e` |
+| 0b | Proc macro emits `tag` for every variant, `Unit` carries none | `c928d53e` |
+| 0c | 3 index-as-tag sites: `enum_variants:54`, `wire:318`, `wire:352` | `c928d53e` |
+| 0e | `EnumExplicitPayload { A = 10, B(u32), C(Vec3f32), D = 20 }` → 10, 11, 12, 20 | `c928d53e` |
+
+`Issues.md` `09b82d44` is closed. Suite green: 31 passed, 0 failed, 2 ignored, plus doctests.
+
+### Remaining
 
 | # | Status | Item | Gate |
 |---|---|---|---|
-| 0 | blocked | Discriminant onto `Variant` (`09b82d44` defect 2) | **Open decision: `Variant.tag` vs `VariantKind::Tuple(_, tag)`** |
-| 0a | open | Proc macro: `next_discriminant = resolved + 1` (`09b82d44` defect 1) | none — independent, ships alone |
-| 0b | open | Proc macro: read `variant.discriminant` in the `Tuple` arm | 0 |
-| 0c | open | 3 index-as-tag sites: `enum_variants:54`, `wire:318`, `wire:352` (defect 3) | 0b |
-| 0d | open | Reference enum `{ A = 5, B, C }` → confirms/kills defect 1 | none — do first |
-| 0e | open | Reference enum mixing explicit discriminants + payload variants | 0c |
-| 1 | open | `union_projection` model pass: eligibility + name resolution | — |
+| R | open | Retarget 13 `.csproj` to `net11.0` + `<LangVersion>preview</LangVersion>` | — |
+| Ra | open | Justfile `net10.0` → `net11.0` output paths | R |
+| Rb | open | Rebuild the 11 plugin DLLs against net11 | Ra |
+| 1 | open | `union_projection` model pass — name resolution only | R green |
 | 1a | open | Reserved-name set incl. enclosing type name (CS0542) | 1 |
 | 1b | open | Stem = currently-emitted name, not re-cased | 1 |
 | 1c | open | Migrate 7 templates off raw `v.name` | 1 |
-| 2 | open | `RustLibraryBuilder::unions(bool)` | 1 |
-| 3 | open | Struct: `_hasValue`, managed partial only | 2 |
-| 3a | open | Class: private parameterless ctor, no `_hasValue` | 2 |
+| 3 | open | Struct: `_hasValue`, managed partial only | 1c |
+| 3a | open | Class: private parameterless ctor, no `_hasValue` | 1c |
 | 3b | open | Nested `{Stem}Case` case types | 1c |
 | 3c | open | `Value` / `HasValue` / `TryGetValue` | 3, 3a, 3b |
 | 3d | open | `[Union]` + `IUnion` via joined interface list | 3c |
 | 4 | open | `ToUnmanaged` / `AsUnmanaged` empty guard | 3 |
-| 4a | open | `ToManaged` constructs via case ctors + validates tag | **0, 0c** |
+| 4a | open | `ToManaged` constructs via case ctors + validates tag | 3c |
 | 4b | open | Exception split: `InvalidOperationException` vs `InteropException` | 4, 4a |
-| 5 | open | Flag-off snapshots byte-identical | **real checkout, not worktree** |
-| 5a | open | Flag-on snapshot | 5 |
-| 5b | open | net11/preview compile fixture | 3d |
+| 5 | open | Snapshots move once; no byte-identical gate | 3d, 4b |
 | 5c | open | Collision cases: `Value`, casing-fold, `B`/`IsB` | 1a |
 | 5d | open | `default(struct).ToUnmanaged()` throws | 4 |
 | 5e | open | Class union cannot produce non-null empty | 3a |
@@ -495,29 +508,28 @@ only what is done. Step 0 is tracked as `Issues.md` `09b82d44`, not here.
 | 5h | open | Managed-only `DataEnum` case | 3c |
 | 6 | deferred | `Option` / `Result` — incl. `body_from_call` factory names | 5 green |
 
-Note 0a is independent of the union work and of the `Variant` shape decision. It is a
-one-line fix to a bug that affects ordinary unit-only enums, and it should not wait on
-anything here.
-
-Steps 1 and 2 no longer gate on Step 0 — name resolution and the builder flag touch nothing
-the discriminant work touches. Only 4a does.
-
 ### Decided
 
-**Discriminant lives on `Variant`** — item 0 unblocked. `VariantKind` becomes `Unit` /
-`Tuple(TypeId)`, a pure payload descriptor. Rationale in `09b82d44`: the measured cost over the
-alternative is four one-line match arms, and the same defect has already appeared
-independently in three places.
+**Target net11 everywhere; unions are the default, not a flag.** This repository is a fork with
+a single known consumer, so there are no net10 consumers to protect. Dropped as a result: item 2
+(`RustLibraryBuilder::unions(bool)`), the projection pass's eligibility gate, item 5's
+byte-identical flag-off regression gate, and item 5b's separate net11 compile fixture. The
+retargeted `Bindings`, `Tests` and plugin projects compile the union output directly, which is a
+better check than a bespoke fixture because it is the real consumer path.
 
-**Defect 1's fix is not the one-line counter change described earlier.** `emit.rs` emits an
-explicit discriminant as `(#expr) as isize` — a token stream evaluated at the *call site*, not
-at macro-expansion time. The macro therefore cannot know that `A = 5` is `5`, and cannot resume
-a numeric counter from it. `next_discriminant = disc + 1` is not implementable as written.
+The cost: this is unmergeable upstream, since interoptopus proper cannot require a preview
+compiler. Accepted deliberately. Reinstating the flag is the price of that option if it is ever
+wanted back.
 
-The fix is to carry the previous discriminant as a `TokenStream` and emit implicit variants as
-`((#prev) + 1)`, keeping evaluation at the call site where the expression is const-evaluable.
-Still small, but a different shape — and it means 0a is no longer a trivial one-liner that can
-be waved through.
+**Discriminant lives on `Variant`.** `VariantKind` is `Unit` / `Tuple(TypeId)`, a pure payload
+descriptor. The measured cost over the alternative was four one-line match arms, and the same
+defect had already appeared independently in three places. Landed in `c928d53e`.
+
+**Defect 1's fix was not a one-line counter change.** `emit.rs` emits an explicit discriminant as
+`(#expr) as isize` — a token stream evaluated at the *call site*, not at macro-expansion time —
+so the macro never learns that `A = 5` is `5` and cannot resume a numeric counter from it. The
+fix carries the previous discriminant as a `TokenStream` and emits implicit variants as
+`((#prev) + 1)`, keeping evaluation where the expression is const-evaluable.
 
 ### Not doing
 

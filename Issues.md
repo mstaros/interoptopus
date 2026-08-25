@@ -75,7 +75,7 @@ The previous recommended action — `cargo insta review` — is destructive in t
 id: 09b82d44
 kind: bug
 severity: high
-status: open
+status: closed
 ```
 
 ### Summary
