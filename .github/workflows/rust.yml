@@ -25,11 +25,15 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: "3.8"
+      # Required on every OS, not just Linux: rt/dynamic.rs pins the hostfxr runtime
+      # config at 11.0.0-preview.1, and hostfxr will not roll forward from a release
+      # request to a pre-release runtime. The plugin-load tests boot that runtime, and
+      # define_plugin! now builds the plugins, so the SDK is needed at test time.
       - name: .NET - Install
-        if: runner.os == 'Linux'
-        uses: actions/setup-dotnet@v2
+        uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "10.x"
+          dotnet-version: "11.0.x"
+          dotnet-quality: "preview"
       - name: Python - Install Dependencies
         run: |
           python -m pip install --upgrade pip
