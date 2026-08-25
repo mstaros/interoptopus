@@ -416,6 +416,131 @@ differently.
 Whether `cs_type_name`'s `_ => "object"` fallback ever fires for a legitimate `Wire<T>` payload.
 Wire fields are `WireOnly` by construction, which may be exactly the subset the function handles.
 A read, not a change.
+### Design — agreed
+
+Agreed, not yet implemented. Recorded so implementation does not re-derive it.
+
+#### Resolve at the pass boundary, not inside the emitter
+
+`WireCodeGen`'s methods return `String` and `()`, not `Result`. Making resolution strict *inside*
+them would mean threading `Result` through ten mutually recursive methods — `cs_type_name`, the
+three `emit_*` walkers, the three enum emitters and the three struct-body helpers — which is a
+large diff for a naming fix.
+
+Both construction sites are already inside `process()` functions returning `OutputResult`, with
+`id_map` in scope. Build and validate the lookup there; hand the emitter a prepared map.
+
+#### New type: `WireNames`
+
+Lives in `pass/output/common/wire/` — it is wire's view of the model, not a model concern.
+
+```rust
+pub struct WireNames {
+    types: HashMap<TypeId, String>,             // Rust TypeId -> canonical C# name
+    variants: HashMap<(TypeId, isize), String>, // (Rust enum TypeId, tag) -> stem
+}
+```
+
+Keyed by **Rust** `TypeId`, because that is what wire holds while walking the Rust graph.
+
+Variants key on **`(TypeId, tag)`**. Not positional index — that breaks under any future variant
+filtering, which several output passes already do. Not name — that is the thing being corrected.
+`tag` has been the shared authoritative discriminant on both sides since Step 0 (`c928d53e`), so
+it is the one identity both models agree on.
+
+#### Builder
+
+`WireNames::build(id_map, names, kinds, rs_types, enums) -> Result<Self, Error>`
+
+For each enum the pass is about to emit:
+
+- `id_map.ty(rust_id)` → cs id, else `Err` naming the Rust type
+- `names.get(cs_id)` → canonical type name, else `Err`
+- `kinds.get(cs_id)` → the C# `DataEnum`, else `Err`
+- each C# variant: insert `(rust_id, variant.tag) -> variant.stem`; `Err` if `stem` is empty
+
+An empty stem is `union_names`' own "unresolved" sentinel — the same convention it uses for
+convergence — so this reuses an existing invariant rather than inventing one.
+
+#### Strictness
+
+Lookups on the built map return `&str`, **not** `Option<&str>`. This is deliberate: an `Option`
+here invites `unwrap_or(&variant.name)`, which would silently reinstate exactly this bug while
+looking like defensive coding. Every failure mode is caught in the builder, where `Err` is
+returnable and the message can name the enum and tag.
+
+#### `WireCodeGen`
+
+```rust
+pub struct WireCodeGen<'a> {
+    pub rs_types: &'a RsTypes,
+    pub cs: &'a WireNames,
+}
+```
+
+Method signatures unchanged. The diff is the six variant sites plus two `cs_type_name` arms.
+
+#### The six variant sites
+
+All in `wire/mod.rs`: `emit_enum_serialize` (320, 324), `emit_enum_deserialize` (361, 363),
+`emit_enum_size` (385, 387). Each `variant.name` becomes `self.cs.variant_stem(ty_id, variant.tag)`.
+
+`emit_enum_serialize` already receives the enum's `TypeId` as `_ty_id` and ignores it — drop the
+underscore. Confirm the other two receive it; thread it if not.
+
+#### `cs_type_name`
+
+```rust
+RsTypeKind::Struct(_) => self.cs.type_name(ty_id),   // was ty.name.clone()
+RsTypeKind::Enum(_)   => self.cs.type_name(ty_id),   // was ty.name.clone()
+```
+
+Everything else unchanged. `WireOnly` composition — `List<T>`, `Dictionary<K,V>`, `T?`, `T[]` —
+stays recursive here: those are *shapes* derived from the Rust graph, not nominal identifiers, and
+walking the Rust graph is correct for them because `WireOnly` fields have no C# `TypeKind`.
+
+This preserves the split worth keeping: **the Rust graph decides traversal and composition; the C#
+model decides canonical identifiers.**
+
+For a type with genuinely no C# mapping, the builder falls back to
+`rust_to_pascal(sanitize_rust_name(&ty.name))` — the same helpers `names.rs:118` uses, called
+rather than copied.
+
+#### Threading
+
+Two construction sites, both already receiving `id_map`:
+
+- `wire/helper_classes.rs:40` — `let codegen = WireCodeGen { rs_types };`
+- `wire/wire_type.rs`
+
+Their `process()` signatures gain the names and kinds passes. Four pipeline call sites (Rust and
+dotnet), which already have `m.type_names` and `m.type_kinds` in scope. Two signatures and four
+calls — not architecture.
+
+#### Tests — item 5c, extended
+
+1. **Colliding variant** (`Foo` / `IsFoo`) forcing `stem != name`. Assert all six wire emissions
+   use the stem. Without this the defect reopens silently.
+2. **A type whose `sanitize_rust_name` is not identity, reachable inside a `Wire<T>`.** Assert wire
+   emits the sanitized C# name.
+
+Together these prove both families, not just the variant half. Both are acceptance gates for 1d.
+
+#### Explicitly out of scope
+
+- Replacing `_ => "object"` with a generation error. Separate change; a snapshot search for
+  `object result`, `List<object>`, `WireOfObject` and `public required object` found nothing, so
+  there is no evidence the path fires today. Worth doing eventually — a generator emitting `object`
+  because it does not understand a type is masking a model bug — but it does not gate 1d.
+- Deduplicating the `WireOnly` composition that `names.rs` (87-97) and `cs_type_name` (34-43) both
+  implement. Real duplication and already present; the two compose from different resolvers, so a
+  shared helper takes a resolver parameter. Factor when a third consumer appears or when the two
+  drift, not now — but note it here so the drift is not rediscovered.
+- Item 4d, wire's exception contract. Same file, different concern, gated on 4b.
+
+#### Order
+
+`WireNames` + builder → threading → six variant sites → `cs_type_name` → 5c → then 3b.
 ## Enum variant names are never sanitized, so a C# keyword variant emits uncompilable bindings
 
 ```issue
