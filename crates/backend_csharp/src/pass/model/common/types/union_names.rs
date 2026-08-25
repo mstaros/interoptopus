@@ -87,7 +87,7 @@ pub struct Pass {
 /// for the shapes `fallback.rs` synthesises and `type_map_patterns` installs. Matching
 /// only the first left `Ok` and `Err` unresolved, which emitted `_` for every payload
 /// field and factory.
-fn data_enum(kind: &TypeKind) -> Option<&DataEnum> {
+pub(crate) fn data_enum(kind: &TypeKind) -> Option<&DataEnum> {
     match kind {
         TypeKind::DataEnum(e) => Some(e),
         TypeKind::TypePattern(TypePattern::Option(_, e) | TypePattern::Result(_, _, e)) => Some(e),

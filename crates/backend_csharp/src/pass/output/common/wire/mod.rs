@@ -7,9 +7,11 @@
 //! - [`all`] — Assembles `wire_type` and `helper_classes` results per output file
 
 pub mod all;
+pub mod cs_names;
 pub mod helper_classes;
 pub mod wire_type;
 
+use self::cs_names::CsNames;
 use interoptopus::inventory::{TypeId, Types as RsTypes};
 use interoptopus::lang::types::{Array, Layout, Primitive, Struct, TypeKind as RsTypeKind, VariantKind, WireOnly};
 
@@ -19,9 +21,38 @@ use interoptopus::lang::types::{Array, Layout, Primitive, Struct, TypeKind as Rs
 /// translating primitives, `WireOnly` types, and user structs into inline C# statements.
 pub struct WireCodeGen<'a> {
     pub rs_types: &'a RsTypes,
+    /// Wire's two-method view of the resolved C# model. Deliberately not the model itself.
+    pub cs: CsNames<'a>,
 }
 
 impl WireCodeGen<'_> {
+    /// Canonical C# name for a nominal Rust type.
+    ///
+    /// Absence is a **model-initialization** invariant violation: `id_map` maps every
+    /// inventory type, `enum_variants` excludes no enum, and `wire::nested` backfills the
+    /// structs `struct_fields` skips. There is deliberately no fallback - deriving a name
+    /// here would make wire a second naming authority, which is the defect `4e9a17c3`
+    /// describes.
+    fn model_type_name(&self, ty_id: TypeId, rust_name: &str) -> String {
+        let Some(name) = self.cs.mapped_type_name(ty_id) else {
+            panic!("wire codegen: model-initialization invariant violated - no resolved C# type for Rust type `{rust_name}` ({ty_id})");
+        };
+        name.to_string()
+    }
+
+    /// Allocated stem for one variant, identified by its tag.
+    ///
+    /// Absence is a **model/output synchronization** invariant violation - a different
+    /// failure from the one above, and worth telling apart when debugging: the model was
+    /// built, but `union_names` had not resolved this variant. Falling back to
+    /// `variant.name` would silently reinstate the bug this accessor exists to prevent.
+    fn variant_stem(&self, ty_id: TypeId, tag: isize) -> &str {
+        let Some(stem) = self.cs.variant_stem(ty_id, tag) else {
+            panic!("wire codegen: model/output synchronization invariant violated - no resolved stem for variant tag {tag} of Rust enum {ty_id}");
+        };
+        stem
+    }
+
     /// Maps a Rust type to its C# managed type name.
     #[must_use]
     pub fn cs_type_name(&self, ty_id: TypeId) -> String {
@@ -41,8 +72,8 @@ impl WireCodeGen<'_> {
                 let inner_name = self.cs_type_name(*inner);
                 format!("{inner_name}?")
             }
-            RsTypeKind::Struct(_) => ty.name.clone(),
-            RsTypeKind::Enum(_) => ty.name.clone(),
+            RsTypeKind::Struct(_) => self.model_type_name(ty_id, &ty.name),
+            RsTypeKind::Enum(_) => self.model_type_name(ty_id, &ty.name),
             RsTypeKind::Array(arr) => format!("{}[]", self.cs_type_name(arr.ty)),
             RsTypeKind::TypePattern(interoptopus::lang::types::TypePattern::Option(inner)) => {
                 let inner_name = self.cs_type_name(*inner);
@@ -289,7 +320,7 @@ impl WireCodeGen<'_> {
                 lines.push(format!("{p}}}"));
             }
             RsTypeKind::Enum(e) => {
-                self.emit_enum_size(lines, e, val, depth, indent);
+                self.emit_enum_size(lines, ty_id, e, val, depth, indent);
             }
             RsTypeKind::Struct(s) => {
                 for f in &s.fields {
@@ -305,7 +336,7 @@ impl WireCodeGen<'_> {
 
     /// Wire-serialize an enum by branching on each variant (`IsX`), writing the
     /// discriminant, then serializing the variant's payload (if any).
-    fn emit_enum_serialize(&self, lines: &mut Vec<String>, _ty_id: TypeId, e: &interoptopus::lang::types::Enum, val: &str, depth: usize, indent: usize) {
+    fn emit_enum_serialize(&self, lines: &mut Vec<String>, ty_id: TypeId, e: &interoptopus::lang::types::Enum, val: &str, depth: usize, indent: usize) {
         let prim = enum_repr_primitive(e);
         let prim_cs = cs_primitive_name(prim);
         let p = pad(indent);
@@ -317,11 +348,11 @@ impl WireCodeGen<'_> {
                 VariantKind::Unit => (variant.tag, None),
                 VariantKind::Tuple(t) => (variant.tag, Some(*t)),
             };
-            lines.push(format!("{p}{kw} ({val}.Is{name})", name = variant.name));
+            lines.push(format!("{p}{kw} ({val}.Is{name})", name = self.variant_stem(ty_id, variant.tag)));
             lines.push(format!("{p}{{"));
             lines.push(format!("{pi}writer.Write(({prim_cs}){tag});"));
             if let Some(payload_id) = payload {
-                let payload_val = format!("{val}.As{}()", variant.name);
+                let payload_val = format!("{val}.As{}()", self.variant_stem(ty_id, variant.tag));
                 self.emit_serialize(lines, payload_id, &payload_val, depth + 1, indent + 1);
             }
             lines.push(format!("{p}}}"));
@@ -358,9 +389,9 @@ impl WireCodeGen<'_> {
                 let payload_var = format!("_p{depth}");
                 lines.push(format!("{pi2}{payload_cs} {payload_var} = default;"));
                 self.emit_deserialize(lines, payload_id, &payload_var, depth + 1, indent + 2);
-                lines.push(format!("{pi2}{target} = {enum_name}.{}({payload_var});", variant.name));
+                lines.push(format!("{pi2}{target} = {enum_name}.{}({payload_var});", self.variant_stem(ty_id, variant.tag)));
             } else {
-                lines.push(format!("{pi2}{target} = {enum_name}.{};", variant.name));
+                lines.push(format!("{pi2}{target} = {enum_name}.{};", self.variant_stem(ty_id, variant.tag)));
             }
             lines.push(format!("{pi}}}"));
         }
@@ -371,7 +402,7 @@ impl WireCodeGen<'_> {
     }
 
     /// Wire size of an enum: discriminant size plus payload size for the active variant.
-    fn emit_enum_size(&self, lines: &mut Vec<String>, e: &interoptopus::lang::types::Enum, val: &str, depth: usize, indent: usize) {
+    fn emit_enum_size(&self, lines: &mut Vec<String>, ty_id: TypeId, e: &interoptopus::lang::types::Enum, val: &str, depth: usize, indent: usize) {
         let prim = enum_repr_primitive(e);
         let p = pad(indent);
 
@@ -382,9 +413,9 @@ impl WireCodeGen<'_> {
                 VariantKind::Unit => continue,
                 VariantKind::Tuple(t) => *t,
             };
-            lines.push(format!("{p}if ({val}.Is{name})", name = variant.name));
+            lines.push(format!("{p}if ({val}.Is{name})", name = self.variant_stem(ty_id, variant.tag)));
             lines.push(format!("{p}{{"));
-            let payload_val = format!("{val}.As{}()", variant.name);
+            let payload_val = format!("{val}.As{}()", self.variant_stem(ty_id, variant.tag));
             self.emit_size(lines, payload, &payload_val, depth + 1, indent + 1);
             lines.push(format!("{p}}}"));
         }

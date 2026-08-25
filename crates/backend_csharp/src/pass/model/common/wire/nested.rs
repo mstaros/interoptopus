@@ -13,6 +13,7 @@ use crate::pass::Outcome::Unchanged;
 use crate::pass::{ModelResult, PassInfo, model};
 use interoptopus::inventory::{TypeId as RsTypeId, Types as RsTypes};
 use interoptopus::lang::meta::Visibility as RsVisibility;
+use interoptopus_backends::casing::sanitize_rust_name;
 use interoptopus::lang::types::{Repr, Struct, TypeKind as RsTypeKind, WireOnly as RsWireOnly};
 use std::collections::HashSet;
 
@@ -72,7 +73,7 @@ impl Pass {
             let composite = Composite { fields: cs_fields, repr: Repr::c() };
 
             type_kinds.set(cs_id, TypeKind::WireOnly(CsWireOnly::Composite(composite)));
-            type_names.set(cs_id, rust_ty.name.clone());
+            type_names.set(cs_id, sanitize_rust_name(&rust_ty.name));
             outcome.changed();
         }
 
@@ -123,7 +124,7 @@ impl Pass {
                 let composite = Composite { fields: cs_fields, repr: Repr::c() };
 
                 type_kinds.set(cs_id, TypeKind::WireOnly(CsWireOnly::Composite(composite)));
-                type_names.set(cs_id, nested_ty.name.clone());
+                type_names.set(cs_id, sanitize_rust_name(&nested_ty.name));
                 outcome.changed();
             }
         }

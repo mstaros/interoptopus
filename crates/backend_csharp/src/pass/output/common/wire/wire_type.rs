@@ -7,6 +7,7 @@
 use crate::lang::TypeId;
 use crate::output::{FileType, Output};
 use crate::pass::output::common::wire::WireCodeGen;
+use crate::pass::output::common::wire::cs_names::CsNames;
 use crate::pass::{OutputResult, PassInfo, model, output};
 use interoptopus::inventory::Types as RsTypes;
 use interoptopus::lang::types::TypeKind as RsTypeKind;
@@ -39,7 +40,7 @@ impl Pass {
         rs_types: &RsTypes,
     ) -> OutputResult {
         let templates = output_master.templates();
-        let codegen = WireCodeGen { rs_types };
+        let codegen = WireCodeGen { rs_types, cs: CsNames::new(types, id_map) };
 
         for file in output_master.outputs_of(FileType::Csharp) {
             let mut rendered = Vec::new();

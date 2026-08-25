@@ -187,7 +187,7 @@ would misalign silently after any filter.
 
 Every emitted member derives from `stem`: factory `{stem}`, check `Is{stem}`, accessor
 `As{stem}`, field `_{stem}`, unmanaged helper `Unmanaged{stem}`, case type `{case_type}`.
-`Variant::name` is the Rust spelling and is now diagnostics-only.
+`Variant::name` is the Rust spelling. It is **not** diagnostics-only: `wire/mod.rs` emitted it directly at six sites until item 1d, and `Issues.md` `4e9a17c3` is the record of that. Treat any claim that a field is unused as a claim to verify, not to repeat.
 
 ### Allocation policy
 
@@ -482,8 +482,9 @@ are reviewed rather than diffed to zero.
 
 - one focused union snapshot
 - variant named `Value`
-- casing-fold collision
-- `B` / `BCase`, and cross-family `B` / `IsB`
+- ~~casing-fold collision~~ — stale, no such class: `union_names` allocates case-sensitively, and there is no case-insensitive comparison anywhere in `backend_csharp`
+- `B` / `BCase`, and cross-family `B` / `IsB` — both managed-side only
+- **a stem-moving collision reachable inside `Wire<E>`** — the cases above never reach the wire emitters, which is exactly why `4e9a17c3` stayed invisible; `B`/`BCase` in particular moves only `case_type`, leaving both stems intact. Covered by `tests/output/wire/collision.rs`
 - `default(struct E).ToUnmanaged()` throws
 - class-backed union cannot produce a non-null empty instance
 - invalid native tag throws

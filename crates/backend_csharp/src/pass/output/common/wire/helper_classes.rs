@@ -8,6 +8,7 @@ use crate::lang::types::kind::TypeKind;
 use crate::lang::types::kind::wire::WireOnly;
 use crate::output::{FileType, Output};
 use crate::pass::output::common::wire::WireCodeGen;
+use crate::pass::output::common::wire::cs_names::CsNames;
 use crate::pass::{OutputResult, PassInfo, model, output};
 use interoptopus::inventory::Types as RsTypes;
 use interoptopus_backends::template::Context;
@@ -37,7 +38,7 @@ impl Pass {
         wire_types: &output::common::wire::wire_type::Pass,
     ) -> OutputResult {
         let templates = output_master.templates();
-        let codegen = WireCodeGen { rs_types };
+        let codegen = WireCodeGen { rs_types, cs: CsNames::new(types, id_map) };
 
         // Route each helper class to the output file its type is routed to.
         let mut helpers_by_output: HashMap<Output, Vec<String>> = HashMap::new();

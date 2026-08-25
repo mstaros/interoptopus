@@ -418,7 +418,7 @@ Wire fields are `WireOnly` by construction, which may be exactly the subset the 
 A read, not a change.
 ### Design — agreed
 
-Agreed, not yet implemented. Recorded so implementation does not re-derive it.
+**Implemented, and partly superseded by what was built.** Two things below no longer describe the code. (1) The prebuilt `WireNames` map, its builder and its `&str` strictness: replaced by a two-method resolver with lazy `Option` lookups and two panicking accessors at the call site — there is no map, so there is no domain to define, which was the only real objection to the original design. (2) The `rust_to_pascal(sanitize_rust_name(&ty.name))` fallback for a type with no C# mapping: dropped entirely. A locally derived name is a second naming authority, which is the defect family this issue is about; a missing model entry is now a panic. The rest of this section stands as written, including the two rejections and the `(TypeId, tag)` keying.
 
 #### Resolve at the pass boundary, not inside the emitter
 
@@ -613,3 +613,155 @@ emitted; they are noted here only so the distinction is on record.
 A reference-project enum with a keyword variant would need the fix in place first, since adding
 one now would break the build rather than a test. A `union_names`-level unit test asserting the
 escaped or cased stem is the cheaper gate.
+## wire's is_cs_value_type re-derives struct-vs-class that struct_class::Pass owns
+
+```issue
+id: 31248473
+kind: bug
+severity: medium
+status: open
+```
+
+### Symptom
+
+None yet. Latent, and a **compile error in generated `Interop.cs`** when it fires — `'X' does not contain a definition for 'HasValue'`.
+
+### What it does
+
+`crates/backend_csharp/src/pass/output/common/wire/mod.rs::is_cs_value_type` decides whether a Rust type maps to a C# value type, which drives the `Option` branching in `emit_option_serialize`, `emit_option_deserialize` and `emit_option_size` — `.HasValue`/`.Value` for a value type, a null check for a reference type.
+
+It decides this by walking the Rust graph:
+
+```rust
+RsTypeKind::Primitive(_) | RsTypeKind::Enum(_) | RsTypeKind::Array(_) => true,
+RsTypeKind::Struct(s) => !s.fields.iter().any(|f| contains_wireonly(f.ty, rs_types, ...)),
+```
+
+But `pass::model::common::types::info::struct_class::Pass::is_struct` already owns that decision, and six output passes consult it — `composites::{body, body_unmanaged, definition}` and `enums::{body, definition}` among them. Wire is the one that re-derives it.
+
+### Two concrete divergences
+
+**`Enum(_) => true` unconditionally.** `enums/body.rs:79` picks `struct` or `class` via `struct_class.is_struct(ty)`. A `DataEnum` emitted as a class then gets `.HasValue`/`.Value` from wire's `Option` path — a reference type has neither.
+
+**`Array(_) => true`.** C# arrays are reference types. `Option<[T; N]>` inside a wire payload emits `.HasValue` on a `T[]`.
+
+Whether either shape occurs in a real inventory today is **unmeasured**. `Option<DataEnum>` inside a `Wire<T>` is the likely first one.
+
+### Same family as `4e9a17c3`
+
+An emitter re-deriving something the model already owns. That issue fixed the two naming families in this file; this is the third thing the same file re-derives, and unlike them it is not about identifiers, so it survived that fix untouched.
+
+Counting the whole family: `tag` re-derived three times (`09b82d44`, `c928d53e`), names twice in wire (`4e9a17c3`), names once inside the model (`wire::nested`, fixed alongside 1d). This would be the seventh. The recurrence is the finding — it argues for handing passes capability-narrow accessors rather than whole model handles.
+
+### Proposed fix
+
+Thread `struct_class::Pass` to `WireCodeGen` the way `4e9a17c3` threaded the name resolver — as a narrow accessor, not the whole pass — and delete `is_cs_value_type`'s own derivation. Note that `contains_wireonly` is currently duplicated between this file and `types/kind/struct_fields.rs`; the model-side copy is the authority.
+
+### Also here, unrelated to the above
+
+`wire/helper_classes.rs::resolve_field_type_name` degrades gracefully for a missing model entry (`types.get(cs_ty)`, then `"object"`) three lines below a `cs_type_name` call that now panics on that same condition. Two policies for one failure in one function. No reproduction found: the near-miss — `patterns.rs:58` skipping `ffi::Option` over a `WireOnly` inner — routes through `cs_type_name`'s `TypePattern::Option` arm and never reaches the panicking arm. Misleading rather than broken; the fallback reads as if it handles a case its caller no longer reaches.
+## wire::nested writes type names, making it a second naming authority alongside names.rs
+
+```issue
+id: c33b9cf5
+kind: issue
+severity: low
+status: open
+```
+
+### Symptom
+
+None yet. `wire::nested` no longer produces an invalid identifier — that was fixed alongside item 1d — but it is still a second writer to `type_names`, which is the shape of the defect rather than its symptom.
+
+### What happened
+
+`pass/model/common/wire/nested.rs` registers structs that transitively contain `WireOnly` fields, because `struct_fields.rs` deliberately skips them. It registered both the kind **and** the name:
+
+```rust
+type_kinds.set(cs_id, TypeKind::WireOnly(CsWireOnly::Composite(composite)));
+type_names.set(cs_id, rust_ty.name.clone());   // raw inventory string
+```
+
+`names.rs:72` is first-write-wins (*"Skip if we've already mapped this name"*) and `nested` won, so the raw string became the model's answer — even though `names.rs:98` has an arm for exactly this kind that applies `sanitize_rust_name`.
+
+For an instantiated generic the raw string is not a legal C# identifier. Measured, before the fix:
+
+```csharp
+    public required Boxed<u32> inner;
+        result.inner = (Boxed<u32>)...GetUninitializedObject(typeof(Boxed<u32>));
+public partial class Boxed<u32>
+```
+
+A live compile error in generated code, one of them a class declaration emitted by `helper_classes` from the model name — so not a wire defect at all. It surfaced only because item 1d routed wire through the model, making the model's own answer observable.
+
+### What was fixed, and what was not
+
+Fixed: `sanitize_rust_name` applied at both write sites, matching `names.rs:98`. Called, not copied. Regression test: `tests/output/wire/nested_composite_names.rs`.
+
+Not fixed: `nested` still writes names. That is the actual defect. `names.rs` is the naming pass; a kind-registration pass deciding names is how two authorities appear in the first place, and the next name transform added to `names.rs` will silently not apply to this family.
+
+### Proposed fix
+
+Drop the `type_names.set` calls and the `type_names` parameter from `nested::process`, letting the convergence loop carry the name from `names.rs` on the next iteration.
+
+Two things to check first, because they are why this was not done inline:
+
+- **Ordering.** With first-write-wins, confirm `names.rs` does not set an early name from the *Rust* kind before the composite kind exists. If it does, that early name is `sanitize_rust_name(&ty.name)` — the same answer — so it is likely harmless, but it should be established rather than assumed.
+- **Convergence.** `nested` is a run-once pass (`self.done`). Removing a write changes what it reports as `Changed`; make sure the loop still terminates.
+
+Both pipeline call sites change, which is why it was out of scope for a naming fix.
+
+### Related
+
+`4e9a17c3` — the same family, one layer up. `31248473` — the same file, a third thing re-derived.
+## _plugins staging omits NuGet dependencies, so wire::load_plugin is a false green on any fresh checkout
+
+```issue
+id: e235bc7d
+kind: bug
+severity: medium
+status: open
+```
+
+### Symptom
+
+`reference_plugins::wire::load_plugin` fails on a fresh checkout and passes on one that has run it before, with no source difference between them:
+
+```
+FileNotFoundException: Could not load file or assembly
+  'Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed'
+  Requested by: wire, Version=1.0.0.0
+   at My.Company.Plugin.WireString(WireOfString nested)
+```
+
+The project builds cleanly — `Build succeeded, 0 Errors`. It fails at assembly load.
+
+### Cause
+
+`tests/reference_plugins/wire.dll/wire.csproj` has a real dependency:
+
+```xml
+<PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+```
+
+and `Plugin.cs` calls `JsonConvert` in `WireString`, which is the failing frame.
+
+`define_plugin!` builds the `.csproj` and stages the plugin's own DLL into `_plugins/`, but nothing stages the DLL's *dependencies*. On the main checkout `tests/reference_plugins/_plugins/Newtonsoft.Json.dll` exists — 712 KB, dated **2026-08-14** — left behind by an older run. On a fresh worktree there is no such file anywhere under `tests/`, and the test fails.
+
+Measured both ways: fails twice in a fresh worktree, passes in the main checkout, and the only difference is that stale artifact.
+
+### Why it matters
+
+The test currently reports green because of a file no build step produces. Any clean clone, any CI runner without a warm working tree, and a worktree-based workflow all hit it. It is a false green, and it is the only plugin test with a third-party `PackageReference`, so nothing else in the suite covers the gap.
+
+This is adjacent to what `9d664613` removed: plugin DLLs used to be committed, and `define_plugin!` building them at test time is what replaced that. Dependency staging did not come along.
+
+### Proposed fix
+
+Stage the build output directory rather than the single DLL — copy the `.csproj`'s resolved runtime assets into `_plugins/` after build, not just `$name.dll`. `ensure_plugin_built` is the natural place, since `define_plugin!`, `load_plugin!` and `dll_path_for` all route through it (`docs/csharp-unions-handoff.md` §7).
+
+Verification is cheap and specific: delete `tests/reference_plugins/_plugins/Newtonsoft.Json.dll` in the main checkout and confirm the test fails before the fix and passes after. Do not verify on a tree that has run the suite before.
+
+### Note
+
+Found while measuring 1d's test failures (`4e9a17c3`). It was the one failure that did not clear on a re-run, which is what separated it from the six first-run plugin-build ordering failures around it.
