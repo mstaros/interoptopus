@@ -12,6 +12,5 @@
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="xunit.v3.aot" Version="4.0.0-pre.128"/>
-        <PackageReference Include="Newtonsoft.Json" Version="13.0.4"/>
     </ItemGroup>
 </Project>

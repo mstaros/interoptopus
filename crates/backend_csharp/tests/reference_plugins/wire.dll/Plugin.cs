@@ -1,6 +1,6 @@
 using My.Company;
 using My.Company.Common;
-using Newtonsoft.Json;
+using System.Text.Json;
 
 namespace My.Company;
 
@@ -17,8 +17,8 @@ public class Plugin : IPlugin
     public static WireOfString WireString(WireOfString nested)
     {
         var s = nested.Unwire();
-        var dict = JsonConvert.DeserializeObject<Dictionary<string, string>>(s) ?? new();
+        var dict = JsonSerializer.Deserialize<Dictionary<string, string>>(s) ?? new();
         dict["hello"] = "world";
-        return WireOfString.From(JsonConvert.SerializeObject(dict));
+        return WireOfString.From(JsonSerializer.Serialize(dict));
     }
 }
