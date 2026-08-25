@@ -12,20 +12,11 @@ ci verbose="": (build verbose) (test verbose) test-dotnet lint
 build verbose="":
     cargo build --all-features {{ verbose }}
 
-# Builds the .NET (reverse interop) plugins. Separate step, as .NET output is not reproducible.
-build-dotnet-plugins: (_bdp_ref "functions_primitive") (_bdp_ref "functions_behavior") (_bdp_ref "complex") (_bdp_ref "pattern") (_bdp_ref "service_basic") (_bdp_ref "service_async") (_bdp_ref "service_async_cancel") (_bdp_ref "service_nested") (_bdp_ref "wire") (_bdp_p "exceptions") (_bdp_p "memory")
-
-# Helper to build a .NET `reference-plugins` plugin.
-_bdp_ref name:
-    dotnet build -c Release crates/backend_csharp/tests/reference_plugins/{{ name }}.dll/{{ name }}.csproj -v q 
-    cp crates/backend_csharp/tests/reference_plugins/{{ name }}.dll/bin/Release/net11.0/{{ name }}.dll crates/backend_csharp/tests/reference_plugins/_plugins
-
-# Helper to build a .NET `plugins` plugin.
-_bdp_p name:
-    dotnet build -c Release crates/backend_csharp/tests/backend_plugins/{{ name }}.dll/{{ name }}.csproj -v q
-    cp crates/backend_csharp/tests/backend_plugins/{{ name }}.dll/bin/Release/net11.0/{{ name }}.dll crates/backend_csharp/tests/backend_plugins/_plugins
-
 # Run unit tests, check semantic correctness.
+#
+# The .NET reverse-interop plugins are built by `define_plugin!` during the test run itself,
+# so a .NET 11 preview SDK must be on PATH. There is no separate plugin build step: an
+# out-of-band one let the DLLs drift from the interop sources and surfaced as `ApiMismatch`.
 [arg("verbose", long="verbose", short="v", value="--verbose")]
 test verbose="" package="":
     cargo nextest run --all-features {{ verbose }}
