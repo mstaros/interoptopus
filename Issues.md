@@ -306,6 +306,116 @@ One further note, from closing this out: `commit_transaction` can return a trans
 to the client *after* the operation has already succeeded server-side. Check `get_commit_status`
 before retrying a commit that appears to have failed.
 
+## wire/mod.rs emits C# identifiers from the Rust inventory, bypassing union_names and names.rs
+
+```issue
+id: 4e9a17c3
+kind: bug
+severity: high
+status: open
+```
+
+### Symptom
+
+None yet. This is latent and will surface as a **compile error in generated `Interop.cs`**, in the
+wire serializer, with no obvious connection to enum naming.
+
+`crates/backend_csharp/src/pass/output/common/wire/mod.rs` emits C# identifiers derived from the
+raw Rust inventory instead of the resolved C# model. Two families:
+
+**Variant names — six sites**, all emitting members that `union_names` owns:
+
+| Line | Emits | Should derive from |
+|---|---|---|
+| 320 | `{val}.Is{name}` | `stem` |
+| 324 | `{val}.As{name}()` | `stem` |
+| 361 | `{enum_name}.{name}({payload})` | `stem` |
+| 363 | `{enum_name}.{name}` | `stem` |
+| 385 | `{val}.Is{name}` | `stem` |
+| 387 | `{val}.As{name}()` | `stem` |
+
+`body.cs` and the other eight migrated consumers emit `Is{stem}`. When `stem != name` the two
+disagree inside one generated file, and the wire call targets a member that does not exist.
+
+**Type names.** `cs_type_name` returns `ty.name.clone()` for `Struct` and `Enum`. Every other
+path through `names.rs` applies `sanitize_rust_name`, and most apply `rust_to_pascal` as well
+(line 134 is the catch-all: `_ => sanitize_rust_name(&ty.name)`).
+
+### Why it has not been caught
+
+`stem == name` for every variant in the reference project, because nothing there collides —
+exactly the blind spot `docs/csharp-unions-handoff.md` §3 records: *"no reference-project test
+would catch it — nothing there collides."* Likewise `sanitize_rust_name` is identity for ordinary
+Rust identifiers, so the type-name divergence is invisible on the current corpus.
+
+The plan's Step 1 claims **all nine** name-deriving sites emit from `v.stem`. This is a tenth.
+Item 1c is therefore incomplete.
+
+### Not licensed by the Wire comment
+
+`names.rs:113` says *"The inner type of Wire may not have a C# TypeKind (its fields use WireOnly
+types), so resolve the name from the Rust inventory directly."* That licenses reading the source
+string from `rs_types` — and the very next lines still apply `sanitize_rust_name` and
+`rust_to_pascal` to it. Resolving *from* the Rust inventory is not the same as using the Rust name
+*verbatim*. Wire does the latter.
+
+### Root cause
+
+`WireCodeGen` holds only the Rust inventory:
+
+```rust
+pub struct WireCodeGen<'a> {
+    pub rs_types: &'a RsTypes,
+}
+```
+
+There is no path from `self` to the C# model, so no emitter in this file can reach a resolved
+name. `emit_enum_serialize` already receives a `TypeId` it ignores (`_ty_id`), which is the
+natural hook once a model reference exists.
+
+This is the same disconnection that produced the tag defect in `09b82d44`, whose blast radius
+described these sites as re-deriving "independently of the model pass". That fix corrected the
+tags at `wire:318` and `wire:352` without addressing why wire was re-deriving at all.
+
+### Trigger date — this fires as Step 3 lands
+
+Divergence is rare today and becomes common:
+
+- **3b** adds nested `{stem}Case` types, a new collision class against existing members.
+- **3c** reserves `Value`, `HasValue`, `TryGetValue`; variants named those get moved to fallback
+  stems.
+- The allocator is preservation-biased, so a moved variant is precisely the `stem != name` case.
+
+**Item 5c is the test that catches it.** A collision case whose stem differs from its name will
+produce inconsistent output across `body.cs` and wire. Worth writing 5c early for that reason.
+
+### Third, separate alignment gap
+
+`emit_enum_serialize` branches on `IsX` and falls through to
+`throw new InvalidOperationException("Unknown variant")`. Once item 3c consumes `_hasValue`,
+every `IsX` returns false for a default struct union, so wire reaches that fallback for an empty
+enum. Step 4 specifies `InvalidOperationException` for empty-state marshal-out and
+`InteropException` for a corrupt tag, both routed through `ExceptionForVariant()`. Wire honours
+neither and hand-rolls its own message.
+
+### Proposed fix
+
+Give `WireCodeGen` a reference to the resolved C# names and use it for both families, then align
+the exception path with Step 4. That means a new field and touching every construction site;
+scope it before starting.
+
+Rejected: putting `stem` on the core `interoptopus::lang::types::Variant`. A stem is the output
+of C#-specific collision resolution (CS0102, CS0542, C# reserved words) and does not belong in
+the language-neutral core, which `backend_c` and `backend_cpython` also compile against. It is
+also unknown at proc-macro time — unlike `tag`, which the macro emits — so a core field would be
+constructed empty and filled by one backend, with nothing preventing a second from filling it
+differently.
+
+### Unmeasured
+
+Whether `cs_type_name`'s `_ => "object"` fallback ever fires for a legitimate `Wire<T>` payload.
+Wire fields are `WireOnly` by construction, which may be exactly the subset the function handles.
+A read, not a change.
 ## Enum variant names are never sanitized, so a C# keyword variant emits uncompilable bindings
 
 ```issue
