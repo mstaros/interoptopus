@@ -176,15 +176,22 @@ deliberate `ArgumentNullException`/`InteropException`? Undecided.
 
 ## 7. Environment and workflow
 
-**Transactions do not work in this repo** — `Issues.md` `1383b84b`. The MCP commit pipeline builds
-its candidate tree without running the Git LFS clean filter, so it would store content where a
-pointer belongs and the guard correctly refuses. It fails for *any* change, including an empty one.
-Work in the real checkout and commit with plain `git` until that is fixed.
+**Transactions work again** — `Issues.md` `1383b84b` is closed. They used to fail for *any*
+change, including an empty one: the MCP commit pipeline built its candidate tree without running
+the Git LFS clean filter, so it would have stored content where a pointer belonged and the guard
+correctly refused. Nothing in this repo is LFS-tracked now, so there is nothing to trip on.
+Verified by `2b1825f7`, a transaction that built a real candidate tree and integrated. The
+tooling defect itself is unfixed, so it returns if LFS tracking ever does.
 
-**LFS.** `.gitattributes` tracks `*.snap` and `*.dll`. Worktrees *do* materialize content
-(measured), contrary to an earlier claim in the plan that has been retracted. If snapshots ever
-look like three-line stubs, that is unmaterialized LFS, not repo drift — check the interop snapshot
-is ~847 KB before believing a mass failure.
+Two things worth knowing when a commit looks like it failed. `commit_transaction` can return a
+transport error to the client *after* succeeding server-side — check `get_commit_status` before
+retrying, or you will retry against an already-integrated transaction. And a no-op transaction
+proves nothing about the pipeline, because it never constructs a candidate tree; only a change
+that writes one does.
+
+**LFS.** Removed. Nine extensions were tracked, three of them text (`*.json`, `*.snap`, `*.svg`)
+and none large — `global.json` is 63 bytes, the largest committed DLL was 30 KB. `.gitattributes`
+now classifies by text versus binary. If you reintroduce tracking, expect `1383b84b` back.
 
 **Snapshots.** `just` is not installed. The accept incantation is:
 
@@ -198,12 +205,23 @@ Get-ChildItem -Recurse -Filter *.snap.new | Remove-Item
 `--no-fail-fast` matters: without it a single failure stops later crates and their snapshots go
 unaccepted while appearing to have been handled.
 
-**Plugin DLLs** must be rebuilt whenever the API hash changes, or the `load_plugin` tests fail with
-`ApiMismatch`. Expand `build-dotnet-plugins` from the `Justfile`; output path is now `net11.0`.
+**Plugin DLLs are no longer committed and no longer built by hand.** `define_plugin!` builds each
+plugin's `.csproj` during `cargo test` and stages the DLL into `_plugins/`, so it cannot drift
+from the interop sources and `ApiMismatch` no longer has a way to happen. `build-dotnet-plugins`
+and its `_bdp_ref`/`_bdp_p` helpers were deleted with the recipes. A .NET 11 preview SDK is
+therefore required to run the tests at all.
+
+`define_plugin!`, `load_plugin!` and `dll_path_for` all route through `ensure_plugin_built`,
+which builds at most once per process. That guard is load-bearing: cargo runs a plugin's define
+and load tests on parallel threads, and Windows refuses to overwrite a DLL the .NET runtime has
+mapped (`os error 32`). `dll_path_for` is the easy one to miss — several tests reach the DLL
+through it rather than through `load_plugin!`.
 
 **Toolchain**: .NET 11 Preview 5+ required. Verified on `11.0.100-preview.7.26381.103`.
-`rt/dynamic.rs` pins the hostfxr runtime config at `11.0.0-preview.1` — deliberately a pre-release,
-because hostfxr will not roll forward from a release request to a pre-release runtime. Leave it.
+`rt/dynamic.rs` pins the hostfxr runtime config at `11.0.0-preview.1` — deliberately a
+pre-release, because hostfxr will not roll forward from a release request to a pre-release
+runtime. Leave it. CI installs the SDK on **every** OS; it used to be gated to Linux and pinned
+to 10.x, which the runtime pin above made unusable.
 
 **MCP tool quirks worth knowing.** `Rust editor:str_replace` is parser-aware and will not match a
 pattern spanning categories — a pattern containing a string literal or a `//` comment silently
@@ -211,13 +229,20 @@ returns zero matches. Use `search_and_replace` (regex) for those, but note its r
 honour `\n`, so multi-line inserts need `str_replace` with a pure-code pattern, or `write_file`.
 `FileMcp:write_file` HTML-escapes XML content — `<Project>` became `&lt;Project&gt;` and had to be
 repaired. `add_markdown_section` returns "No approval received" with no prompt shown;
-`replace_markdown_section` works on the same file.
+`replace_markdown_section` works on the same file, but drops a trailing `---` separator unless you
+include it in the replacement, and its `expectedTransformedHash` is bound to the exact content you
+dry-ran — edit the text and you must dry-run again. Root aliases are **per server**: FileMcp's
+`$N` and the Rust editor's `$N` are different registries, so a transaction worktree alias from one
+cannot be resolved by the other.
 
 **PowerShell**: use here-strings (`@'` … `'@`, delimiters alone on their line) for commit messages.
 Escaped quotes inside a double-quoted string terminate it early and scatter the message across
-`git add`.
+`git add`. Bash heredocs (`<<'@'`) do not parse in PowerShell at all. Piping a here-string into
+`git commit -F -` prepends a UTF-8 BOM to the subject line on PS 5.1; write the file with
+`[IO.File]::WriteAllText(path, $msg, (New-Object Text.UTF8Encoding $false))` and pass that instead.
 
 ---
+
 
 ## 8. Where I was wrong
 

@@ -111,33 +111,30 @@ An earlier version of that issue reported 29 of 33 failing and was cited in earl
 this plan as a hard blocker. **That was retracted** — it came from a Git LFS materialization
 failure, not from the repository.
 
-**LFS in transaction worktrees — earlier warning retracted.** A previous revision of this
-section claimed MCP transaction worktrees do not materialize LFS content and that snapshot work
-therefore belonged in the real checkout. **Measured 2026-08-25 and false.** In worktree
-`086e4102`, `r#mod__reference_project__interop.snap` is 848,675 bytes — byte-for-byte the same
-size as the main checkout. `reference_project::interop` produced a real content diff, not the
-*"snapshot uses a legacy snapshot format"* error that a pointer stub yields.
+**LFS is gone, and with it two hazards this section used to carry.** Nine extensions were
+LFS-tracked, three of them text (`*.json`, `*.snap`, `*.svg`) and none large — `global.json` is
+63 bytes, the largest committed DLL was 30 KB. `.gitattributes` now classifies by text versus
+binary instead. Consequences for this plan:
 
-So snapshot-driven work can *run* inside a transaction worktree. It cannot be *committed* from
-one: the MCP commit pipeline builds its candidate tree without the LFS clean filter and the guard
-refuses, for any change including an effectively empty one — `Issues.md` `1383b84b`. Re-measured
-on a fresh transaction: it tripped on `ty_enum__variants_negative.snap` rather than the DLL the
-issue names, confirming the guard reports whichever LFS path it reaches first. Work in the real
-checkout and commit with plain `git` until that is fixed.
-
-What remains true and unmeasured: `.gitattributes` tracks the LFS set, so a fresh clone without
-`git lfs pull` or a CI checkout without LFS support will still see pointer stubs, and
-`cargo insta review` in that state is destructive — accepting against stub baselines overwrites
-the pointers with raw content. Cheap guard before measuring anywhere unfamiliar: confirm that
-snapshot is ~847 KB and not three lines.
+- **Transactions work.** `Issues.md` `1383b84b` is closed: the MCP commit pipeline built its
+  candidate tree without the LFS clean filter, so the guard refused every transaction regardless
+  of content. With nothing tracked there is nothing to trip on. Verified end to end by
+  `2b1825f7`, a transaction that built a real candidate tree and integrated. Earlier revisions
+  of this section told you to work in the real checkout and commit with plain `git`; that is no
+  longer necessary. The underlying tooling defect is unfixed, so it returns if LFS tracking does.
+- **`cargo insta review` is no longer destructive on a fresh clone.** Snapshots were pointer
+  stubs without `git lfs pull`, and accepting against a stub overwrote the pointer with raw
+  content. They are ordinary blobs now.
 
 **Toolchain — in place.** Union output needs `<LangVersion>preview</LangVersion>` and a .NET 11
 Preview 5+ SDK for `UnionAttribute` / `IUnion`. Step 2 landed both: 14 `.csproj` files retargeted
 to `net11.0`, and `crates/backend_csharp/Directory.Build.props` sets `LangVersion=preview` for
-everything beneath it. There is no opt-in flag, no eligibility gate and no flag-off output to
-preserve — see Decided.
+everything beneath it. Since `8c70868d` the SDK is needed to run the tests at all, because
+`define_plugin!` builds the reverse-interop plugins during the run. There is no opt-in flag, no
+eligibility gate and no flag-off output to preserve — see Decided.
 
 ---
+
 
 ## Step 0 — Discriminant becomes an attribute of the variant
 
