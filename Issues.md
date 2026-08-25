@@ -69,7 +69,7 @@ Filed upstream as `10b7b672` in `rust-mcp-transform`.
 ### Hazard
 
 The previous recommended action — `cargo insta review` — is destructive in that state. Accepting against stub baselines overwrites every LFS pointer with raw generated content, silently un-LFS-ing the snapshots. Before measuring this suite, confirm `crates/backend_csharp/tests/reference_project/snapshots/r#mod__reference_project__interop.snap` is ~847 KB and not three lines.
-## Enum variant discriminant is the declared tag for unit variants but the positional index for payload variants
+## Enum variant discriminants are not resolved per Rust's rules: explicit values don't advance the counter, and tuple variants fall back to the positional index
 
 ```issue
 id: 09b82d44
@@ -78,26 +78,74 @@ severity: high
 status: open
 ```
 
-### Symptom
+### Summary
 
-`crates/backend_csharp/src/pass/model/common/types/kind/enum_variants.rs` derives a variant's
-discriminant differently depending on whether the variant carries a payload:
+Three distinct defects in how enum variant discriminants are resolved. All are silent: a wrong
+tag is written into the explicit-layout `Unmanaged` struct and read back by `ToManaged()`,
+yielding the wrong variant rather than an error.
 
-```rust
-VariantKind::Unit(tag)           => (*tag, None),
-VariantKind::Tuple(rust_type_id) => (index.cast_signed(), Some(cs_type_id)),
+### Defect 1 — an explicit discriminant does not advance the counter
+
+**Confirmed.** Reproduced 2026-08-25 in transaction `086e4102` by adding
+`EnumExplicitThenImplicit { A = 5, B, C }` to the reference project. Generated C#:
+
+```csharp
+public static EnumExplicitThenImplicit A => new() { _variant = 5 };
+public static EnumExplicitThenImplicit B => new() { _variant = 1 };
+public static EnumExplicitThenImplicit C => new() { _variant = 2 };
 ```
 
-Unit variants use their declared discriminant. Payload variants use their **positional
-index**. For any enum mixing the two with explicit discriminants, the managed `_variant`
-field and the native Rust tag disagree.
+`5, 1, 2`. Rust assigns 5, 6, 7. Marshalling `.B` sends 1, and Rust reads a variant that does
+not exist at that tag.
 
-Example: `enum E { A = -1, B(u32) }` gives `A` the declared `-1` and `B` the positional `1`,
-while Rust assigns `B` whatever its own discriminant rules produce.
+`crates/proc_macros_impl/src/types/emit.rs`, lines 236-263:
+
+```rust
+let mut next_discriminant: isize = 0;
+// VariantData::Unit
+let disc = if let Some(expr) = &variant.discriminant { /* (#expr) as isize */ }
+           else { next_discriminant };
+next_discriminant += 1;   // never resumes from an explicit value
+```
+
+**This is the one that matters practically.** It needs only an explicit discriminant followed by
+an implicit one on a plain unit-only enum — ordinary Rust. Defects 2 and 3 require the rarer
+mix of explicit discriminants *and* payload variants.
+
+**The wrong tag propagates to every consumer.** The same run shows `IsA`/`IsB`/`IsC`,
+`AsA`/`AsB`/`AsC`, `ToString()` and `ExceptionForVariant()` all carrying `5, 1, 2`. They are
+internally consistent, so no C#-side check can detect the fault; it surfaces only at the
+boundary. That is the silent-corruption mode, now demonstrated rather than argued.
+
+**Note on the fix.** `next_discriminant = disc + 1` is *not* implementable as written. The
+explicit value is emitted as `(#expr) as isize` — a token stream evaluated at the call site,
+not at macro-expansion time — so the macro never learns that `A = 5` is `5`. The fix is to
+carry the previous discriminant as a `TokenStream` and emit implicit variants as `((#prev) + 1)`,
+keeping evaluation at the call site where the expression is const-evaluable.
+
+### Defect 2 — tuple variants discard their discriminant
+
+Same site. The `VariantData::Tuple` arm increments the counter, then emits
+`VariantKind::Tuple(<#ty as TypeInfo>::id())` with no tag. `variant.discriminant` is parsed and
+available for tuple variants; the arm never reads it.
+
+### Defect 3 — consumers substitute the positional index
+
+Forced by defect 2: there is no tag to read. Each site does
+`VariantKind::Tuple(t) => (index.cast_signed(), Some(*t))`.
+
+| File | Line | Context |
+|---|---|---|
+| `backend_csharp/src/pass/model/common/types/kind/enum_variants.rs` | 54 | builds C# `Variant.tag` |
+| `backend_csharp/src/pass/output/common/wire/mod.rs` | 318 | `emit_enum_serialize` |
+| `backend_csharp/src/pass/output/common/wire/mod.rs` | 352 | `emit_enum_deserialize` |
+
+Exhaustive within `backend_csharp`: `index.cast_signed()` occurs at exactly these three sites,
+and `variants.iter().enumerate()` occurs at exactly the same three and nowhere else.
 
 ### Root cause
 
-The information does not exist in the core model. `crates/core/src/lang/types/enums.rs`:
+`crates/core/src/lang/types/enums.rs`:
 
 ```rust
 pub enum VariantKind {
@@ -106,18 +154,17 @@ pub enum VariantKind {
 }
 ```
 
-`Tuple` has nowhere to put a tag, so the backend has no alternative to the index. This is a
-core-model gap, not a backend bug — the backend is doing the only thing it can.
+`Tuple` has nowhere to put a tag. The backends are doing the only thing available to them.
 
-### Impact
+### Why `wire/mod.rs` must be fixed alongside the model pass
 
-Silent at generation time. `_variant` is written into the explicit-layout `Unmanaged` struct
-and read back by `Unmanaged.ToManaged()`, so a mismatch corrupts the round trip for affected
-enums rather than failing loudly.
+`wire/mod.rs` takes `e: &interoptopus::lang::types::Enum` — the **Rust inventory type**, not the
+C# model's `DataEnum`. It bypasses `enum_variants.rs` and re-derives the tag independently.
+Fixing the model pass alone leaves the wire path wrong.
 
-No enum in `crates/reference_project/src/types/enums.rs` currently triggers it: `EnumNegative`
-uses explicit discriminants but is unit-only, and `EnumPayload` has payloads but no explicit
-discriminants. A single reference-project enum combining both would expose it.
+The two currently agree, because both apply the same rule to the same variants in the same
+order — so they are wrong together rather than inconsistent with each other. That is incidental,
+not structural, and a shared unconditional tag is what would make it structural.
 
 ### Proposed fix
 
@@ -137,28 +184,45 @@ pub enum VariantKind {
 }
 ```
 
-The alternative — adding a second element to `VariantKind::Tuple` — keeps the discriminant
-conditional on variant shape and would need revisiting when named and multi-field variants
-are added.
+In the proc macro: resolve `variant.discriminant` in **both** arms, and set
+`next_discriminant = resolved + 1`.
 
-### Blast radius
+**Alternative considered and rejected:** `VariantKind::Tuple(TypeId, isize)`. Cheaper by four
+one-line match arms, but keeps the discriminant conditional on payload shape — the exact shape
+that produced three copies of defect 3 — and needs a third home when named and multi-field
+variants land. Doing it that way first and moving to the field later costs strictly more, since
+the `Unit(tag)` migration is still owed and `Tuple`'s arity churns twice.
+
+### Blast radius (measured)
 
 | Location | Change |
 |---|---|
 | `core/src/lang/types/enums.rs` | struct, `VariantKind`, `Variant::new` signature |
-| `proc_macros_impl` | must compute discriminants (see below) |
-| `backend_csharp/.../enum_variants.rs` | read `v.tag` unconditionally |
-| `backend_c`, `backend_cpython` | defunct but still compile against these types |
-| serde inventory shape | changes under the `serde` feature |
+| `proc_macros_impl/src/types/emit.rs` | both arms + counter reset |
+| `.../kind/enum_variants.rs` | 1 derivation, 1 mechanical arm |
+| `.../output/common/wire/mod.rs` | 2 derivations, 2 mechanical arms |
+| `.../output/common/wire/mod.rs:382` | payload-only match, mechanical only |
+| serde inventory | shape changes under the `serde` feature |
 
-The substantive work is in the proc macro: it must replicate Rust's discriminant assignment —
-explicit values where given, previous-plus-one otherwise — across mixed unit and payload
-variants. **Unverified:** whether it currently sees explicit discriminants on payload
-variants at all. That determines whether this is plumbing or real logic.
+The seven `.tag` reads under `output/common/types/enums/*` (`body`, `body_ctors`,
+`body_tostring`, `body_unmanaged`, `body_to_unmanaged`, `body_as_unmanaged`,
+`body_exception_for_variant`) consume the value `enum_variants.rs` produces and are
+correct-by-construction once it is. No changes there.
+
+`crates/_old/*` is **not** affected: it matches on `VariantKind::Typed`, which no longer exists,
+so it is not compiled. An earlier revision of this issue wrongly listed `backend_c` and
+`backend_cpython` as impacted.
+
+### Verification
+
+Reference-project additions, each with a round-trip assertion, and a wire round trip for the
+enums that have one:
+
+- `enum E { A = 5, B, C }` — unit-only, explicit then implicit → defect 1
+- an enum mixing explicit discriminants with payload variants → defects 2 and 3
 
 ### Note
 
-Needs a reference-project enum mixing explicit discriminants with payload variants, plus a
-round-trip assertion. This blocks `docs/csharp-unions.md`, whose `ToManaged()` tag validation
-would otherwise validate against the wrong tag set — but it is a correctness bug in its own
-right and should be reviewed independently of that plan.
+Blocks `docs/csharp-unions.md` item 4a, whose `ToManaged()` tag validation would otherwise
+validate against the wrong tag set. Stands on its own as a correctness bug and should be
+reviewed independently of that plan.

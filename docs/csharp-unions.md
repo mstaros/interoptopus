@@ -65,37 +65,34 @@ Pattern matching binds through `TryGetValue`, so ordinary matches do not allocat
 
 ## 2. Prerequisites
 
-**Step 0 is filed as `Issues.md` `09b82d44`** (discriminant divergence). It blocks Step 4 but
-is a correctness bug in its own right.
+**Step 0 is filed as `Issues.md` `09b82d44`** (discriminant resolution). Defect 1 is confirmed
+by execution; see that issue. It blocks item 4a but is a correctness bug in its own right.
 
 **Snapshot baseline.** Effectively green. `Issues.md` `ccb105a2` measures **30 passed,
 1 failed, 2 ignored** of 33 on `b42399a4`; the single failure is `reference_project::interop`,
 awaiting `cargo insta review` for an unrelated `AsSpan()`/`ToArray()` template change.
 
 An earlier version of that issue reported 29 of 33 failing and was cited in earlier drafts of
-this plan as a hard blocker. **That was retracted.** The 29 came from a Git LFS failure, not
-from the repository.
+this plan as a hard blocker. **That was retracted** — it came from a Git LFS materialization
+failure, not from the repository.
 
-**LFS hazard — read before running the suite.** `.gitattributes` tracks `*.snap` and `*.dll`
-in LFS. Where LFS content is not materialized, every snapshot is a three-line pointer stub and
-every prebuilt `_plugins/*.dll` likewise: 17 `insta` tests fail against empty baselines and 12
-plugin-loading tests fail, totalling exactly 29. `insta` reports *"A snapshot uses a legacy
-snapshot format"* when it parses a pointer.
+**LFS in transaction worktrees — earlier warning retracted.** A previous revision of this
+section claimed MCP transaction worktrees do not materialize LFS content, that the Step 5
+regression gate was therefore unusable inside one, and that snapshot work belonged in the real
+checkout. **Measured 2026-08-25 and false.** In worktree `086e4102`,
+`r#mod__reference_project__interop.snap` is 848,675 bytes — byte-for-byte the same size as the
+main checkout. `reference_project::interop` produced a real content diff, not the
+*"snapshot uses a legacy snapshot format"* error that a pointer stub yields.
 
-States where this happens:
+So snapshot-driven work, including Step 5, can run inside a transaction. No split between
+worktree and real checkout is needed.
 
-- a fresh clone without `git lfs pull`
-- a CI checkout without LFS
-- **an MCP transaction worktree**
-
-The third matters for how this plan is executed. Steps 1-5 are snapshot-driven, and the Step 5
-regression gate — flag-off output byte-identical — cannot be measured inside a worktree.
-Worse, `cargo insta review` in that state is **destructive**: accepting against stub baselines
-overwrites every LFS pointer with raw generated content, silently un-LFS-ing the snapshots.
-
-Before measuring, confirm
-`crates/backend_csharp/tests/reference_project/snapshots/r#mod__reference_project__interop.snap`
-is ~847 KB and not three lines. Snapshot work belongs in the real checkout.
+What remains true and unmeasured: `.gitattributes` tracks `*.snap` and `*.dll` in LFS, so a
+fresh clone without `git lfs pull` or a CI checkout without LFS support will still see pointer
+stubs, and `cargo insta review` in that state is destructive — accepting against stub baselines
+overwrites the pointers with raw content. Whether that was `ccb105a2`'s original environment is
+unknown. Cheap guard before measuring anywhere unfamiliar: confirm that snapshot is ~847 KB and
+not three lines.
 
 **Toolchain.** Union consumers need `<LangVersion>preview</LangVersion>` and a .NET 11
 Preview 5+ runtime for `UnionAttribute` / `IUnion`.
@@ -468,10 +465,13 @@ only what is done. Step 0 is tracked as `Issues.md` `09b82d44`, not here.
 
 | # | Status | Item | Gate |
 |---|---|---|---|
-| 0 | blocked | Discriminant onto `Variant` (`09b82d44`) | **Open decision: `Variant.tag` vs `VariantKind::Tuple(_, tag)`** |
-| 0a | open | Reference enum mixing explicit discriminants + payload variants | after 0 |
-| 0b | open | Confirm proc macro sees explicit discriminants on payload variants | none — do first, sizes 0 |
-| 1 | open | `union_projection` model pass: eligibility + name resolution | 0b |
+| 0 | blocked | Discriminant onto `Variant` (`09b82d44` defect 2) | **Open decision: `Variant.tag` vs `VariantKind::Tuple(_, tag)`** |
+| 0a | open | Proc macro: `next_discriminant = resolved + 1` (`09b82d44` defect 1) | none — independent, ships alone |
+| 0b | open | Proc macro: read `variant.discriminant` in the `Tuple` arm | 0 |
+| 0c | open | 3 index-as-tag sites: `enum_variants:54`, `wire:318`, `wire:352` (defect 3) | 0b |
+| 0d | open | Reference enum `{ A = 5, B, C }` → confirms/kills defect 1 | none — do first |
+| 0e | open | Reference enum mixing explicit discriminants + payload variants | 0c |
+| 1 | open | `union_projection` model pass: eligibility + name resolution | — |
 | 1a | open | Reserved-name set incl. enclosing type name (CS0542) | 1 |
 | 1b | open | Stem = currently-emitted name, not re-cased | 1 |
 | 1c | open | Migrate 7 templates off raw `v.name` | 1 |
@@ -482,7 +482,7 @@ only what is done. Step 0 is tracked as `Issues.md` `09b82d44`, not here.
 | 3c | open | `Value` / `HasValue` / `TryGetValue` | 3, 3a, 3b |
 | 3d | open | `[Union]` + `IUnion` via joined interface list | 3c |
 | 4 | open | `ToUnmanaged` / `AsUnmanaged` empty guard | 3 |
-| 4a | open | `ToManaged` constructs via case ctors + validates tag | **0** |
+| 4a | open | `ToManaged` constructs via case ctors + validates tag | **0, 0c** |
 | 4b | open | Exception split: `InvalidOperationException` vs `InteropException` | 4, 4a |
 | 5 | open | Flag-off snapshots byte-identical | **real checkout, not worktree** |
 | 5a | open | Flag-on snapshot | 5 |
@@ -494,6 +494,30 @@ only what is done. Step 0 is tracked as `Issues.md` `09b82d44`, not here.
 | 5g | open | Default disposable `Dispose()` no-op | 3 |
 | 5h | open | Managed-only `DataEnum` case | 3c |
 | 6 | deferred | `Option` / `Result` — incl. `body_from_call` factory names | 5 green |
+
+Note 0a is independent of the union work and of the `Variant` shape decision. It is a
+one-line fix to a bug that affects ordinary unit-only enums, and it should not wait on
+anything here.
+
+Steps 1 and 2 no longer gate on Step 0 — name resolution and the builder flag touch nothing
+the discriminant work touches. Only 4a does.
+
+### Decided
+
+**Discriminant lives on `Variant`** — item 0 unblocked. `VariantKind` becomes `Unit` /
+`Tuple(TypeId)`, a pure payload descriptor. Rationale in `09b82d44`: the measured cost over the
+alternative is four one-line match arms, and the same defect has already appeared
+independently in three places.
+
+**Defect 1's fix is not the one-line counter change described earlier.** `emit.rs` emits an
+explicit discriminant as `(#expr) as isize` — a token stream evaluated at the *call site*, not
+at macro-expansion time. The macro therefore cannot know that `A = 5` is `5`, and cannot resume
+a numeric counter from it. `next_discriminant = disc + 1` is not implementable as written.
+
+The fix is to carry the previous discriminant as a `TokenStream` and emit implicit variants as
+`((#prev) + 1)`, keeping evaluation at the call site where the expression is const-evaluable.
+Still small, but a different shape — and it means 0a is no longer a trivial one-liner that can
+be waved through.
 
 ### Not doing
 
