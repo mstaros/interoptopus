@@ -98,39 +98,44 @@ Pattern matching binds through `TryGetValue`, so ordinary matches do not allocat
 
 ## 2. Prerequisites
 
-**Step 0 is filed as `Issues.md` `09b82d44`** (discriminant resolution). Defect 1 is confirmed
-by execution; see that issue. It blocks item 4a but is a correctness bug in its own right.
+**Step 0 is done** — `c928d53e`; `Issues.md` `09b82d44` is closed. It was the one hard
+prerequisite: every downstream step assumes `_variant` is the native discriminant, and item 4a's
+validated `ToManaged` switch would otherwise validate against the wrong tag set.
 
-**Snapshot baseline.** Effectively green. `Issues.md` `ccb105a2` measures **30 passed,
-1 failed, 2 ignored** of 33 on `b42399a4`; the single failure is `reference_project::interop`,
-awaiting `cargo insta review` for an unrelated `AsSpan()`/`ToArray()` template change.
+**Snapshot baseline.** Effectively green. `Issues.md` `ccb105a2` measures **30 passed, 1 failed,
+2 ignored** of 33 on `b42399a4`; the single failure is `reference_project::interop`, awaiting
+`cargo insta review` for an unrelated `AsSpan()`/`ToArray()` template change. It is open and
+low-severity — one snapshot's bookkeeping, not a gate on template work.
 
 An earlier version of that issue reported 29 of 33 failing and was cited in earlier drafts of
 this plan as a hard blocker. **That was retracted** — it came from a Git LFS materialization
 failure, not from the repository.
 
 **LFS in transaction worktrees — earlier warning retracted.** A previous revision of this
-section claimed MCP transaction worktrees do not materialize LFS content, that the Step 5
-regression gate was therefore unusable inside one, and that snapshot work belonged in the real
-checkout. **Measured 2026-08-25 and false.** In worktree `086e4102`,
-`r#mod__reference_project__interop.snap` is 848,675 bytes — byte-for-byte the same size as the
-main checkout. `reference_project::interop` produced a real content diff, not the
+section claimed MCP transaction worktrees do not materialize LFS content and that snapshot work
+therefore belonged in the real checkout. **Measured 2026-08-25 and false.** In worktree
+`086e4102`, `r#mod__reference_project__interop.snap` is 848,675 bytes — byte-for-byte the same
+size as the main checkout. `reference_project::interop` produced a real content diff, not the
 *"snapshot uses a legacy snapshot format"* error that a pointer stub yields.
 
-So snapshot-driven work, including Step 5, can run inside a transaction. No split between
-worktree and real checkout is needed.
+So snapshot-driven work can *run* inside a transaction worktree. It cannot be *committed* from
+one: the MCP commit pipeline builds its candidate tree without the LFS clean filter and the guard
+refuses, for any change including an effectively empty one — `Issues.md` `1383b84b`. Re-measured
+on a fresh transaction: it tripped on `ty_enum__variants_negative.snap` rather than the DLL the
+issue names, confirming the guard reports whichever LFS path it reaches first. Work in the real
+checkout and commit with plain `git` until that is fixed.
 
-What remains true and unmeasured: `.gitattributes` tracks `*.snap` and `*.dll` in LFS, so a
-fresh clone without `git lfs pull` or a CI checkout without LFS support will still see pointer
-stubs, and `cargo insta review` in that state is destructive — accepting against stub baselines
-overwrites the pointers with raw content. Whether that was `ccb105a2`'s original environment is
-unknown. Cheap guard before measuring anywhere unfamiliar: confirm that snapshot is ~847 KB and
-not three lines.
+What remains true and unmeasured: `.gitattributes` tracks the LFS set, so a fresh clone without
+`git lfs pull` or a CI checkout without LFS support will still see pointer stubs, and
+`cargo insta review` in that state is destructive — accepting against stub baselines overwrites
+the pointers with raw content. Cheap guard before measuring anywhere unfamiliar: confirm that
+snapshot is ~847 KB and not three lines.
 
-**Toolchain.** Union consumers need `<LangVersion>preview</LangVersion>` and a .NET 11
-Preview 5+ runtime for `UnionAttribute` / `IUnion`.
-`tests/reference_project/Bindings/Bindings.csproj` targets `net10.0`. The feature must
-therefore be opt-in; flag-off output stays byte-identical and net10 consumers are unaffected.
+**Toolchain — in place.** Union output needs `<LangVersion>preview</LangVersion>` and a .NET 11
+Preview 5+ SDK for `UnionAttribute` / `IUnion`. Step 2 landed both: 14 `.csproj` files retargeted
+to `net11.0`, and `crates/backend_csharp/Directory.Build.props` sets `LangVersion=preview` for
+everything beneath it. There is no opt-in flag, no eligibility gate and no flag-off output to
+preserve — see Decided.
 
 ---
 
@@ -325,18 +330,21 @@ Every managed tag consumer must respect `_hasValue` — not only `Dispose()`.
 **There is no empty class instance.** `default(E)` is a null reference; no member is callable
 on it. Every non-null instance is valid.
 
-- No `_hasValue` field.
+- No `_hasValue` field. `8c70868d` added it to struct-backed enums only, which is correct.
 - `HasValue => true` (constant).
 - `Value` is never null.
 - A **private parameterless constructor** replaces today's implicit public one, so
   `new EnumX()` can no longer produce a bogus variant-zero instance. Factories, case
   constructors and `Unmanaged.ToManaged()` construct from inside the type and are unaffected.
 
-**Flag-on breaking change:** external `new EnumX()` stops compiling for class-backed enums.
-Changelog entry required.
+**Breaking change, unconditionally.** There is no flag, so external `new EnumX()` stops
+compiling for every class-backed enum the moment 3a lands. Changelog entry required. Consumers
+that never construct generated types directly are unaffected, but that is a property of the
+consumer, not something this projection guarantees — verify it when regenerating.
 
 **OPEN:** what happens when `null` reaches the custom marshaller — today's
 `NullReferenceException`, or a deliberate `ArgumentNullException` / `InteropException`?
+Open item 1.
 
 ### `Value`
 
@@ -413,8 +421,17 @@ This works identically for structs and classes, establishes `_hasValue` implicit
 an invalid native tag unrepresentable as a managed value. For struct constructors, mind
 definite assignment — `this = default` before assigning tag, payload and `_hasValue`.
 
-**These switch arms are keyed on `_variant`. Step 0 must land first or they validate against
-the wrong tag set.**
+These switch arms are keyed on `_variant`, which is only the native discriminant because Step 0
+landed (`c928d53e`). Before that they would have validated against the wrong tag set.
+
+**`Result` and `Option` go through this path too**, so two constraints that earlier drafts
+parked in Step 6 are requirements here (item 4c): `default(ResultX)` must be **empty**, not
+`Ok`, and `default(OptionX)` must be distinct from `NoneCase`. `8c70868d` already emits
+`_hasValue` on the `Result` carriers, so the storage exists; what is missing is the reads.
+One observable consequence: `AsOk()` on a default `Result` throws the empty-state exception,
+where today any failure surfaces as `EnumException<E>`. Consumers translate that at a single
+boundary, so the change is visible to them — flag it in the changelog alongside the class-ctor
+break.
 
 ### Exceptions
 
@@ -429,22 +446,33 @@ codebase means *"severe error, should never happen"*.
 `ExceptionForVariant()` returns the empty-state exception so existing
 `throw ExceptionForVariant()` call sites stay coherent.
 
+This is **decided**, not open — item 4b is implementation only.
+
 ---
 
 ## Step 5 — Tests
 
-**Not tested:** `[Union]` recognition, exhaustive matching, implicit union conversions. Those
-are compiler features.
+**Not tested:** `[Union]` recognition and exhaustive matching. Those are compiler features, and
+a test would pass either way. *Emitting* whatever a custom `[Union]` needs is still ours — see
+Open item 2 on case conversions.
+
+**The compile gate is the real consumer path, not a fixture.** Step 2 retargeted `Bindings`,
+`Tests` and the plugin projects to net11 with `LangVersion=preview`, so they compile union
+output directly. That supersedes the bespoke net11 fixture earlier drafts specified, and it is
+the only thing that verifies `LangVersion=preview` is doing anything — the native API guard
+cannot, because the projection leaves the ABI and hash unchanged.
+
+Since `8c70868d`, the plugin projects are also built by `define_plugin!` during `cargo test`
+rather than by a separate `just build-dotnet-plugins` step, so that compile gate runs on every
+test invocation. `_hasValue` currently trips **CS0169: never used** on eight generated types;
+that clears with item 3c and is a useful marker until it does.
+
+There is no byte-identical regression gate. Snapshots move once, when the projection lands, and
+are reviewed rather than diffed to zero.
 
 **Tested — our behaviour:**
 
-- flag-off snapshots byte-identical (the regression gate)
-- one focused flag-on union snapshot
-- **flag-on output compiles** under a small net11 / `LangVersion=preview` fixture. This
-  proves the generator emits legal C#; it asserts nothing about union semantics. Currently
-  nothing compiles union-mode source: `reference_project::interop` only writes and compares
-  text, and `Bindings.csproj` is net10. (`Tests/InteropSpike.csproj` is net11 but reportedly
-  references the net10 bindings project — **unverified**.)
+- one focused union snapshot
 - variant named `Value`
 - casing-fold collision
 - `B` / `BCase`, and cross-family `B` / `IsB`
@@ -453,6 +481,11 @@ are compiler features.
 - invalid native tag throws
 - default disposable struct `Dispose()` is a no-op
 - one managed-only `DataEnum` (`body.rs` supports `DataEnum`s with no `Unmanaged` form)
+- **`default(ResultX)` is empty, never `Ok`** — a Step 3/4 requirement, not a deferred one,
+  because `Result` is projected in this pass
+- **`default(OptionX)` is distinct from `NoneCase`** — same
+- **`AsOk()` on a default `Result`** throws the empty-state exception, not `EnumException<E>`.
+  Consumers catch the latter at a single translation boundary, so the change is observable
 - existing Rust round trip unchanged
 
 ---
@@ -511,35 +544,52 @@ Execution state. Rationale lives in the step sections above; this tracks only wh
 | 0b | Proc macro emits `tag` for every variant, `Unit` carries none | `c928d53e` |
 | 0c | 3 index-as-tag sites: `enum_variants:54`, `wire:318`, `wire:352` | `c928d53e` |
 | 0e | `EnumExplicitPayload { A = 10, B(u32), C(Vec3f32), D = 20 }` → 10, 11, 12, 20 | `c928d53e` |
+| R | net11 retarget, `LangVersion=preview`, `rt/dynamic.rs`, plugin DLLs | `9d664613` |
+| 1 | `union_names` model pass + preserve/fallback/case-type allocator, 12 unit tests | *(union_names commit)* |
+| 1a | Reserved-name set incl. enclosing type name (CS0542) | same |
+| 1b | Stem = currently-emitted name verbatim, not re-cased | same |
+| 1c | All **nine** name-deriving sites emit from `v.stem`; output byte-identical | `2bdbf054` |
+| 3 | Struct-backed data enums emit `_hasValue` in the managed partial | `8c70868d` |
 
-`Issues.md` `09b82d44` is closed. Suite green: 31 passed, 0 failed, 2 ignored, plus doctests.
+`Issues.md` `09b82d44` is closed; `2a6da76a`, `ccb105a2`, `1383b84b` and `7c8cb22e` remain open.
+
+Item 3 emits the field but nothing reads it yet, so every generated carrier currently warns
+**CS0169: the field `_hasValue` is never used** — eight types across five reference plugins at
+the time of writing. That is expected and clears with item 3c, which is what consumes it.
+
+Earlier drafts named item 1 `union_projection` and gave it an eligibility gate. Both are stale:
+the pass is `union_names`, it owns naming only, and there is no gate — see Decided and Step 1.
 
 ### Remaining
 
+Items 0–1c, R and 3 are done; **3a and 3b are next.**
+
 | # | Status | Item | Gate |
 |---|---|---|---|
-| 1 | open | `union_projection` model pass — name resolution only | — |
-| 1a | open | Reserved-name set incl. enclosing type name (CS0542) | 1 |
-| 1b | open | Stem = currently-emitted name, not re-cased | 1 |
-| 1c | open | Migrate 7 templates off raw `v.name` | 1 |
-| 3 | open | Struct: `_hasValue`, managed partial only | 1c |
-| 3a | open | Class: private parameterless ctor, no `_hasValue` | 1c |
-| 3b | open | Nested `{Stem}Case` case types | 1c |
-| 3c | open | `Value` / `HasValue` / `TryGetValue` | 3, 3a, 3b |
+| 3a | open | Class: private parameterless ctor, no `_hasValue` | — |
+| 3b | open | Nested `{case_type}` case types | — |
+| 3c | open | `Value` / `HasValue` / `TryGetValue` — consumes `_hasValue`, clears CS0169 | 3a, 3b |
 | 3d | open | `[Union]` + `IUnion` via joined interface list | 3c |
-| 4 | open | `ToUnmanaged` / `AsUnmanaged` empty guard | 3 |
+| 3e | open | **Case→enum conversion** — decide whether the compiler synthesises it from `[Union]` or we emit operators | 3b |
+| 3f | open | **Case-type accessibility** — fix it explicitly; consumers keep them internal | 3b |
+| 4 | open | `ToUnmanaged` / `AsUnmanaged` empty guard | — |
 | 4a | open | `ToManaged` constructs via case ctors + validates tag | 3c |
-| 4b | open | Exception split: `InvalidOperationException` vs `InteropException` | 4, 4a |
-| 5 | open | Snapshots move once; no byte-identical gate | 3d, 4b |
-| 5c | open | Collision cases: `Value`, casing-fold, `B`/`IsB` | 1a |
+| 4b | open | Exception split (decided in Step 4; implementation only) | 4, 4a |
+| 4c | open | `default(ResultX)` empty not `Ok`; `default(OptionX)` ≠ `NoneCase` | 3c, 4a |
+| 5 | open | Snapshots move once; consumer projects compile the output | 3d, 4b |
+| 5c | open | Collision cases: `Value`, casing-fold, `B`/`IsB` | — |
 | 5d | open | `default(struct).ToUnmanaged()` throws | 4 |
 | 5e | open | Class union cannot produce non-null empty | 3a |
 | 5f | open | Invalid native tag throws | 4a |
-| 5g | open | Default disposable `Dispose()` no-op | 3 |
+| 5g | open | Default disposable `Dispose()` no-op | — |
 | 5h | open | Managed-only `DataEnum` case | 3c |
-| 6 | deferred | `Option` / `Result` — incl. `body_from_call` factory names | 5 green |
+| 5i | open | `default(ResultX)`/`default(OptionX)` tests; `AsOk()` on default | 4c |
+| 6 | open | `Result` leftovers: `IResult<T,E>` coexistence, `body_from_call` factory names | 5 green |
 
-Item R (net11 retarget) is done — `9d664613`; see Step 2. Item 1 is unblocked.
+Item 6 is **not** an exclusion — `Option` and `Result` are projected in this pass, and `8c70868d`
+already emits `_hasValue` on `Result` carriers (`ResultVoidError`, `ResultVec3f32Error`,
+`ResultUintDotnetException`) alongside plain enums. Only the `Result`-specific tidying is
+deferred; see Step 6. `body_from_call` is a naming consumer and moves here from the Closed list.
 
 ### Decided
 
@@ -574,24 +624,32 @@ Multi-field and named variant support. Retiring `IsOk` / `AsOk`.
 
 ## Open items
 
-1. **Step 0 shape** — `tag` on `Variant` vs. in `VariantKind::Tuple`. **Blocking.**
-   Tracked in `09b82d44`; recommendation there is the field on `Variant`.
-2. Null reaching the marshaller for a class-backed union — today's `NullReferenceException`,
-   or a deliberate `ArgumentNullException` / `InteropException`?
-3. Whether the proc macro currently sees explicit discriminants on payload variants. A read,
-   not a change. Decides whether `09b82d44` is plumbing or real discriminant-assignment logic.
+1. **Null reaching the marshaller for a class-backed union** — today's `NullReferenceException`,
+   or a deliberate `ArgumentNullException` / `InteropException`? Gates item 3a.
+2. **Case→enum conversion.** § 1's consumer API shows
+   `EnumPayload y = new EnumPayload.BCase(vector);`. Nothing in Steps 3–4 emits that conversion.
+   Either `[Union]` makes the compiler synthesise it — in which case say so once and close this —
+   or we emit user-defined operators, and item 3e is real work. Not tested is not the same as not
+   emitted. **A read against the preview SDK settles it; do that before starting 3b.**
+3. **Case-type accessibility.** Nested `{case_type}` types have no stated accessibility. They
+   need enough for generated and consumer-internal use, and consumers (GixSharp rule 8) keep
+   them out of their public surface. Fix it explicitly rather than inheriting a default.
 
 ### Closed
 
-- ~~`body_from_call`~~ — **not affected.** The pass `continue`s on anything that is not
-  `TypePattern::Result`, so it never fires for a plain `DataEnum`. It also constructs through
-  the factories (`return Ok(func())`, `return Panic`), not by mutation, so it needs no Step 4
-  treatment. It *does* consume factory names, which makes it a **Step 6 naming consumer** —
-  add it to the migration list when `Option` / `Result` land.
+- ~~**Step 0 shape**~~ — decided and landed: `tag` is a field on `Variant`. `c928d53e`.
+- ~~Whether the proc macro sees explicit discriminants on payload variants~~ — answered by
+  item 0e: `EnumExplicitPayload { A = 10, B(u32), C(Vec3f32), D = 20 }` yields 10, 11, 12, 20,
+  so the counter resumes across a payload variant. Real logic, not plumbing.
+- ~~`body_from_call`~~ — needs no Step 4 treatment (it constructs through factories, never
+  mutates) but it *does* consume factory names, so it is a naming consumer. Moved to item 6.
 - ~~`builder.rs` setter shape~~ — confirmed, see Step 2.
 - ~~`master.rs` routing~~ — confirmed, see Output routing.
 - ~~Snapshot baseline blocks all template work~~ — retracted, see Prerequisites. Baseline is
   effectively green; the 29-of-33 was a Git LFS materialization failure.
+- ~~`Option`/`Result` are excluded from the first projection~~ — retracted. They carry a
+  `DataEnum` and are projected with everything else; `8c70868d` demonstrates it by emitting
+  `_hasValue` on the `Result` carriers. Only `Result`-specific tidying is deferred; see Step 6.
 
 ---
 

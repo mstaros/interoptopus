@@ -53,8 +53,11 @@ cannot know enough to apply it.
 
 ## 3. Conventions this work established
 
-**`v.stem`, never `v.name`.** `lang::types::kind::Variant` now carries `stem` and `case_type`
-alongside `name`. Every emitted member derives from `stem`:
+**`v.stem`, never `v.name` — but this is not yet true everywhere.** See the blocker below
+before relying on it.
+
+`lang::types::kind::Variant` carries `stem` and `case_type` alongside `name`. Every emitted
+member should derive from `stem`:
 
 | Member | Form |
 |---|---|
@@ -65,9 +68,31 @@ alongside `name`. Every emitted member derives from `stem`:
 | unmanaged helper | `Unmanaged{stem}` |
 | case type (new) | `{case_type}`, normally `{stem}Case` |
 
-`name` is the Rust spelling and is now **only** for diagnostics. Emitting from it reintroduces
-the collisions `union_names` exists to prevent, and no reference-project test would catch it —
-nothing there collides.
+### BLOCKER: the wire generator still emits raw `variant.name`
+
+An earlier revision of this file claimed `name` was "only for diagnostics". **That is false.**
+`crates/backend_csharp/src/pass/output/common/wire/mod.rs` emits it at six sites:
+
+- `emit_enum_serialize` — `{val}.Is{}` and `{val}.As{}()`
+- `emit_enum_deserialize` — `{enum_name}.{}(payload)` and `{enum_name}.{}`
+- `emit_enum_size` — `{val}.Is{}` and `{val}.As{}()`
+
+The nine sites under `pass/output/common/types/enums/*` were migrated; these were not.
+
+**This is not a one-word fix.** `wire/mod.rs` takes `e: &interoptopus::lang::types::Enum` — the
+*Rust inventory* type, which has no `stem` field at all. Resolving it needs either the C#
+variant threaded in, or a lookup from Rust variant to resolved C# name. That is a design
+decision, not a rename.
+
+**Why no test catches it.** `stem == name` for every reference-project enum, because none
+collide. The invariant is unenforced. A colliding enum would generate a managed type using
+`IsFooVariant` while the wire serializer emits `IsFoo` — two halves of the same file
+disagreeing, silently, and only for enums nobody has written yet.
+
+**Fix this before item 3.** Adding case types on top of a half-migrated naming layer buries the
+inconsistency deeper.
+
+### Once that is done
 
 **Templates must not re-sanitize.** `union_names` guarantees uniqueness over the exact strings
 it produces. Any casing or escaping applied downstream breaks that guarantee.
@@ -77,7 +102,6 @@ emitting — `body` keeps only disposable ones, `body_as_unmanaged` only payload
 a parallel `Vec<VariantNames>` indexed positionally misaligns silently after any filter.
 
 ---
-
 ## 4. Three things that cost time
 
 **A `DataEnum` reaches the model by three routes.** Directly as `TypeKind::DataEnum` from
