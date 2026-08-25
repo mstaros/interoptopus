@@ -226,3 +226,72 @@ enums that have one:
 Blocks `docs/csharp-unions.md` item 4a, whose `ToManaged()` tag validation would otherwise
 validate against the wrong tag set. Stands on its own as a correctness bug and should be
 reviewed independently of that plan.
+## MCP transaction commit cannot integrate any change: candidate tree bypasses the Git LFS clean filter
+
+```issue
+id: 1383b84b
+kind: bug
+severity: high
+status: open
+```
+
+### Symptom
+
+`commit_transaction` fails after validation passes. The tool result carries only
+`invalid_params/-32602: commit transaction failed`; the operation event log ends with a bare
+`operation failed` and no error event. The real message is in the server log
+(`Rust editor:get_server_log_tail`, filter `commit transaction failed`):
+
+```
+category: commit_pipeline_failed
+detail: candidate commit would store content where a Git LFS pointer belongs:
+        crates/backend_csharp/tests/backend_plugins/_plugins/exceptions.dll is
+        24064 bytes in the candidate tree; committing it would silently un-LFS the path
+```
+
+Reproduced twice on transaction `086e4102381f1d60b16e9c35`, against target `2867011c` and
+again after `pull_target` onto `4fac2166`. Identical detail both times.
+
+### Diagnosis
+
+The LFS **smudge** filter runs when the transaction worktree is created — content is
+materialized correctly. `r#mod__reference_project__interop.snap` is 848,675 bytes in the
+worktree, identical to the main checkout, and all 12 DLL-loading plugin tests pass there.
+
+The LFS **clean** filter does not run when the candidate tree is built. Every LFS-tracked path
+is therefore staged as raw bytes rather than as a pointer, and the commit guard correctly
+refuses. This suggests the candidate tree is assembled by writing objects directly rather than
+through `git add`, which would bypass `filter.lfs.clean`.
+
+### Impact
+
+**Blocks every transaction in this repository, regardless of what it changes.**
+
+`.gitattributes` tracks `*.snap` and `*.dll`. The `deferred changes classified` event lists 68
+such paths; none belong to the change under test. `exceptions.dll` is simply the first path the
+guard trips on. A transaction with an empty change set would fail identically.
+
+The guard is doing the right thing — silently un-LFS-ing 68 binary and snapshot paths would be
+far worse than a failed commit. The bug is upstream of it.
+
+### Workaround
+
+Copy the changed files from the transaction worktree into the real checkout and commit with
+plain `git`, where the clean filter runs normally. Verified: the four files from `086e4102`
+copied across, `git status` showed exactly those four, and the full suite stayed green
+(31 passed, 0 failed, 2 ignored, plus doctests).
+
+### Note
+
+Not an interoptopus bug — it is a defect in the MCP transaction tooling, recorded here because
+it blocks the execution model assumed by `docs/csharp-unions.md`, which planned to do the union
+work in transactions throughout. Until this is fixed, that plan's steps must land through the
+real checkout.
+
+Two smaller observations from the same investigation:
+
+- The failure detail is only reachable through the server log. `get_operation_log` omits
+  `truncated_result`, so the operation log alone gives no actionable reason for the failure.
+- `add_markdown_section` on the FileMcp server returns `No approval received` with no approval
+  prompt shown to the user, while `replace_markdown_section` on the same file succeeds. Possibly
+  related tooling inconsistency; recorded here only so it is not lost.
