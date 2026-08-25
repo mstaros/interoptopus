@@ -124,7 +124,16 @@ fn ensure_plugin_built(base: &Path, name: &str) -> Result<(), Box<dyn Error>> {
     let _lock = PluginBuildLock::acquire(staged_dir.join(format!(".lock-{name}")))?;
 
     let status = std::process::Command::new("dotnet").args(["build", "-c", "Release", "-v", "q"]).arg(&csproj).status()?;
-    assert!(status.success(), "dotnet build failed for {}", csproj.display());
+    if !status.success() {
+        // NuGet resolves its package root and user-level config from the ambient environment.
+        // A stripped environment fails restore with `Value cannot be null (Parameter 'path1')`
+        // at NuGet.targets, which names neither the variable nor the path it could not build.
+        // Report them here so the next reader does not have to guess which one is missing.
+        for var in ["USERPROFILE", "APPDATA", "NUGET_PACKAGES", "HOME", "DOTNET_CLI_HOME"] {
+            eprintln!("  {var} = {:?}", std::env::var(var).ok());
+        }
+        panic!("dotnet build failed for {}", csproj.display());
+    }
 
     let built_dll = project_dir.join("bin").join("Release").join("net11.0").join(name);
     if !stage_is_current(&staged, &built_dll) {
