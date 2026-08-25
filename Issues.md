@@ -232,7 +232,7 @@ reviewed independently of that plan.
 id: 1383b84b
 kind: bug
 severity: high
-status: open
+status: closed
 ```
 
 ### Symptom
@@ -250,7 +250,11 @@ detail: candidate commit would store content where a Git LFS pointer belongs:
 ```
 
 Reproduced twice on transaction `086e4102381f1d60b16e9c35`, against target `2867011c` and
-again after `pull_target` onto `4fac2166`. Identical detail both times.
+again after `pull_target` onto `4fac2166`. Identical detail both times. Re-measured later on a
+fresh transaction carrying only its own ticket file, where it tripped on
+`crates/proc_macros_impl/tests/snapshots/ty_enum__variants_negative.snap` instead — confirming
+the guard reports whichever LFS path it reaches first, and that no change set is small enough
+to avoid it.
 
 ### Diagnosis
 
@@ -265,36 +269,43 @@ through `git add`, which would bypass `filter.lfs.clean`.
 
 ### Impact
 
-**Blocks every transaction in this repository, regardless of what it changes.**
+**Blocked every transaction in this repository, regardless of what it changed.**
 
-`.gitattributes` tracks `*.snap` and `*.dll`. The `deferred changes classified` event lists 68
-such paths; none belong to the change under test. `exceptions.dll` is simply the first path the
-guard trips on. A transaction with an empty change set would fail identically.
+`.gitattributes` tracked nine extensions. The `deferred changes classified` event lists 68 such
+paths; none belonged to the change under test. `exceptions.dll` was simply the first path the
+guard tripped on. A transaction with an empty change set failed identically.
 
-The guard is doing the right thing — silently un-LFS-ing 68 binary and snapshot paths would be
+The guard was doing the right thing — silently un-LFS-ing 68 binary and snapshot paths would be
 far worse than a failed commit. The bug is upstream of it.
 
-### Workaround
+### Resolution — closed by removing LFS, not by fixing the tooling
 
-Copy the changed files from the transaction worktree into the real checkout and commit with
-plain `git`, where the clean filter runs normally. Verified: the four files from `086e4102`
-copied across, `git status` showed exactly those four, and the full suite stayed green
-(31 passed, 0 failed, 2 ignored, plus doctests).
+The underlying MCP defect is **not fixed**. It stopped mattering here because nothing in this
+repository is LFS-tracked any more.
 
-### Note
+Untracking was worth doing on its own merits: of the nine tracked extensions, three were text
+(`*.json`, `*.snap`, `*.svg`) and none were large — `global.json` is 63 bytes, the largest
+committed DLL 30 KB. `.gitattributes` now classifies by text versus binary instead. The DLLs
+left the repository entirely, since `define_plugin!` builds them during the test run.
 
-Not an interoptopus bug — it is a defect in the MCP transaction tooling, recorded here because
-it blocks the execution model assumed by `docs/csharp-unions.md`, which planned to do the union
-work in transactions throughout. Until this is fixed, that plan's steps must land through the
-real checkout.
+Verified end to end: a transaction deleting the dead `build-dotnet-plugins` recipes built a real
+candidate tree (`2b1825f7`) and integrated successfully. An earlier empty-change-set probe was
+*not* sufficient evidence — a no-op never constructs a tree, which is exactly where this failed.
 
-Two smaller observations from the same investigation:
+**Reopen this if LFS tracking is ever reintroduced.** The clean-filter bypass is still present
+in the MCP commit pipeline and will resurface with the first LFS-tracked path.
+
+Two smaller observations from the original investigation, still true:
 
 - The failure detail is only reachable through the server log. `get_operation_log` omits
   `truncated_result`, so the operation log alone gives no actionable reason for the failure.
 - `add_markdown_section` on the FileMcp server returns `No approval received` with no approval
-  prompt shown to the user, while `replace_markdown_section` on the same file succeeds. Possibly
-  related tooling inconsistency; recorded here only so it is not lost.
+  prompt shown to the user, while `replace_markdown_section` on the same file succeeds.
+
+One further note, from closing this out: `commit_transaction` can return a transport-level error
+to the client *after* the operation has already succeeded server-side. Check `get_commit_status`
+before retrying a commit that appears to have failed.
+
 ## Enum variant names are never sanitized, so a C# keyword variant emits uncompilable bindings
 
 ```issue
