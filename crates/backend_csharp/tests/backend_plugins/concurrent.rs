@@ -23,7 +23,7 @@ fn concurrent_same_plugins_work() -> Result<(), Box<dyn Error>> {
             std::thread::spawn(move || {
                 let rt = dotnet_runtime().expect("failed to initialize .NET runtime");
                 let plugin = rt
-                    .load::<Behavior>(crate::dll_path_for(BASE, "functions_behavior.dll"))
+                    .load::<Behavior>(crate::dll_path_for::<Behavior>(BASE, "functions_behavior.dll"))
                     .expect("failed to load plugin");
 
                 let result = catch_unwind(std::panic::AssertUnwindSafe(|| plugin.panic()));

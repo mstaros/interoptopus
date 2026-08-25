@@ -99,35 +99,69 @@ fn stage_is_current(staged: &Path, built: &Path) -> bool {
     }
 }
 
-/// Builds the `$base/$name` plugin project and stages its DLL into `$base/_plugins/`, at most
-/// once per test process.
+/// Generates a plugin's interop sources, then builds and stages its DLL.
 ///
-/// Every path that reaches a staged DLL must come through here - `define_plugin!`,
-/// `load_plugin!`, and `dll_path_for`. Cargo runs a plugin's define and load tests on parallel
-/// threads with no ordering guarantee, and on Windows a DLL the .NET runtime has already mapped
-/// cannot be overwritten; the copy fails with `os error 32`. Whichever caller arrives first
-/// therefore performs the build, and the rest find it recorded here and never touch the file.
+/// Generation lives here rather than in `define_plugin!` so arrival order stops mattering. It
+/// used to be split: `define_plugin!` generated, this function built. A loader reaching a
+/// plugin first therefore compiled against whatever was on disk — and on a fresh checkout the
+/// interop files are gitignored, so nothing was, and the build failed with `CS0246` rather than
+/// producing a stale DLL. Measured: a fresh worktree fails three of sixty-two on the first run
+/// and passes on the second.
 ///
-/// Consequence worth knowing: if a loader wins the race, the DLL is built from the interop
-/// sources as they were on disk, before `define_plugin!` regenerated them. That only differs
-/// when the inventory has changed, and then `define_plugin!`'s snapshot assertion says so.
-fn ensure_plugin_built(base: &Path, name: &str) -> Result<(), Box<dyn Error>> {
-    let staged = base.join("_plugins").join(name);
+/// **Writes are conditional on content**, which is load-bearing rather than an optimisation.
+/// `write_buffers_to` writes unconditionally for `Overwrite::Always` buffers, which the interop
+/// files use. Rewriting identical bytes still bumps mtime, which would make `dotnet` rebuild,
+/// which would make the built DLL newer than the staged one, which would fire the copy that
+/// [`stage_is_current`] exists to avoid — reintroducing the mapped-DLL collision (`os error
+/// 32`). The in-process set cannot prevent that: nextest gives each test its own process.
+///
+/// The generated buffer is returned rather than consumed so `define_plugin!` can snapshot it.
+/// The snapshot assertion stays in that macro deliberately — moving it here would make every
+/// loader assert a snapshot it did not ask for.
+fn prepare_plugin<P: interoptopus::lang::plugin::PluginInfo>(base: &Path, name: &str) -> Result<impl std::fmt::Display, Box<dyn Error>> {
+    use interoptopus_csharp::dispatch::Dispatch;
 
-    // Recover from a poisoned lock rather than cascading one panicking test into every later one.
-    let mut built = BUILT_PLUGINS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    if built.contains(&staged) {
-        return Ok(());
-    }
+    // Single-sourced on purpose. If the definer and the loader each built their own generation
+    // config, the files on disk would depend on which won the race.
+    let multibuf = interoptopus_csharp::DotnetLibrary::builder(P::inventory())
+        .dispatch(Dispatch::plugin_defaults_with("My.Company"))
+        .exception(FILE_NOT_FOUND_EXCEPTION)
+        .build()
+        .process()?;
 
-    // `name` is the DLL file name; the project directory and its csproj share the stem.
     let project_dir = base.join(name);
-    let stem = Path::new(name).file_stem().expect("plugin name must carry a .dll suffix");
-    let csproj = project_dir.join(stem).with_extension("csproj");
-
+    let staged = base.join("_plugins").join(name);
     let staged_dir = staged.parent().expect("staged path has a parent");
     std::fs::create_dir_all(staged_dir)?;
+
+    // Held across generation as well as build: two processes writing the same source file
+    // interleaved would be as bad as two compiling it.
     let _lock = PluginBuildLock::acquire(staged_dir.join(format!(".lock-{name}")))?;
+
+    let mut built = BUILT_PLUGINS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    if !built.contains(&staged) {
+        std::fs::create_dir_all(&project_dir)?;
+        // Not `write_buffers_to`: that rewrites unconditionally. The content check has to live
+        // in `Multibuf` rather than here because the per-buffer `Overwrite` policy is private,
+        // so a loop over `iter()` would silently clobber `Overwrite::Never` files.
+        multibuf.write_buffers_to_if_changed(&project_dir)?;
+        build_and_stage(&project_dir, &staged, name)?;
+        built.insert(staged.clone());
+    }
+
+    Ok(multibuf)
+}
+
+/// Builds the plugin project and stages its DLL.
+///
+/// Assumes the caller holds the per-plugin lock and has already written the sources; this
+/// function does neither. Split out of the old `ensure_plugin_built` so that generation,
+/// locking and the once-per-process check live together in [`prepare_plugin`] and this is only
+/// the part that shells out.
+fn build_and_stage(project_dir: &Path, staged: &Path, name: &str) -> Result<(), Box<dyn Error>> {
+    // `name` is the DLL file name; the project directory and its csproj share the stem.
+    let stem = Path::new(name).file_stem().expect("plugin name must carry a .dll suffix");
+    let csproj = project_dir.join(stem).with_extension("csproj");
 
     let status = std::process::Command::new("dotnet").args(["build", "-c", "Release", "-v", "q"]).arg(&csproj).status()?;
     if !status.success() {
@@ -142,11 +176,9 @@ fn ensure_plugin_built(base: &Path, name: &str) -> Result<(), Box<dyn Error>> {
     }
 
     let built_dll = project_dir.join("bin").join("Release").join("net11.0").join(name);
-    if !stage_is_current(&staged, &built_dll) {
-        std::fs::copy(&built_dll, &staged)?;
+    if !stage_is_current(staged, &built_dll) {
+        std::fs::copy(&built_dll, staged)?;
     }
-
-    built.insert(staged);
     Ok(())
 }
 
@@ -159,17 +191,8 @@ fn ensure_plugin_built(base: &Path, name: &str) -> Result<(), Box<dyn Error>> {
 #[macro_export]
 macro_rules! define_plugin {
     ($plugin:ty, $name:expr, $base:expr) => {{
-        use interoptopus_csharp::dispatch::Dispatch;
-
-        let multibuf = ::interoptopus_csharp::DotnetLibrary::builder(<$plugin as ::interoptopus::lang::plugin::PluginInfo>::inventory())
-            .dispatch(Dispatch::plugin_defaults_with("My.Company"))
-            .exception(crate::FILE_NOT_FOUND_EXCEPTION)
-            .build()
-            .process()?;
-
         let base = ::std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join($base);
-        multibuf.write_buffers_to(base.join($name))?;
-        crate::ensure_plugin_built(&base, $name)?;
+        let multibuf = crate::prepare_plugin::<$plugin>(&base, $name)?;
 
         insta::assert_snapshot!(multibuf);
     }};
@@ -180,7 +203,7 @@ macro_rules! define_plugin {
 #[macro_export]
 macro_rules! load_plugin {
     ($plugin:ty, $name:expr, $base:expr) => {{
-        let path = crate::dll_path_for($base, $name);
+        let path = crate::dll_path_for::<$plugin>($base, $name);
         let rt = ::interoptopus_csharp::rt::dynamic::runtime().expect("failed to initialize .NET runtime");
         rt.load::<$plugin>(path)?
     }};
@@ -195,9 +218,9 @@ macro_rules! load_plugin {
 ///
 /// Panics rather than returning a `Result` so the signature stays usable from thread closures and
 /// other non-`Result` contexts. A plugin that will not build is a test failure either way.
-fn dll_path_for(base: impl AsRef<Path>, name: impl AsRef<Path>) -> PathBuf {
+fn dll_path_for<P: interoptopus::lang::plugin::PluginInfo>(base: impl AsRef<Path>, name: impl AsRef<Path>) -> PathBuf {
     let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(base);
     let name = name.as_ref().to_str().expect("plugin name must be valid UTF-8");
-    ensure_plugin_built(&base, name).expect("failed to build plugin");
+    prepare_plugin::<P>(&base, name).expect("failed to prepare plugin");
     base.join("_plugins").join(name)
 }

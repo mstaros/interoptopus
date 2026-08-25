@@ -241,6 +241,22 @@ through it rather than through `load_plugin!`.
 
 **That guard was per *process*, which the commit validator's runner defeats.** `cargo-nextest` gives each test its own process, so the `Mutex<HashSet>` coordinated nothing and several processes compiled the same `.csproj` into the same `obj/`; the loser died with `CS2012`, the output file held by the winner. Reproduced by bisection on an unchanged tree — single-threaded passed, a five-test filter passed, the full run failed on four different plugins. Now guarded by a lock file at `_plugins/.lock-<name>` held across build-and-stage, with age-based reclamation so a killed test cannot wedge later runs. Two things to know: the reclamation path has no test, and `cargo test` and `nextest` do not run the same set — `cargo test` counts nine doctests that nextest does not run at all, so "the suite passes" means different things depending which you ask.
 
+**`prepare_plugin` now owns generation as well as build and stage.** It used to be split —
+`define_plugin!` generated the interop sources, `ensure_plugin_built` compiled them — so a
+loader reaching a plugin first compiled against whatever happened to be on disk. On a fresh
+checkout the `Interop*.cs` files are gitignored and therefore absent, so the build failed with
+`CS0246` rather than producing a stale DLL. Measured: a fresh worktree failed three of
+sixty-two on the first run and passed on the second. `dll_path_for` is now
+`dll_path_for::<P>`, and every path to a staged DLL generates first, so arrival order no longer
+matters. Two things to keep in mind if you touch it: the snapshot assertion stays in
+`define_plugin!` (moving it into the shared helper would make every loader assert a snapshot it
+did not ask for), and writes go through `Multibuf::write_buffers_to_if_changed`, not
+`write_buffers_to`. The latter rewrites unconditionally, which bumps mtime, which forces a
+rebuild, which makes the built DLL newer than the staged one and re-fires the copy that
+`stage_is_current` exists to avoid. The content check also has to live in `Multibuf` rather
+than in the harness, because the per-buffer `Overwrite` policy is private and a loop over
+`iter()` would silently clobber `Overwrite::Never` files.
+
 **Plugin fixtures must not take third-party `PackageReference`s.** `_plugins/` staging copies the plugin DLL and not its dependencies, so a fixture with one passes only on a checkout where an earlier run left the dependency behind — a false green on any clean clone. The `wire` fixture had `Newtonsoft.Json` and passed for exactly that reason; it is now on `System.Text.Json`, which is in the BCL. `Newtonsoft.Json` is gone from the repository.
 
 **Toolchain**: .NET 11 Preview 5+ required. Verified on `11.0.100-preview.7.26381.103`.

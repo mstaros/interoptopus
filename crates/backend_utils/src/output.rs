@@ -97,6 +97,29 @@ impl Multibuf {
         Ok(())
     }
 
+    /// Writes all buffers into the given directory, honoring each buffer's overwrite policy,
+    /// and skipping any file whose content on disk is already identical.
+    ///
+    /// The content check is not only an optimisation. [`write_buffers_to`](Self::write_buffers_to)
+    /// rewrites `Overwrite::Always` buffers unconditionally, which updates their mtime even when
+    /// nothing changed; a caller whose build step keys on mtime will then rebuild, and anything
+    /// downstream that compares timestamps sees a change that did not happen. Callers that only
+    /// want the bytes on disk to be correct should prefer this.
+    pub fn write_buffers_to_if_changed(&self, dir: impl AsRef<Path>) -> Result<(), std::io::Error> {
+        let dir = dir.as_ref();
+        for (name, entry) in &self.buffers {
+            let path = dir.join(name);
+            if entry.overwrite == Overwrite::Never && path.exists() {
+                continue;
+            }
+            if fs::read_to_string(&path).is_ok_and(|existing| existing == entry.content) {
+                continue;
+            }
+            fs::write(path, &entry.content)?;
+        }
+        Ok(())
+    }
+
     /// Iterates over all `(name, content)` pairs.
     pub fn iter(&self) -> impl Iterator<Item = (&String, &String)> {
         self.buffers.iter().map(|(k, v)| (k, &v.content))

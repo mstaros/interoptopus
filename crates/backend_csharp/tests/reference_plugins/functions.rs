@@ -32,7 +32,7 @@ fn load_plugin_functions_primitive() -> Result<(), Box<dyn Error>> {
 // the calling thread (via the per-thread uncaught-exception slot).
 #[test]
 fn load_plugin_functions_behavior() -> Result<(), Box<dyn Error>> {
-    let plugin = dotnet_runtime()?.load::<Behavior>(crate::dll_path_for(super::BASE, "functions_behavior.dll"))?;
+    let plugin = dotnet_runtime()?.load::<Behavior>(crate::dll_path_for::<Behavior>(super::BASE, "functions_behavior.dll"))?;
 
     let result = catch_unwind(std::panic::AssertUnwindSafe(|| plugin.panic()));
     assert!(result.is_err(), "bare void throw must surface as a Rust panic");
@@ -55,7 +55,7 @@ fn load_plugin_functions_behavior() -> Result<(), Box<dyn Error>> {
 //   wrapper. The outer await resolves to `Ok(ffi::Result::Panic)`.
 #[tokio::test]
 async fn load_plugin_functions_behavior_async_throw() -> Result<(), Box<dyn Error>> {
-    let plugin = dotnet_runtime()?.load::<Behavior>(crate::dll_path_for(super::BASE, "functions_behavior.dll"))?;
+    let plugin = dotnet_runtime()?.load::<Behavior>(crate::dll_path_for::<Behavior>(super::BASE, "functions_behavior.dll"))?;
 
     let result = plugin.panic_async().await;
     assert!(result.is_err(), "untyped async throw should surface as outer Err(AsyncCancelled)");
