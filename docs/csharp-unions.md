@@ -1,12 +1,21 @@
 # C# 15 union projection for Rust enums
 
-Status: **in progress.** Steps 0, 1 and 2 are landed and committed; the suite is green. Step 3
-is next. See `docs/csharp-unions-handoff.md` for current state and traps; this file is the
-design record.
+Status: **in progress.** § Todo/Remaining below is the single source for what is landed and what
+is open; this line deliberately does not restate it. See `docs/csharp-unions-handoff.md` for
+current state and traps; this file is the design record.
 
-Scope: project every Rust `DataEnum` reaching the C# backend as a C# 15 custom union. Native
-ABI unchanged. Not opt-in — the repository targets net11 everywhere and unions are the default
-enum projection (see Decided).
+Scope: project every Rust `DataEnum` reaching the C# backend as a C# 15 custom union, subject to
+the eligibility rule below. Native ABI unchanged. Not opt-in — the repository targets net11
+everywhere and unions are the default enum projection (see Decided).
+
+**Provenance — two sources, and they are not the same source.** Language claims here are read
+from the unions feature specification at `MpsAgent/Unions/UnionSpecification.md`, a Microsoft
+Learn snapshot of `dotnet/csharplang/proposals/unions.md` at `git_commit_id
+f23bdbed3f5a9c5f5d78f7f2a0a9f0bc54ac58b4`, `ms.date 2026-06-02`. Compilation claims are verified
+against the .NET 11 SDK **preview 7, August 2026**. The feature has shipped, so where that
+snapshot leaves a question open the shipped implementation is authoritative — note that several
+sections in it are headed `[Resolved]` and carry no resolution text, including both sections on
+classes as union types. Do not read those as unresolved.
 
 ## Two layers, two rules
 
@@ -670,13 +679,13 @@ not determinable from this document and has not been guessed at.
 | 3a | **done** `f630e225` | ~~Class: private parameterless ctor, no `_hasValue`~~ Declaring any constructor removes the implicit public one, so a single `private E() { }` is the whole change; nested types may still reach it, so factories and `Unmanaged.ToManaged()` are unaffected. The `_hasValue` half was already correct — `8c70868d` added that field to struct-backed enums only. Breaking change, changelog entry added | — |
 | 3b | **done** `4a19b0e3`, tests `9d6905bd` | ~~Nested `{case_type}` case types~~ New pass `body_case_types.rs`, scoped per enum by `variants.iter().any(\|v\| v.can_carry_payload)`. **Corrected after this row was first written:** it read `v.ty.is_some()`, which asks whether a variant *does* carry a payload rather than whether it *can*. `fallback.rs::resolve_payload` erases a `()` payload to `None`, so `Result<(), ()>` read as entirely payloadless and lost its projection while `Result<u32, Error>` kept it — the same shape decided by a type argument. The predicate is now the model-layer field `Variant::can_carry_payload`, set from `VariantKind::Tuple` in `enum_variants.rs` and from the payload-carrying position in `fallback.rs`; five sites read it. A `DataEnum` with no payload-**capable** variant is skipped entirely, while a union-projected enum gets a case type for **every** variant, unit ones included. Guard test `enum_union_members::eligibility_asks_can_carry_not_does_carry` is the only fixture separating the two predicates — reverting passes the whole rest of the suite. Names came from `Variant::case_type`, already allocated and collision-resolved by `union_names`. Remains the precondition for 3e; see Open items #2 | 1d ✔ |
 | 3c | **done** `bdd13b53` | ~~`Value` / `HasValue` / `TryGetValue` — consumes `_hasValue`, clears CS0169~~ Same scope as 3b, through `can_carry_payload`. Struct-backed: `HasValue => _hasValue`, `Value` returns null when it is false. Class-backed: `HasValue => true`, no `_hasValue` field, no `_hasValue &&` in `TryGetValue`. `Value` boxes a `readonly record struct` per access — value-stable, not reference-stable. Leaves a deliberate stopgap `_managed._hasValue = true;` in `ToManaged` for 4a to delete | 3a ✔, 3b ✔ |
-| 3d | open | `[Union]` + `IUnion` via joined interface list | 3c ✔ |
+| 3d | open | `[Union]` **only**. The attribute's full name is `System.Runtime.CompilerServices.UnionAttribute`, confirmed against a net11 assembly that builds (`MpsAgent/Unions`, `UnionReflection.HasUnionAttribute` matches on that string). ~~+ `IUnion` via joined interface list~~ — **`IUnion` is a separate decision and is not part of 3d:** the specification leaves its namespace unspecified, states the compiler will not synthesize it, and records `IUnion<TUnion>` as removed. Emit neither without a verified reference. **Hard constraint on 3c's output:** `Value` must remain a *public instance* property. Reflection consumers locate it with `GetProperty("Value", Public \| Instance)`, so an explicit `object? IUnion.Value => …` implementation would be invisible to them | 3c ✔ |
 | 3e | open, **shrunk** | ~~decide whether the compiler synthesises it~~ — settled: it does, via the generated constructor. Reduces to "constructors are public and single-parameter"; nothing emitted for the conversion | 3b ✔ |
 | 3f | **done** `4a19b0e3` | ~~**Case-type accessibility — `public`**~~ Emitted `public` at the site rather than inherited, since a nested type defaults to `private` — unusable, because the case type could not then be named outside the union — and `internal` fails the same way across an assembly boundary. Landed with 3b as planned; asserted by `enum_case_types::case_types_are_public` | 3b ✔ |
 | 4 | open | `ToUnmanaged` / `AsUnmanaged` empty guard | — |
 | 4a | open | `ToManaged` constructs via case ctors + validates tag | 3c ✔ |
 | 4b | open | Exception split (decided in Step 4; implementation only) | 4, 4a, **Open items #1** |
-| 4c | open | `default(ResultX)` empty not `Ok`; `default(OptionX)` ≠ `NoneCase`. **A soundness obligation, not a preference** — the compiler assumes *"for struct unions, `default` produces a `Value` of null"* and reasons about exhaustiveness on it. `Value` must consult `_hasValue` before materialising a case | 3c ✔, 4a |
+| 4c | open | `default(ResultX)` empty not `Ok`; `default(OptionX)` ≠ `NoneCase`. **A soundness obligation, not a preference** — specification § Well-formedness, *Soundness*: `Value` always evaluates to null or to a value of a case type, **expressly including the default value of the union type**. (An earlier version of this row cited *"for struct unions, `default` produces a `Value` of null"*. That rule sits in the specification's `[Obsolete]` section and is marked removed; the obligation survives under *Soundness*.) The side state is **forced, not chosen**: `Ok` is tag 0 and `default` is all-zero, so given tag preservation — settled, and load-bearing because it keeps the crossing a memcpy rather than an N-way translation — the discriminant cannot distinguish them, and `_hasValue` or equivalent is the only remedy. Consequence recorded nowhere else: a `Value` that can be null makes a consumer's otherwise-exhaustive `switch` warn on unhandled null | 3c ✔, 4a |
 | 4d | partial | Wire has **two** throw sites, not one. Deserializer's unknown native tag → `InteropException`: **done**. Serializer's empty-state `else` should call `ExceptionForVariant()` instead of its own "Unknown variant": **open**, needs 4b's helper | 1d ✔, 4b |
 | 5 | open | Snapshots move once; consumer projects compile the output | 3d, 4b |
 | 5c | partial | Collision cases: `Value`, `B`/`IsB`. ~~casing-fold~~ — no such class, `union_names` allocates case-sensitively. A Wire-reachable stem-moving collision is covered by `tests/output/wire/collision.rs`; the managed-side cases remain | 1d ✔ |

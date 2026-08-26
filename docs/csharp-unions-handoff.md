@@ -103,11 +103,24 @@ overwritten by merge"*. The commit itself had already validated; only the checko
 **Read `docs/csharp-unions.md` § "Two layers, two rules" before writing any code.** It is the
 second section of that file and it is the thing most likely to be misread.
 
-The short version: this work governs the **generated layer** only. Every `DataEnum` goes through
-the union machinery, unit-only ones included, *not* because a union is better for a scalar choice
-but because the generator cannot distinguish a scalar choice from a payload alternative — that is
-domain knowledge it does not have, so any eligibility rule based on variant shape would be a
-guess.
+The short version: this work governs the **generated layer** only.
+
+**The rule stated here previously was the superseded one** — that every `DataEnum` goes through
+the union machinery, unit-only ones included, because the generator cannot distinguish a scalar
+choice from a payload alternative. That argument covers **domain** eligibility and still governs
+everything else: the generator does not guess whether a payload-carrying enum is "really" a
+scalar choice. It does not cover **mechanical** eligibility, and that distinction is settled.
+
+**The rule in force: a `DataEnum` with no payload-carrying variant does not receive union
+machinery.** No case types, no `Value`, no `HasValue`, no `TryGetValue`. Whether any variant can
+carry a payload is not domain knowledge — it is `VariantKind::Tuple` versus `Unit`, visible in the
+inventory. Excluded enums keep their current representation: struct, `Unmanaged` mirror and
+marshaller all stay, and this rule only declines to *add* union machinery on top. `Issues.md`
+`79be256e` records the rule, the measured cost and the population; projecting excluded enums as
+plain C# `enum`s instead is option C there and is **deferred**.
+
+The predicate that implements it is `variants.iter().any(|v| v.can_carry_payload)` — *can*, not
+*does*. See §5 and §8; getting that backwards was this session's most expensive error.
 
 That is not a mandate for the consumer API. A consumer decides per type: payload or state
 alternatives → union, scalar choice → `enum`, bit combinations → `[Flags]`, product data →
@@ -122,8 +135,9 @@ Note the direction of that dependency: interoptopus decides what it emits from t
 specification and the Rust inventory. A consumer may motivate a shape by showing it occurs in
 practice, but never constrains the projection. See `csharp-unions.md` §0.
 
-Do not add an eligibility gate to interoptopus to try to enforce the consumer-layer rule. It
-cannot know enough to apply it.
+Do not add a **domain** eligibility gate to interoptopus to try to enforce the consumer-layer
+rule. It cannot know enough to apply it. The mechanical gate above is a different thing and is
+already in force.
 
 ---
 
