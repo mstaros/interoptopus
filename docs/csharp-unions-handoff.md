@@ -13,13 +13,23 @@ done, what is next, and the things that cost time to discover.
 checkout, whole workspace — **174 passed, 3 skipped, 0 failed**, across 38 binaries. Run twice
 (39.1s, 34.9s), identical. Reference snapshot 858,865 bytes.
 
-**Record the scope with the number.** Four different counts exist in this repo's history and none
-of the earlier three says what it covered: this section previously said "12 unit + 31 integration
-+ doctests, 2 ignored"; the 2026-08-25 session handoff says 64 under nextest; `ccb105a2` says 33
-for `-p interoptopus_csharp`. They are not comparable, and the discrepancy between 64 and 174 is
-**unexplained** — it was not investigated, and the plausible causes (package-scoped run, a
-different filter, tests added since) were not distinguished. A bare pass count is not a baseline;
-the command and scope are what make it one.
+**Record the scope with the number.** Four counts exist in this repo's history and none of the
+earlier three said what it covered. **Resolved 2026-08-26:**
+
+| Count | Scope |
+|---|---|
+| 174 passed, 3 skipped, 38 binaries | whole workspace, `cargo nextest run` |
+| 64 passed, 2 skipped, 5 binaries | `-p interoptopus_csharp` under nextest |
+| 33 (30 passed, 1 failed, 2 ignored) | `cargo test -p interoptopus_csharp`, per `ccb105a2` |
+| 12 unit + 31 integration + doctests | this section's earlier figure, scope unrecorded |
+
+So the 2026-08-25 handoff's **64 was a package-scoped nextest run**, not a workspace one — measured
+directly while running the 3b tests, where nextest anchored on `interoptopus_csharp` and reported
+exactly 64 across 5 binaries. The counts were never in conflict; they were answering different
+questions.
+
+`cargo test` and `nextest` also differ: `cargo test` counts nine doctests nextest does not run.
+**A bare pass count is not a baseline** — the command and the scope are what make it one.
 
 Earlier commits on `master`:
 
