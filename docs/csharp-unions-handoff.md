@@ -9,44 +9,80 @@ done, what is next, and the things that cost time to discover.
 
 ## 1. State
 
-**Baseline, measured 2026-08-26 on `master` at `318256c7`:** `cargo nextest run` in the real
-checkout, whole workspace — **174 passed, 3 skipped, 0 failed**, across 38 binaries. Run twice
-(39.1s, 34.9s), identical. Reference snapshot 858,865 bytes.
+**`master` is `d477f843`.** Baseline, measured 2026-08-26 in the transaction worktree:
+`cargo nextest run -p interoptopus_csharp` — **77 passed, 2 skipped, 0 failed**, across 5 binaries.
+Whole workspace was **174 passed, 3 skipped** at `318256c7`; that figure has not been re-measured
+since, and it will now be higher by the 14 tests added this session.
 
 **Record the scope with the number.** Four counts exist in this repo's history and none of the
 earlier three said what it covered. **Resolved 2026-08-26:**
 
 | Count | Scope |
 |---|---|
-| 174 passed, 3 skipped, 38 binaries | whole workspace, `cargo nextest run` |
-| 64 passed, 2 skipped, 5 binaries | `-p interoptopus_csharp` under nextest |
+| 174 passed, 3 skipped, 38 binaries | whole workspace, `cargo nextest run`, at `318256c7` |
+| 64 → 77 passed, 2 skipped, 5 binaries | `-p interoptopus_csharp` under nextest |
 | 33 (30 passed, 1 failed, 2 ignored) | `cargo test -p interoptopus_csharp`, per `ccb105a2` |
-| 12 unit + 31 integration + doctests | this section's earlier figure, scope unrecorded |
+| 12 unit + 31 integration + doctests | an earlier figure here, scope unrecorded |
 
-So the 2026-08-25 handoff's **64 was a package-scoped nextest run**, not a workspace one — measured
-directly while running the 3b tests, where nextest anchored on `interoptopus_csharp` and reported
-exactly 64 across 5 binaries. The counts were never in conflict; they were answering different
-questions.
+The 2026-08-25 handoff's **64 was a package-scoped nextest run**, not a workspace one — measured
+directly, where nextest anchored on `interoptopus_csharp` and reported exactly 64 across 5
+binaries. The counts were never in conflict; they answered different questions. `cargo test` also
+counts nine doctests nextest does not run. **A bare pass count is not a baseline** — the command
+and the scope are what make it one.
 
-`cargo test` and `nextest` also differ: `cargo test` counts nine doctests nextest does not run.
-**A bare pass count is not a baseline** — the command and the scope are what make it one.
+### Plan state
 
-Earlier commits on `master`:
+Done: **0–1c, R, 1d, 3a, 3b, 3c, 3f.** Open front is **3d** (`[Union]` + `IUnion`), gated on 3c
+which is now satisfied. Item 4 (`ToUnmanaged`/`AsUnmanaged` empty guard) has no gate and can go in
+parallel.
 
-| Commit | What |
-|---|---|
-| `09b82d44` fix | Proc macro resumes implicit discriminants from the previous value |
-| `c928d53e` | Discriminant moved onto `Variant.tag`; three index-as-tag sites fixed |
-| `9d664613` | net11 retarget, `LangVersion=preview`, plugin DLLs rebuilt |
-| `bbff2055` | Plan updated for net11-everywhere |
-| *(union_names commit)* | `union_names` model pass + allocator, 12 unit tests |
-| *(wiring commit)* | Pass wired into both pipelines |
-| `2bdbf054` | All nine name-deriving sites emit from `v.stem` |
+| Item | Commit | What landed |
+|---|---|---|
+| 1d | `f5057d4b` | Six wire sites emit `v.stem`; `cs_type_name` sanitises |
+| 3b, 3f | `4a19b0e3`, tests `9d6905bd` | Nested case types, `public`, union-projected enums only |
+| 3a | `f630e225` | Private parameterless ctor on class-backed enums; changelog entry |
+| 3c | `bdd13b53` | `HasValue`/`Value`/`TryGetValue`, `_hasValue` writes, `can_carry_payload` |
+| — | `d477f843` | `WarningsAsErrors=CS0169;CS0414` gate in `Directory.Build.props` |
 
-`Issues.md`, as of `318256c7`. Open — `2a6da76a`, `4e9a17c3`, `7c8cb22e`, `79be256e`, `b4e07f12`,
-`5d1ae4c7`. Closed — `09b82d44`, `ccb105a2`, `1383b84b`, `31248473`, `c33b9cf5`, `e235bc7d`.
+**`Issues.md` as of `d477f843`.** Open — `2a6da76a`, `4e9a17c3`, `7c8cb22e`, `79be256e`,
+`b4e07f12`, `5d1ae4c7`. Closed — `09b82d44`, `ccb105a2`, `1383b84b`, `31248473`, `c33b9cf5`,
+`e235bc7d`, `8f4c1e2a`.
 
-Plan todo: items 0–0e and 1–1c done. **Item 3 is next.**
+### The three things worth knowing before you start
+
+**1. `5d1ae4c7` is now an *eleven*-site gate, and I made it worse.** Every enum output pass opens
+with the same inline `match type_kind { DataEnum(e) => e, Result(_, _, e) => e, Option(_, e) => e,
+_ => continue }`. `union_names::data_enum()` already implements exactly this and nothing calls it.
+I added two more passes this session (`body_case_types`, `body_union_members`), each with its own
+copy. If you add a twelfth, consider adopting the helper first — it is a mechanical change and the
+issue has the site list.
+
+**2. Item 1 still gates 4b and is still unmeasured.** Positions (a) `InvalidOperationException`
+and (c) `?? default` were never reproduced; only (b) was, and it showed the NRE fires *before* any
+marshaller, at `body_as_unmanaged.rs:47` in the enclosing composite. `b4e07f12` records the
+present-tense defect. Reproduce (a) and (c) before choosing, and do not close `b4e07f12` first.
+
+**3. `ResultVoidVoid` regained union machinery in 3c, deliberately.** If you see it carrying four
+empty case types and wonder whether that is bloat: it is the eligibility predicate asking *can a
+variant carry a payload* rather than *does one*. See §8.
+
+### Snapshot workflow
+
+Accept **per step**, not deferred. The accept must run in the *transaction worktree*, not the real
+checkout — `ccb105a2`'s "real checkout only" rule applied to LFS stubs, and LFS is gone since
+`1383b84b`.
+
+```powershell
+cd <worktree>
+$env:INSTA_UPDATE='always'; $env:TRYBUILD='overwrite'
+cargo test --workspace --all-features --no-fail-fast
+Remove-Item Env:INSTA_UPDATE, Env:TRYBUILD
+Get-ChildItem -Recurse -Filter *.snap.new | Remove-Item
+```
+
+**Delete stray build logs before committing.** A `dotnet build > build.txt` left in the worktree
+was picked up by a commit and blocked the checkout with *"Untracked working tree file … would be
+overwritten by merge"*. The commit itself had already validated; only the checkout failed.
 
 ---
 
@@ -96,49 +132,21 @@ member should derive from `stem`:
 | unmanaged helper | `Unmanaged{stem}` |
 | case type (new) | `{case_type}`, normally `{stem}Case` |
 
-### BLOCKER: the wire generator still emits raw `variant.name`
+### ~~BLOCKER: the wire generator still emits raw variant.name~~ — landed in `f5057d4b`
 
-An earlier revision of this file claimed `name` was "only for diagnostics". **That is false.**
-`crates/backend_csharp/src/pass/output/common/wire/mod.rs` emits it at six sites:
+**This is done.** The section is kept because its reasoning still governs new code.
 
-- `emit_enum_serialize` — `{val}.Is{}` and `{val}.As{}()`
-- `emit_enum_deserialize` — `{enum_name}.{}(payload)` and `{enum_name}.{}`
-- `emit_enum_size` — `{val}.Is{}` and `{val}.As{}()`
+Six sites in `wire/mod.rs` emitted `v.name` — the raw Rust identifier — instead of `v.stem`, the
+collision-resolved name `union_names` allocates. `cs_type_name` also skipped `sanitize_rust_name`.
+Both are fixed, and `pass::output::common::wire::cs_names` now owns the resolution, with unit tests
+covering collision, tag-not-position lookup, and the wrapped-`DataEnum` path.
 
-The nine sites under `pass/output/common/types/enums/*` were migrated; these were not.
+**The rule that outlives the fix:** every emitted member name comes from `v.stem`, never `v.name`.
+`union_names` is the single naming authority. If you add a pass that names anything per-variant,
+take the stem — `c33b9cf5` and `4e9a17c3` are both instances of something deriving names
+independently, and both were defects.
 
-**This is not a one-word fix.** `wire/mod.rs` takes `e: &interoptopus::lang::types::Enum` — the
-*Rust inventory* type, which has no `stem` field at all. The root cause is one level up:
-`WireCodeGen` holds only `rs_types: &RsTypes`, so no emitter in that file can reach the C# model.
-Resolving it needs a model reference threaded into the struct. That is a design decision, not a
-rename.
-
-**There is a second family, from the same cause.** `cs_type_name` returns `ty.name.clone()` for
-`Struct` and `Enum`, skipping the `sanitize_rust_name` that every path through `names.rs` applies
-(line 134 is the catch-all: `_ => sanitize_rust_name(&ty.name)`). The comment at `names.rs:113`
-does **not** license this — it says to resolve the Wire inner *name* from the Rust inventory, and
-then still applies `sanitize_rust_name` and `rust_to_pascal` to it. Reading the source string from
-`rs_types` is not the same as using the Rust name verbatim.
-
-**Why no test catches it.** `stem == name` for every reference-project enum, because none
-collide. The invariant is unenforced. A colliding enum would generate a managed type using
-`IsFooVariant` while the wire serializer emits `IsFoo` — two halves of the same file
-disagreeing, silently, and only for enums nobody has written yet.
-
-**Fix this before item 3b.** Items 3b and 3c both *add* collision surface — `{stem}Case` is a new
-collision class, and 3c reserves `Value`/`HasValue`/`TryGetValue` — so the rate of `stem != name`
-goes up as Step 3 lands. Adding case types on top of a half-migrated naming layer buries the
-inconsistency deeper. Tracked as `Issues.md` `4e9a17c3`; plan item 1d, which now gates 3b.
-
-**When fixing, match variants by `tag`, not by index or name.** Since Step 0 both the Rust and C#
-variant carry the same authoritative discriminant. Index is positional and brittle; name is the
-thing being corrected.
-
-**A third gap, same file, different contract.** `emit_enum_serialize` falls through to
-`throw new InvalidOperationException("Unknown variant")`. Once item 3c consumes `_hasValue`,
-every `IsX` returns false for a default struct union, so wire reaches that fallback for an empty
-enum. Step 4 routes empty-state and corrupt-tag through `ExceptionForVariant()` with different
-exception types; wire honours neither. Plan item 4d.
+`7c8cb22e` remains open: enum variant names are still never sanitised at the model layer.
 
 ### Once that is done
 
@@ -173,41 +181,67 @@ not converge.
 
 ---
 
-## 5. Next: item 3
+## 5. Next: 3d, then 4
 
-The design is written up in `docs/csharp-unions.md` Step 3. Summary of the load-bearing parts,
-because several were argued over and reversed:
+Step 3's representation work is done. What remains is the attribute layer and Step 4's marshalling.
 
-**Struct and class unions have different contracts. Do not unify them.**
+**3d — `[Union]` + `IUnion`.** The generated type already declares an interface list in some
+cases (`IResult<Unit, Unit>`), so this joins rather than replaces. Verified by compilation on
+preview 7: the `[Union]` declaration shape, constructors and `Value` compile under C# 13 *and*
+preview; the implicit conversion (`Shape s = new Shape.CircleCase(1.0)`) is **preview only**,
+failing with CS8652 "unions" on stable. Union pattern matching with no default arm is preview only
+and produces no CS8509, so exhaustiveness works.
 
-- *Struct*: `bool _hasValue` in the managed partial only, never in `Unmanaged`. `default(T)` is a
-  real value, so `Value` → null, `HasValue` → false, `IsX` → false, `AsX()`/`ToUnmanaged()` throw,
-  `Dispose()` no-op.
-- *Class*: no `_hasValue`. Add a **private parameterless constructor** so `new EnumX()` cannot
-  produce a bogus variant-zero instance; `default` is a null reference and every non-null instance
-  is valid, so `HasValue` is constant `true`. This is a breaking change for anyone calling
-  `new EnumX()`.
+**4 — empty guard on `ToUnmanaged`/`AsUnmanaged`.** No gate. Can start now.
 
-`struct_class.is_struct()` decides which.
+**4a — `ToManaged` via case constructors.** This replaces the whole method body. Note that 3c left
+a deliberate stopgap there: `_managed._hasValue = true;` immediately after the `_variant` copy.
+4a's validated switch establishes the flag implicitly, so delete the stopgap rather than keeping
+both.
 
-**`Value` materialises on access.** `_variant switch { 1 => new BCase(_B), ... }`. Do *not* add an
-eagerly-populated `_boxed` field — it allocates in `ToManaged`, i.e. on every enum crossing the
-boundary, which is the cost this whole design exists to avoid. Consequence: `x.Value != x.Value`
-by reference. That is acceptable; the spec constrains the *type* of `Value`, not its identity, and
-`TryGetValue` is the path patterns actually take.
+### What 3c actually emits, so you can read the output
 
-**`ToManaged` should construct, not mutate.** Emit a validated switch returning through the case
-constructors rather than `new E()` + field assignment. Uniform across struct and class, sets
-`_hasValue` implicitly, makes an invalid native tag unrepresentable. For struct constructors mind
-definite assignment — `this = default` first.
+For a **struct-backed** union:
 
-**Every tag consumer must respect `_hasValue`**, not just `Dispose()`: `IsX`, `AsX`, `Value`,
-`ToString`, `ExceptionForVariant`, `ToUnmanaged`, `AsUnmanaged`.
+```csharp
+public bool HasValue => _hasValue;
 
-**Interface list**: build a `Vec<String>` and join it. `body.cs` already nests conditionals for
-`IResult` and `IDisposable`; adding `IUnion` to that inline is how comma bugs happen.
+public object? Value => !_hasValue ? null : _variant switch
+{
+    0 => new ACase(),
+    1 => new BCase(_B),
+    _ => null,
+};
 
----
+public bool TryGetValue(out BCase value)
+{
+    if (_hasValue && _variant == 1) { value = new BCase(_B); return true; }
+    value = default;
+    return false;
+}
+```
+
+For a **class-backed** union, `HasValue => true`, `Value` has no `!_hasValue ? null :` prefix, and
+`TryGetValue` has no `_hasValue &&` — there is no such field, because `default(E)` is a null
+reference and every non-null instance is valid.
+
+`Value` boxes a `readonly record struct` per access, so it is **value-stable, not
+reference-stable**. That is deliberate: an eager `_boxed` field would allocate inside `ToManaged`,
+on every boundary crossing. `TryGetValue` does not allocate.
+
+### The eligibility rule, and the predicate that implements it
+
+A `DataEnum` with no payload-**capable** variant receives no union machinery — no case types, no
+`Value`/`HasValue`/`TryGetValue`, and since 3c, no `_hasValue` field either. The rule is per
+*enum*, not per variant: within a union-projected enum, **every** variant gets a case type,
+unit variants included, because an empty case type is what keeps a mixed enum exhaustive.
+
+The predicate is `v.can_carry_payload`, a field on the C# `Variant`. **It is not `v.ty.is_some()`,
+and the difference is not cosmetic** — see §8.
+
+Unit-only enums keep their struct, `Unmanaged` mirror and marshaller. Projecting them as plain C#
+`enum`s is option C in `79be256e`, still deferred: it needs an unverified blittability claim and
+closed enums, which did not ship in C# 15.
 
 ## 6. Open decisions
 
@@ -335,6 +369,51 @@ Escaped quotes inside a double-quoted string terminate it early and scatter the 
 ---
 
 
+### MCP tooling notes, 2026-08-26
+
+**FileMcp now has transactions, and they are the right tool for docs-only changes.**
+`FileMcp:begin_transaction` takes a `chatUrl`, plus `folders` and `extensions` scope — so a docs
+transaction cannot accidentally carry a code edit. Commit is async: `commit_transaction` queues,
+then poll `get_commit_status`.
+
+**The older note that `add_markdown_section` returns "No approval received" is stale.** It works.
+
+Two quirks in `replace_markdown_section`: pass the heading as a **leaf**, not a full path, and put
+the `##` heading inside `content` — the `title` parameter deletes the old heading without writing
+a new one, orphaning the section under its predecessor. Both tools take a dry run first, which
+returns the hash to pass back as `expectedTransformedHash`.
+
+**Root aliases are per server, and the Rust editor cannot reach a FileMcp worktree at all** — the
+call fails outright. `$N` in one server is not `$N` in the other. For a change mixing code and
+docs, use one Rust-editor transaction rather than two, or they race on the same repo.
+
+**Measuring C# warnings needs `-t:Rebuild`.** An incremental build recompiles nothing and emits no
+warnings, and `CSharpEditor:build_diagnostics` returns *errors* — a clean result from either proves
+nothing about warnings. The reliable form, per the `2>&1` note above:
+
+```powershell
+cmd /c "dotnet build -t:Rebuild -v:n > build.txt 2>&1"
+Select-String -Path build.txt -Pattern 'warning [A-Z]+\d+' | ForEach-Object { $_.Matches.Value } | Group-Object | Sort-Object Count -Descending
+```
+
+**Delete `build.txt` before committing** — a stray one was picked up by a commit and blocked the
+checkout with *"Untracked working tree file … would be overwritten by merge"*.
+
+**`CSharpEditor:list_git_commits` without a `project` searches CSharpMpc**, not interoptopus,
+because that server's active root is elsewhere. Pass a project path inside the repo you mean.
+
+**`search_and_replace` with a bare `file_glob` matches every file of that name.** `body_unmanaged.rs`
+and `mod.rs` each exist under both `enums/` and `composites/`; a batch aimed at one silently edited
+the other. Anchor on text unique to the intended file, and read the dry run's file list before
+applying.
+
+**`dokono test selection fallback: affected_source_identity_invalid` is benign** — see the entry
+above; it fires on essentially every change to a non-root source module and fails open.
+
+**A first run in a fresh worktree can fail the concurrency test.** `prepare_plugin`'s doc comment
+records it: *"a fresh worktree fails three of sixty-two on the first run and passes on the second."*
+Changing `Directory.Build.props` invalidates every plugin build and reproduces exactly this. Re-run
+before investigating.
 ## 8. Where I was wrong
 
 Recorded because the same traps are still live.
@@ -355,3 +434,64 @@ already emitted today, which means `Foo`/`IsFoo`, `Foo`/`AsFoo` and `Foo`/`Unman
 The step-2 inventory listed `.csproj` files and the Justfile and called that the framework retarget.
 It missed `rt/dynamic.rs`, which pins the runtime the host boots — the one that actually mattered.
 When changing a framework here, ask what pins it at *runtime*, not just at build time.
+
+### 2026-08-26 — the eligibility predicate asked the wrong question
+
+**The worst error of the session, and it shipped through 3b before anyone caught it.**
+
+I wrote the union eligibility check as `v.ty.is_some()` — *does this variant carry a payload*. The
+correct question is *can* it: whether the **declaration** has a payload slot. Those coincide
+everywhere except one shape, which is why every test passed.
+
+`fallback.rs::resolve_payload` maps a `()` payload to `None`. So `Result<(), ()>` — which declares
+`Ok(T)` and `Err(E)`, both payload-carrying positions — reads as entirely payloadless downstream and
+became indistinguishable from `Color::Red`. `ResultVoidVoid` was therefore classified unit-only and
+stripped of its union projection, while `Result<u32, Error>` kept it. **The same shape, decided by a
+type argument.**
+
+Three compounding mistakes:
+
+1. **I inferred the meaning of `ty` instead of reading what populates it.** `enum_variants.rs` does
+   not erase — a `Tuple(())` there resolves to a void `TypeId`. Only `fallback.rs` erases. I read
+   the first and assumed the second. The handoff's closing line is *read before inferring*, and
+   `8f4c1e2a` records me doing the same thing that morning with `nullable.rs`.
+2. **The plan already named the right mechanism** — "`VariantKind::Tuple` versus `Unit`, visible in
+   the inventory" — and I had quoted that line into the docs hours earlier, then implemented the
+   other thing.
+3. **When challenged I defended it badly**, invoking the consumer-layer "closed set of numeric
+   values" rule while discussing `Result`. That rule governs a *different layer*; the section is
+   titled "two rules" precisely because they are separate. I then proposed special-casing
+   `Result`/`Option`, which would have papered over the erasure and still misclassified a
+   hand-written `enum E { A(()), B }`.
+
+The fix is a model-layer field, `Variant::can_carry_payload`, set from `VariantKind::Tuple` in
+`enum_variants.rs` and from the payload-carrying position in `fallback.rs`. Five predicate sites
+read it.
+
+**If you touch eligibility, the guard test is
+`enum_union_members::eligibility_asks_can_carry_not_does_carry`.** It is the *only* fixture that
+separates the two predicates — reverting to `ty.is_some()` passes the entire rest of the suite.
+Verified by mutation: exactly one test fails.
+
+### 2026-08-26 — I filed an issue on a diagnosis I had not finished
+
+`8f4c1e2a` went in at severity high asserting that no project compiles generated C#, that
+`benches/dotnet` was committed output, and that the feedback loop was severed at both ends. All
+three were false, and I disproved them myself within the hour:
+
+- The twelve plugin fixtures compile generated C# on **every** `cargo test`. The loop is complete;
+  `build_and_stage` just checks the exit status and runs `-v q`, so warnings are discarded.
+- `benches/dotnet/Interop.cs` is gitignored and **regenerated on every run** by
+  `reference_project::interop`, which writes both it and `Bindings/`.
+- `benches/dotnet` is *drifted*, not structurally broken — `Benchmark.cs` frozen since 2026-04-14.
+
+The measurement (19 CS0169, all `_hasValue`) was sound throughout. The diagnosis around it was not.
+The issue is now corrected in place with the three errors stated explicitly rather than quietly
+edited, so the record shows what was measured versus what was inferred from it.
+
+**Two process notes from that.** I twice reported build results from an *incremental* build that
+recompiled nothing — `build_diagnostics` returns errors, not warnings, and a no-op build emits
+neither. Use `-t:Rebuild` when measuring warnings. And an unscoped `CSharpEditor:list_git_commits`
+returns **CSharpMpc** history, not interoptopus, because that server's active root is elsewhere —
+pass a `project` inside the repo you mean.
+
