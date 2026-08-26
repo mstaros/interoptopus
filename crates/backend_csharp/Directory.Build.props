@@ -14,7 +14,27 @@
 
     See docs/csharp-unions.md, Step 2.
   -->
+  <!--
+    Unused-field warnings are errors, so that a field emitted with no reads cannot land.
+
+    `_hasValue` was emitted by definition.cs and touched nowhere else, producing 19 CS0169 in
+    full-scale generated output. The plugin fixtures compile that output on every `cargo test`,
+    so the compiler was reporting the defect all along — but `build_and_stage` shells out with
+    `-v q` and checks only the exit status, and warnings do not affect exit status. The signal
+    existed and was discarded. See `Issues.md` `8f4c1e2a`.
+
+    Both codes, not one: emitted-and-never-read is CS0169, written-but-never-read is CS0414.
+    A field moves between them as it is half-wired, so gating only CS0169 would let the
+    halfway state through — which is exactly what item 3c would have produced had its writes
+    landed without its reads.
+
+    Deliberately scoped rather than `TreatWarningsAsErrors`. The measured profile (19, all
+    CS0169, nothing else) came from library-mode output; plugin-mode has never been measured,
+    and a blanket setting could fail the twelve fixtures on something unrelated and unseen.
+    Widen this once plugin-mode's profile is known.
+  -->
   <PropertyGroup>
     <LangVersion>preview</LangVersion>
+    <WarningsAsErrors>$(WarningsAsErrors);CS0169;CS0414</WarningsAsErrors>
   </PropertyGroup>
 </Project>
