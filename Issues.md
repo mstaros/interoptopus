@@ -1275,3 +1275,94 @@ Still not confirmed by running the generator: that the three template guards are
 consumers of the flag in the rendered output, and what the sub-passes cost when their fragments
 are rendered and discarded.
 
+## No project compiles generated C# any more, so 19 CS0169 went unseen
+
+```issue
+id: 8f4c1e2a
+kind: bug
+severity: high
+status: open
+```
+
+### Measured
+
+A forced rebuild of `crates/backend_csharp/benches/dotnet` — committed, full-scale generated
+output — on 2026-08-26:
+
+```
+dotnet build -t:Rebuild -v:n
+    19 Warning(s)
+    1 Error(s)
+```
+
+**Every one of the 19 is CS0169, and every one is `_hasValue`.** Grouping the raw matches gives
+`38 warning CS0169` and nothing else — 38 because each is reported once per target-framework pass.
+There is no other warning of any kind in the entire generated surface.
+
+```
+Interop.cs(8877,10): warning CS0169: The field 'EnumPayload._hasValue' is never used
+Interop.cs(3105,10): warning CS0169: The field 'EnumExplicitThenImplicit._hasValue' is never used
+Interop.cs(8603,10): warning CS0169: The field 'EnumNegative._hasValue' is never used
+Interop.cs(8440,10): warning CS0169: The field 'ResultVoidError._hasValue' is never used
+```
+
+### The defect the compiler is naming
+
+`_hasValue` is emitted by `templates/common/types/enums/definition.cs` and **that is its only
+occurrence in the generator**. Nothing writes it and nothing reads it. `docs/csharp-unions.md`
+describes item 3c as consuming it and says *"the storage exists; what is missing is the reads"* —
+the writes are missing too, so a `Value` that consulted the flag would return `null` for every
+struct-backed union, including well-formed ones.
+
+Item 4c makes the flag a soundness obligation rather than a convenience: the compiler assumes
+*"for struct unions, `default` produces a `Value` of null"* and reasons about exhaustiveness on it.
+So the field stays and the writes must exist.
+
+### Why nobody saw it
+
+Two projects exist to compile generated output. **Neither currently does.**
+
+- `benches/dotnet/dotnet_benchmarks.csproj` fails to compile:
+  `Benchmark.cs(27,46): error CS0117: 'ServiceAsyncBasic' does not contain a definition for
+  'Create'`. Committed generated output and a committed consumer that no longer agree. Nothing in
+  CI or the test suite builds it, so the drift went unnoticed and so did the warnings underneath.
+- `tests/reference_project/Bindings/Bindings.csproj` fails at **restore**, before compiling a
+  line: `NU1100: Unable to resolve 'Microsoft.NET.ILLink.Tasks (>= 11.0.0-preview.7.26381.103)'`.
+  `IsAotCompatible` pulls ILLink and PackageSourceMapping excludes both configured sources. A
+  build here reports `0 Warning(s)` — meaningless, since nothing compiled.
+
+The plugin fixtures *do* compile generated C# through `define_plugin!`, and they pass — but they
+build narrow per-plugin inventories, and warnings are not errors, so nothing fails.
+
+**This is the root cause of a defect class, not one field.** The same shape has now been recorded
+five times: `b4e07f12` (`nullable.rs` re-deriving reference-ness), `5d1ae4c7` (the processing gate
+re-implemented at ten sites), `31248473` (`is_cs_value_type` re-deriving struct-vs-class),
+`c33b9cf5` and `4e9a17c3` (wire re-deriving names). Each is an invariant spanning passes with no
+single owner. The compiler catches a useful subset of exactly that — and the feedback loop is
+severed at both ends.
+
+### Fix, and why it is cheap
+
+The warning surface is **one defect, not a long tail**, so no cleanup project blocks this:
+
+1. Fix the CS0117 in `Benchmark.cs` so something compiles generated output again.
+2. Enable `TreatWarningsAsErrors` on the projects that compile generated output.
+3. The 19 CS0169 become build failures.
+4. Item 3c's `_hasValue` writes clear them.
+
+After that, emitting a field without its writes is unlandable rather than discovered five items
+later.
+
+### Relation to item 5
+
+`docs/csharp-unions.md` item 5 is *"Snapshots move once; consumer projects compile the output"*,
+gated on 3d and 4b. That item is larger than it reads: **the consumer projects do not compile the
+output today**, for two unrelated reasons, and one of them is an environment and package-source
+problem rather than a code problem.
+
+### Not measured
+
+Whether `Bindings.csproj` produces additional warnings once it restores — it has never compiled
+here, so its warning profile is unknown and may differ from `benches/dotnet`. Whether the
+`ServiceAsyncBasic.Create` drift is a generator regression or a stale committed consumer was not
+investigated.
