@@ -77,6 +77,10 @@ public partial class OptionUtf8String
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class OptionUtf8String : IDisposable
 {
+    public readonly record struct SomeCase(Utf8String Value);
+
+    public readonly record struct NoneCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedSome
     {
@@ -215,6 +219,10 @@ public partial struct OptionUint
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial struct OptionUint
 {
+    public readonly record struct SomeCase(uint Value);
+
+    public readonly record struct NoneCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedSome
     {
@@ -348,6 +356,10 @@ public partial struct OptionVec
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial struct OptionVec
 {
+    public readonly record struct SomeCase(Vec Value);
+
+    public readonly record struct NoneCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedSome
     {
@@ -9055,6 +9067,12 @@ public partial class DataEnum
 
 public partial class DataEnum
 {
+    public readonly record struct SCase(string Value);
+
+    public readonly record struct VCase(List<byte> Value);
+
+    public readonly record struct HCase(Dictionary<string, MyEnum> Value);
+
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public Exception ExceptionForVariant()
     {
@@ -9111,6 +9129,10 @@ public partial class Layer3String
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class Layer3String : IDisposable
 {
+    public readonly record struct ACase(Layer1String Value);
+
+    public readonly record struct BCase(Layer2String Value);
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedA
     {
@@ -9523,6 +9545,14 @@ public partial struct EnumExplicitPayload
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial struct EnumExplicitPayload
 {
+    public readonly record struct ACase();
+
+    public readonly record struct BCase(uint Value);
+
+    public readonly record struct CCase(Vec3f32 Value);
+
+    public readonly record struct DCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedB
     {
@@ -9684,6 +9714,10 @@ public partial class OptionOptionResultOptionUtf8StringError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class OptionOptionResultOptionUtf8StringError : IDisposable
 {
+    public readonly record struct SomeCase(OptionResultOptionUtf8StringError Value);
+
+    public readonly record struct NoneCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedSome
     {
@@ -9826,6 +9860,10 @@ public partial class OptionResultOptionUtf8StringError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class OptionResultOptionUtf8StringError : IDisposable
 {
+    public readonly record struct SomeCase(ResultOptionUtf8StringError Value);
+
+    public readonly record struct NoneCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedSome
     {
@@ -9964,6 +10002,10 @@ public partial struct OptionEnumPayload
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial struct OptionEnumPayload
 {
+    public readonly record struct SomeCase(EnumPayload Value);
+
+    public readonly record struct NoneCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedSome
     {
@@ -10097,6 +10139,10 @@ public partial struct OptionInner
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial struct OptionInner
 {
+    public readonly record struct SomeCase(Inner Value);
+
+    public readonly record struct NoneCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedSome
     {
@@ -10235,6 +10281,14 @@ public partial class ResultOptionUtf8StringError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class ResultOptionUtf8StringError : IResult<OptionUtf8String, Error>, IDisposable
 {
+    public readonly record struct OkCase(OptionUtf8String Value);
+
+    public readonly record struct ErrCase(Error Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {
@@ -10417,6 +10471,14 @@ public partial class ResultServiceAsyncCancelError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class ResultServiceAsyncCancelError : IResult<IntPtr, Error>, IDisposable
 {
+    public readonly record struct OkCase(IntPtr Value);
+
+    public readonly record struct ErrCase(Error Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {
@@ -10598,6 +10660,14 @@ public partial class ResultServiceAsyncCtorError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class ResultServiceAsyncCtorError : IResult<IntPtr, Error>, IDisposable
 {
+    public readonly record struct OkCase(IntPtr Value);
+
+    public readonly record struct ErrCase(Error Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {
@@ -10779,6 +10849,14 @@ public partial class ResultServiceAsyncPanicError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class ResultServiceAsyncPanicError : IResult<IntPtr, Error>, IDisposable
 {
+    public readonly record struct OkCase(IntPtr Value);
+
+    public readonly record struct ErrCase(Error Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {
@@ -10960,6 +11038,14 @@ public partial class ResultServiceAsyncResultError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class ResultServiceAsyncResultError : IResult<IntPtr, Error>, IDisposable
 {
+    public readonly record struct OkCase(IntPtr Value);
+
+    public readonly record struct ErrCase(Error Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {
@@ -11141,6 +11227,14 @@ public partial class ResultServiceAsyncSleepError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class ResultServiceAsyncSleepError : IResult<IntPtr, Error>, IDisposable
 {
+    public readonly record struct OkCase(IntPtr Value);
+
+    public readonly record struct ErrCase(Error Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {
@@ -11322,6 +11416,14 @@ public partial class ResultServiceAsyncStructsError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class ResultServiceAsyncStructsError : IResult<IntPtr, Error>, IDisposable
 {
+    public readonly record struct OkCase(IntPtr Value);
+
+    public readonly record struct ErrCase(Error Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {
@@ -11503,6 +11605,14 @@ public partial class ResultServiceAsyncVecStringError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class ResultServiceAsyncVecStringError : IResult<IntPtr, Error>, IDisposable
 {
+    public readonly record struct OkCase(IntPtr Value);
+
+    public readonly record struct ErrCase(Error Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {
@@ -11684,6 +11794,14 @@ public partial class ResultServiceAsyncWireError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class ResultServiceAsyncWireError : IResult<IntPtr, Error>, IDisposable
 {
+    public readonly record struct OkCase(IntPtr Value);
+
+    public readonly record struct ErrCase(Error Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {
@@ -11865,6 +11983,14 @@ public partial class ResultServiceCallbacksError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class ResultServiceCallbacksError : IResult<IntPtr, Error>, IDisposable
 {
+    public readonly record struct OkCase(IntPtr Value);
+
+    public readonly record struct ErrCase(Error Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {
@@ -12046,6 +12172,14 @@ public partial class ResultServiceDependentError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class ResultServiceDependentError : IResult<IntPtr, Error>, IDisposable
 {
+    public readonly record struct OkCase(IntPtr Value);
+
+    public readonly record struct ErrCase(Error Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {
@@ -12227,6 +12361,14 @@ public partial class ResultServiceIgnoringMethodsError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class ResultServiceIgnoringMethodsError : IResult<IntPtr, Error>, IDisposable
 {
+    public readonly record struct OkCase(IntPtr Value);
+
+    public readonly record struct ErrCase(Error Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {
@@ -12408,6 +12550,14 @@ public partial class ResultServiceMainError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class ResultServiceMainError : IResult<IntPtr, Error>, IDisposable
 {
+    public readonly record struct OkCase(IntPtr Value);
+
+    public readonly record struct ErrCase(Error Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {
@@ -12589,6 +12739,14 @@ public partial class ResultServiceMultipleCtorsError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class ResultServiceMultipleCtorsError : IResult<IntPtr, Error>, IDisposable
 {
+    public readonly record struct OkCase(IntPtr Value);
+
+    public readonly record struct ErrCase(Error Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {
@@ -12770,6 +12928,14 @@ public partial class ResultServiceResultError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class ResultServiceResultError : IResult<IntPtr, Error>, IDisposable
 {
+    public readonly record struct OkCase(IntPtr Value);
+
+    public readonly record struct ErrCase(Error Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {
@@ -12951,6 +13117,14 @@ public partial class ResultServiceStringsError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class ResultServiceStringsError : IResult<IntPtr, Error>, IDisposable
 {
+    public readonly record struct OkCase(IntPtr Value);
+
+    public readonly record struct ErrCase(Error Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {
@@ -13132,6 +13306,14 @@ public partial class ResultServiceVariousSlicesError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class ResultServiceVariousSlicesError : IResult<IntPtr, Error>, IDisposable
 {
+    public readonly record struct OkCase(IntPtr Value);
+
+    public readonly record struct ErrCase(Error Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {
@@ -13313,6 +13495,14 @@ public partial class ResultUseStringError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class ResultUseStringError : IResult<UseString, Error>, IDisposable
 {
+    public readonly record struct OkCase(UseString Value);
+
+    public readonly record struct ErrCase(Error Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {
@@ -13495,6 +13685,14 @@ public partial class ResultUtf8StringError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class ResultUtf8StringError : IResult<Utf8String, Error>, IDisposable
 {
+    public readonly record struct OkCase(Utf8String Value);
+
+    public readonly record struct ErrCase(Error Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {
@@ -13677,6 +13875,14 @@ public partial class ResultVecUtf8StringError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class ResultVecUtf8StringError : IResult<VecUtf8String, Error>, IDisposable
 {
+    public readonly record struct OkCase(VecUtf8String Value);
+
+    public readonly record struct ErrCase(Error Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {
@@ -13859,6 +14065,14 @@ public partial class ResultWireOfHashMapStringStringError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class ResultWireOfHashMapStringStringError : IResult<WireOfHashMapStringString, Error>, IDisposable
 {
+    public readonly record struct OkCase(WireOfHashMapStringString Value);
+
+    public readonly record struct ErrCase(Error Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {
@@ -14037,6 +14251,14 @@ public partial struct ResultNestedArrayError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial struct ResultNestedArrayError : IResult<NestedArray, Error>
 {
+    public readonly record struct OkCase(NestedArray Value);
+
+    public readonly record struct ErrCase(Error Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {
@@ -14210,6 +14432,14 @@ public partial struct ResultOptionEnumPayloadError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial struct ResultOptionEnumPayloadError : IResult<OptionEnumPayload, Error>
 {
+    public readonly record struct OkCase(OptionEnumPayload Value);
+
+    public readonly record struct ErrCase(Error Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {
@@ -14383,6 +14613,14 @@ public partial struct ResultUintError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial struct ResultUintError : IResult<uint, Error>
 {
+    public readonly record struct OkCase(uint Value);
+
+    public readonly record struct ErrCase(Error Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {
@@ -14556,6 +14794,14 @@ public partial struct ResultUlongError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial struct ResultUlongError : IResult<ulong, Error>
 {
+    public readonly record struct OkCase(ulong Value);
+
+    public readonly record struct ErrCase(Error Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {
@@ -14728,6 +14974,14 @@ public partial struct ResultVoidError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial struct ResultVoidError : IResult<Unit, Error>
 {
+    public readonly record struct OkCase();
+
+    public readonly record struct ErrCase(Error Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedErr
     {
@@ -15014,6 +15268,12 @@ public partial struct EnumNum
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial struct EnumNum
 {
+    public readonly record struct ACase(nuint Value);
+
+    public readonly record struct BCase();
+
+    public readonly record struct CCase(nint Value);
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedA
     {
@@ -15166,6 +15426,12 @@ public partial struct EnumPayload
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial struct EnumPayload
 {
+    public readonly record struct ACase();
+
+    public readonly record struct BCase(Vec3f32 Value);
+
+    public readonly record struct CCase(uint Value);
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedB
     {

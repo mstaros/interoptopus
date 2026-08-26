@@ -161,6 +161,14 @@ public partial class ResultNestedADotnetException
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class ResultNestedADotnetException : IResult<NestedA, DotnetException>, IDisposable
 {
+    public readonly record struct OkCase(NestedA Value);
+
+    public readonly record struct ErrCase(DotnetException Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {
@@ -357,6 +365,14 @@ public partial struct ResultUintDotnetException
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial struct ResultUintDotnetException : IResult<uint, DotnetException>
 {
+    public readonly record struct OkCase(uint Value);
+
+    public readonly record struct ErrCase(DotnetException Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {

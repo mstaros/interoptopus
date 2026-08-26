@@ -724,6 +724,14 @@ public partial class ResultNestedAError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class ResultNestedAError : IResult<NestedA, Error>, IDisposable
 {
+    public readonly record struct OkCase(NestedA Value);
+
+    public readonly record struct ErrCase(Error Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {

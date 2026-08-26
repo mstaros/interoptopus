@@ -500,6 +500,14 @@ public partial struct ResultVoidError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial struct ResultVoidError : IResult<Unit, Error>
 {
+    public readonly record struct OkCase();
+
+    public readonly record struct ErrCase(Error Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedErr
     {

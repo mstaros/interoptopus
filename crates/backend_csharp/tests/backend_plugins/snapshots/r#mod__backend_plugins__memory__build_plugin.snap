@@ -161,6 +161,14 @@ public partial class ResultFliparooDotnetException
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class ResultFliparooDotnetException : IResult<Fliparoo, DotnetException>, IDisposable
 {
+    public readonly record struct OkCase(Fliparoo Value);
+
+    public readonly record struct ErrCase(DotnetException Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {
@@ -361,6 +369,14 @@ public partial class ResultHeavyDotnetException
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class ResultHeavyDotnetException : IResult<Heavy, DotnetException>, IDisposable
 {
+    public readonly record struct OkCase(Heavy Value);
+
+    public readonly record struct ErrCase(DotnetException Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {

@@ -937,6 +937,14 @@ public partial class ResultWireOfHashMapStringStringError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class ResultWireOfHashMapStringStringError : IResult<WireOfHashMapStringString, Error>, IDisposable
 {
+    public readonly record struct OkCase(WireOfHashMapStringString Value);
+
+    public readonly record struct ErrCase(Error Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {

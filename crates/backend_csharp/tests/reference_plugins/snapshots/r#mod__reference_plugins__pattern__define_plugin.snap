@@ -933,6 +933,14 @@ public partial struct ResultVec3f32Error
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial struct ResultVec3f32Error : IResult<Vec3f32, Error>
 {
+    public readonly record struct OkCase(Vec3f32 Value);
+
+    public readonly record struct ErrCase(Error Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {

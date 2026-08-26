@@ -66,6 +66,14 @@ public partial struct ResultUintVoid
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial struct ResultUintVoid : IResult<uint, Unit>
 {
+    public readonly record struct OkCase(uint Value);
+
+    public readonly record struct ErrCase();
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {

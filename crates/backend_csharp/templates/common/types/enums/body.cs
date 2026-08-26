@@ -3,6 +3,9 @@
 {% endif -%}
 {{ visibility }} partial {{ struct_or_class }} {{ name }}{% if is_result or is_disposable %} : {% if is_result %}IResult<{{ result_ok_name }}, {{ result_err_name }}>{% if is_disposable %}, {% endif %}{% endif %}{% if is_disposable %}IDisposable{% endif %}{% endif %}
 {
+{%- for item in case_types %}
+    {{ item | indent }}
+{% endfor -%}
 {%- if not is_managed_only %}
     {%- for item in unmanaged_variants %}
     {{ item | indent }}

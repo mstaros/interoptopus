@@ -817,6 +817,12 @@ public partial struct EnumPayload
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial struct EnumPayload
 {
+    public readonly record struct ACase();
+
+    public readonly record struct BCase(Vec3f32 Value);
+
+    public readonly record struct CCase(uint Value);
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedB
     {

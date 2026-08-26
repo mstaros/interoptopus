@@ -103,6 +103,14 @@ public partial class ResultCounterError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class ResultCounterError : IResult<IntPtr, Error>, IDisposable
 {
+    public readonly record struct OkCase(IntPtr Value);
+
+    public readonly record struct ErrCase(Error Value);
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
     {
