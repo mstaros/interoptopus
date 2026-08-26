@@ -1167,8 +1167,10 @@ Ten sites, in two forms. Eight bind the payload: `definition.rs`, `body_unmanage
 `body_exception_for_variant.rs`, `body_tostring.rs`. Two match for effect only and discard it:
 `all.rs` and `body.rs`. `all.rs`'s form binds `e` in two arms without using it.
 
-`body_from_call.rs` contains no `DataEnum` reference at all and reaches its data by another
-route. **Not traced.**
+`body_from_call.rs` is **not** an eleventh copy — traced. It gates on
+`TypeKind::TypePattern(TypePattern::Result(ok, err, _))` with `_ => continue`: no `DataEnum` arm,
+no `Option` arm, and it discards the `DataEnum` in the arm it does match. `FromCall` is a `Result`
+factory, so the narrower predicate is correct there. **Exclude it from any consolidation.**
 
 ### A helper already exists, one layer up
 
@@ -1194,10 +1196,31 @@ with the comment that a `DataEnum` carrying a `WireOnly` payload *"has no FFI-sa
 — it only flows through `Wire<T>`"*.
 
 So a per-enum **"this enum has no `Unmanaged` representation"** concept already exists, at one
-site, and is not `managed_conversion`. The architecture is: sub-passes compute their fragments
-unconditionally; `body.rs` assembles and decides what to include. That is why unit-only enums are
-already `AsIs`-or-`To` yet still receive the full machinery — the classification was never
-load-bearing for emission.
+site, and is not `managed_conversion`. That is why unit-only enums are already `AsIs`-or-`To` yet
+still receive the full machinery — the classification was never load-bearing for emission.
+
+**Where the suppression actually happens — traced.** `is_managed_only` never reaches the
+sub-passes, and `body.rs` does not filter on it either. It is inserted once into the template
+context and consumed only by three guards in `templates/common/types/enums/body.cs`:
+
+- `{%- if not is_managed_only -%}` around the `[NativeMarshalling(typeof(MarshallerMeta))]`
+  attribute;
+- `{%- if not is_managed_only %}` around the unmanaged-variants loop and the `Unmanaged` mirror;
+- `{%- if not is_managed_only %}` around `[CustomMarshaller]`, `MarshallerMeta` and the
+  `Marshaller` ref struct.
+
+So the architecture is: the sub-passes run unconditionally and render their fragments, `body.rs`
+pulls them with `.get(type_id).map_or("", ...)` and passes them all into the context, and **the
+template declines to interpolate them.** Suppression is a template conditional, one layer further
+out than "the assembling pass decides".
+
+Two consequences. A third category could be added as another flag in the same context, guarding
+the same three regions, **without touching the ten gate sites at all** — materially cheaper than a
+model-pass route. And note that the flag already covers `[NativeMarshalling]`, not just the body,
+which is relevant to a plain-enum projection that needs no attribute either. Against that:
+suppression at template level means the fragments are still rendered and discarded, which is
+harmless for today's managed-only set and worth re-checking before extending the pattern to every
+unit-only enum.
 
 ### Consequence for 79be256e
 
@@ -1219,8 +1242,16 @@ issue's call and is deliberately not proposed here.
 
 ### Measured, and not measured
 
-Static read of the pass sources. **No build, no generation, no snapshot.** `body_from_call.rs`'s
-gating is unchecked, and whether `is_managed_only` reaches the sub-passes or only suppresses
-inclusion at assembly time was inferred from the `.get(type_id).map_or("", ...)` pulls in
-`body.rs`, not confirmed by running the generator.
+Static read of the pass sources and the `body.cs` template. **No build, no generation, no
+snapshot.**
+
+Both items this issue originally left open have since been traced and are recorded above:
+`body_from_call.rs` is `Result`-only, and `is_managed_only` suppresses in the template rather than
+in `body.rs` or the sub-passes. An earlier revision of this issue inferred the latter from the
+`.get(type_id).map_or("", ...)` pulls and placed it one layer too far in; the template guards are
+the actual mechanism.
+
+Still not confirmed by running the generator: that the three template guards are the *only*
+consumers of the flag in the rendered output, and what the sub-passes cost when their fragments
+are rendered and discarded.
 
