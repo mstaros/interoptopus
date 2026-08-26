@@ -1041,7 +1041,7 @@ is self-justifying and needs nothing measured.
 It does **not** reach C. The struct's `Unmanaged` mirror and marshaller are not bloat in the same
 sense — they exist so the value can cross FFI. Removing them requires a separate claim: that a
 plain C# `enum` is blittable and crosses without translation, needing no mirror *because* it is
-blittable. That claim is probably true and is **not verified**. Three things are open:
+blittable. That claim is probably true and is **not verified**. Two things are open:
 
 - What `Unmanaged` actually contains for a unit-only enum. If it is only the discriminant field,
   the claim holds trivially. Not read.
@@ -1049,15 +1049,6 @@ blittable. That claim is probably true and is **not verified**. Three things are
   `#[repr(u8)]` enum must be emitted as `: byte` or the widths disagree. `definition.rs` already
   passes `discriminant_type.cs_name()`, so the information exists, but the mapping is unchecked.
   `EnumNegative` additionally requires a signed underlying type.
-- **Which marshalling mode the generated bindings run under.** A C# enum is layout-compatible
-  with its backing integer, but the classic marshaller does not universally classify enums as
-  blittable — enum arrays and pinning are the cases that fail (`dotnet/runtime#48907`). With
-  runtime marshalling disabled, every C# unmanaged type including enums is blittable and the
-  caveat is moot. **`DisableRuntimeMarshalling` is not emitted:** `templates/rust/header.cs` is a
-  ten-line comment banner carrying library, hash, namespace and builder, and no assembly
-  attributes. So the deciding question is whether a unit-only enum can reach a slice element or
-  a pinned array — inside a sequential or explicit struct passed by value it is unaffected
-  either way. Not checked.
 
 So B is safe on the rule alone. C depends on the above, and separately on closed enums, which
 **did not ship in C# 15** — see the trigger section below.
