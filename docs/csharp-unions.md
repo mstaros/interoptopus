@@ -647,9 +647,10 @@ the pass is `union_names`, it owns naming only, and there is no gate — see Dec
 
 ### Remaining
 
-Items 0–1c, R, 1d, **3a, 3b and 3f** are done. **3c is the next open item** and both its gates are
-now satisfied: it consumes the `_hasValue` that 3a leaves in place on struct-backed enums, and the
-case types that 3b emits.
+Items 0–1c, R (the .NET 11 retarget — `LangVersion=preview`, `rt/dynamic.rs`, plugin DLLs;
+`9d664613`, in the Done table above), 1d, **3a, 3b, 3c and 3f** are done. **3d and 3e are the open
+front**: 3d's gate (3c) and 3e's gate (3b) are both satisfied. **4** has no gate and can run in
+parallel.
 
 3a and 3b were independent and landed separately — 3a is representation (a private parameterless
 constructor on class-backed enums), 3b is emission (nested case types). Both are mutation-proven:
@@ -667,25 +668,30 @@ not determinable from this document and has not been guessed at.
 |---|---|---|---|
 | 1d | **done** `f5057d4b` | ~~**`wire/mod.rs` bypasses the C# model.**~~ Six sites emit `v.name`; `cs_type_name` skips `sanitize_rust_name`. `Issues.md` `4e9a17c3` | — |
 | 3a | **done** `f630e225` | ~~Class: private parameterless ctor, no `_hasValue`~~ Declaring any constructor removes the implicit public one, so a single `private E() { }` is the whole change; nested types may still reach it, so factories and `Unmanaged.ToManaged()` are unaffected. The `_hasValue` half was already correct — `8c70868d` added that field to struct-backed enums only. Breaking change, changelog entry added | — |
-| 3b | **done** `4a19b0e3`, tests `9d6905bd` | ~~Nested `{case_type}` case types~~ New pass `body_case_types.rs`, scoped per enum by `variants.iter().any(\|v\| v.ty.is_some())` — a `DataEnum` with no payload-carrying variant is skipped entirely, while a union-projected enum gets a case type for **every** variant, unit ones included. Names came from `Variant::case_type`, already allocated and collision-resolved by `union_names`. Remains the precondition for 3e; see Open items #2 | 1d ✔ |
-| 3c | open | `Value` / `HasValue` / `TryGetValue` — consumes `_hasValue`, clears CS0169. **Same scope as 3b**: skip any `DataEnum` with no payload-carrying variant, or it gets these members with no cases behind them | 3a, 3b |
-| 3d | open | `[Union]` + `IUnion` via joined interface list | 3c |
-| 3e | open, **shrunk** | ~~decide whether the compiler synthesises it~~ — settled: it does, via the generated constructor. Reduces to "constructors are public and single-parameter"; nothing emitted for the conversion | 3b |
+| 3b | **done** `4a19b0e3`, tests `9d6905bd` | ~~Nested `{case_type}` case types~~ New pass `body_case_types.rs`, scoped per enum by `variants.iter().any(\|v\| v.can_carry_payload)`. **Corrected after this row was first written:** it read `v.ty.is_some()`, which asks whether a variant *does* carry a payload rather than whether it *can*. `fallback.rs::resolve_payload` erases a `()` payload to `None`, so `Result<(), ()>` read as entirely payloadless and lost its projection while `Result<u32, Error>` kept it — the same shape decided by a type argument. The predicate is now the model-layer field `Variant::can_carry_payload`, set from `VariantKind::Tuple` in `enum_variants.rs` and from the payload-carrying position in `fallback.rs`; five sites read it. A `DataEnum` with no payload-**capable** variant is skipped entirely, while a union-projected enum gets a case type for **every** variant, unit ones included. Guard test `enum_union_members::eligibility_asks_can_carry_not_does_carry` is the only fixture separating the two predicates — reverting passes the whole rest of the suite. Names came from `Variant::case_type`, already allocated and collision-resolved by `union_names`. Remains the precondition for 3e; see Open items #2 | 1d ✔ |
+| 3c | **done** `bdd13b53` | ~~`Value` / `HasValue` / `TryGetValue` — consumes `_hasValue`, clears CS0169~~ Same scope as 3b, through `can_carry_payload`. Struct-backed: `HasValue => _hasValue`, `Value` returns null when it is false. Class-backed: `HasValue => true`, no `_hasValue` field, no `_hasValue &&` in `TryGetValue`. `Value` boxes a `readonly record struct` per access — value-stable, not reference-stable. Leaves a deliberate stopgap `_managed._hasValue = true;` in `ToManaged` for 4a to delete | 3a ✔, 3b ✔ |
+| 3d | open | `[Union]` + `IUnion` via joined interface list | 3c ✔ |
+| 3e | open, **shrunk** | ~~decide whether the compiler synthesises it~~ — settled: it does, via the generated constructor. Reduces to "constructors are public and single-parameter"; nothing emitted for the conversion | 3b ✔ |
 | 3f | **done** `4a19b0e3` | ~~**Case-type accessibility — `public`**~~ Emitted `public` at the site rather than inherited, since a nested type defaults to `private` — unusable, because the case type could not then be named outside the union — and `internal` fails the same way across an assembly boundary. Landed with 3b as planned; asserted by `enum_case_types::case_types_are_public` | 3b ✔ |
 | 4 | open | `ToUnmanaged` / `AsUnmanaged` empty guard | — |
-| 4a | open | `ToManaged` constructs via case ctors + validates tag | 3c |
-| 4b | open | Exception split (decided in Step 4; implementation only) | 4, 4a, 1 |
-| 4c | open | `default(ResultX)` empty not `Ok`; `default(OptionX)` ≠ `NoneCase`. **A soundness obligation, not a preference** — the compiler assumes *"for struct unions, `default` produces a `Value` of null"* and reasons about exhaustiveness on it. `Value` must consult `_hasValue` before materialising a case | 3c, 4a |
-| 4d | partial | Wire has **two** throw sites, not one. Deserializer's unknown native tag → `InteropException`: **done**. Serializer's empty-state `else` should call `ExceptionForVariant()` instead of its own "Unknown variant": **open**, needs 4b's helper | 1d, 4b |
+| 4a | open | `ToManaged` constructs via case ctors + validates tag | 3c ✔ |
+| 4b | open | Exception split (decided in Step 4; implementation only) | 4, 4a, **Open items #1** |
+| 4c | open | `default(ResultX)` empty not `Ok`; `default(OptionX)` ≠ `NoneCase`. **A soundness obligation, not a preference** — the compiler assumes *"for struct unions, `default` produces a `Value` of null"* and reasons about exhaustiveness on it. `Value` must consult `_hasValue` before materialising a case | 3c ✔, 4a |
+| 4d | partial | Wire has **two** throw sites, not one. Deserializer's unknown native tag → `InteropException`: **done**. Serializer's empty-state `else` should call `ExceptionForVariant()` instead of its own "Unknown variant": **open**, needs 4b's helper | 1d ✔, 4b |
 | 5 | open | Snapshots move once; consumer projects compile the output | 3d, 4b |
 | 5c | partial | Collision cases: `Value`, `B`/`IsB`. ~~casing-fold~~ — no such class, `union_names` allocates case-sensitively. A Wire-reachable stem-moving collision is covered by `tests/output/wire/collision.rs`; the managed-side cases remain | 1d ✔ |
 | 5d | open | `default(struct).ToUnmanaged()` throws | 4 |
-| 5e | open | Class union cannot produce non-null empty | 3a |
+| 5e | open | Class union cannot produce non-null empty | 3a ✔ |
 | 5f | open | Invalid native tag throws | 4a |
 | 5g | open | Default disposable `Dispose()` no-op | — |
-| 5h | open | Managed-only `DataEnum` case | 3c |
+| 5h | open | Managed-only `DataEnum` case | 3c ✔ |
 | 5i | open | `default(ResultX)`/`default(OptionX)` tests; `AsOk()` on default | 4c |
 | 6 | open | `Result` leftovers: `IResult<T,E>` coexistence, `body_from_call` factory names | 5 green |
+
+**Two lists number separately, and the gate column names which.** `1` in the Done table above is
+the `union_names` model pass, and it is done. `Open items #1` is the class-union null-at-marshal-out
+question, whose three positions (a)/(b)/(c) are unmeasured in two of three — that is what gates 4b,
+not the Done-table item.
 
 Item 1d gates 3b because 3b introduces `{case_type}`, a new collision class — every collision it
 resolves moves a stem, and every moved stem is a place `wire` and `body.cs` disagree. 5c is gated
@@ -695,7 +701,6 @@ Item 6 is **not** an exclusion — `Option` and `Result` are projected in this p
 already emits `_hasValue` on `Result` carriers (`ResultVoidError`, `ResultVec3f32Error`,
 `ResultUintDotnetException`) alongside plain enums. Only the `Result`-specific tidying is
 deferred; see Step 6. `body_from_call` is a naming consumer and moves here from the Closed list.
-
 
 ### Decided
 

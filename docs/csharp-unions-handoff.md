@@ -9,32 +9,44 @@ done, what is next, and the things that cost time to discover.
 
 ## 1. State
 
-**`master` is `d477f843`.** Baseline, measured 2026-08-26 in the transaction worktree:
-`cargo nextest run -p interoptopus_csharp` — **77 passed, 2 skipped, 0 failed**, across 5 binaries.
-Whole workspace was **174 passed, 3 skipped** at `318256c7`; that figure has not been re-measured
-since, and it will now be higher by the 14 tests added this session.
+**Baseline.** `cargo nextest run -p interoptopus_csharp` — **77 passed, 2 skipped, 0 failed**,
+5 binaries, measured 2026-08-26 **in a transaction worktree, not on `master`** — re-measure before
+treating it as master's number. `master` was `d477f843` when this was written and has since moved.
+Whole workspace was **174 passed, 3 skipped** at `318256c7`, not re-measured since; it is now
+higher by the 13 tests this session added to `interoptopus_csharp`.
 
-**Record the scope with the number.** Four counts exist in this repo's history and none of the
-earlier three said what it covered. **Resolved 2026-08-26:**
+**Record the command, the scope and the commit with the number.** Six counts exist in this repo's
+history and most of them said none of the three. **Resolved 2026-08-26:**
 
-| Count | Scope |
+| Count | Command, scope, commit |
 |---|---|
-| 174 passed, 3 skipped, 38 binaries | whole workspace, `cargo nextest run`, at `318256c7` |
-| 64 → 77 passed, 2 skipped, 5 binaries | `-p interoptopus_csharp` under nextest |
+| 174 passed, 3 skipped, 38 binaries | `cargo nextest run`, whole workspace, at `318256c7` |
+| 64 passed, 2 skipped, 5 binaries | `cargo nextest run -p interoptopus_csharp`, at `50e0788e` |
+| 77 passed, 2 skipped, 5 binaries | same command and scope, in a transaction worktree 2026-08-26; base commit not recorded |
 | 33 (30 passed, 1 failed, 2 ignored) | `cargo test -p interoptopus_csharp`, per `ccb105a2` |
-| 12 unit + 31 integration + doctests | an earlier figure here, scope unrecorded |
+| 12 unit + 31 integration + doctests | an earlier figure here; command, scope and commit all unrecorded |
+| 3 of **62** failed, fresh worktree | `prepare_plugin`'s doc comment, `tests/mod.rs:108`; command unrecorded, and 62 matches no other count here |
 
-The 2026-08-25 handoff's **64 was a package-scoped nextest run**, not a workspace one — measured
-directly, where nextest anchored on `interoptopus_csharp` and reported exactly 64 across 5
-binaries. The counts were never in conflict; they answered different questions. `cargo test` also
-counts nine doctests nextest does not run. **A bare pass count is not a baseline** — the command
-and the scope are what make it one.
+64 → 77 is **13**: 4 case-type tests, 3 constructor tests, 6 union-member tests. `50e0788e` is
+docs-only after `318256c7`, so the 64 is also `318256c7`'s package count — the package and
+workspace figures were never in conflict, they answered different questions. `cargo test` also
+counts nine doctests nextest does not run. **A bare pass count is not a baseline** — the command,
+the scope and the commit are what make it one. The 62 is still unscoped; fixing it means editing
+`tests/mod.rs`, which a docs change cannot reach.
 
 ### Plan state
 
-Done: **0–1c, R, 1d, 3a, 3b, 3c, 3f.** Open front is **3d** (`[Union]` + `IUnion`), gated on 3c
-which is now satisfied. Item 4 (`ToUnmanaged`/`AsUnmanaged` empty guard) has no gate and can go in
-parallel.
+**Status lives in `docs/csharp-unions.md` § Todo/Remaining. That table is the single source. This
+section names the front and deliberately does not restate it** — the two drifting apart is what
+cost time this morning.
+
+Open front: **3d** (`[Union]` + `IUnion`, gate 3c ✔) and **3e** (implicit conversion, gate 3b ✔).
+**4** (`ToUnmanaged`/`AsUnmanaged` empty guard) has no gate and can go in parallel. Also open and
+**not covered anywhere below**: 4c, 4d's serializer half, 5c–5i, and 6. 4c is a soundness
+obligation rather than a preference, so check it against what 3c already emits before sequencing
+it behind the attribute work.
+
+Landing log for this session — a record of what shipped, not a second status table:
 
 | Item | Commit | What landed |
 |---|---|---|
@@ -181,9 +193,10 @@ not converge.
 
 ---
 
-## 5. Next: 3d, then 4
+## 5. Next: 3d and 3e, then 4
 
-Step 3's representation work is done. What remains is the attribute layer and Step 4's marshalling.
+Step 3's *representation* work is done. What remains in Step 3 is the attribute layer (3d) and the
+implicit conversion (3e); then Step 4's marshalling.
 
 **3d — `[Union]` + `IUnion`.** The generated type already declares an interface list in some
 cases (`IResult<Unit, Unit>`), so this joins rather than replaces. Verified by compilation on
@@ -191,6 +204,17 @@ preview 7: the `[Union]` declaration shape, constructors and `Value` compile und
 preview; the implicit conversion (`Shape s = new Shape.CircleCase(1.0)`) is **preview only**,
 failing with CS8652 "unions" on stable. Union pattern matching with no default arm is preview only
 and produces no CS8509, so exhaustiveness works.
+
+**Preview-only syntax is settled, not an open question.** `LangVersion=preview` is set in
+`Directory.Build.props` and landed with R in `9d664613`, and a .NET 11 preview SDK is already
+required to run the tests at all. The CS8652 note above is therefore a fact about *consumers*
+compiling on stable, not a decision this repository still has to take — which is why it is not in
+§6.
+
+**3e — implicit conversion.** Gate 3b, satisfied since `4a19b0e3`, so this is workable now,
+alongside 3d rather than after it. It shrank to a claim rather than an emission: the compiler
+synthesises the conversion from the generated constructor, so 3e reduces to "constructors are
+public and single-parameter" and nothing is emitted for it.
 
 **4 — empty guard on `ToUnmanaged`/`AsUnmanaged`.** No gate. Can start now.
 
