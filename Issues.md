@@ -920,3 +920,69 @@ Recommendation: **B now, C when closed enums ship.** Recorded rather than execut
 ### Related
 
 An adjacent idea, not costed here: for a *mixed* enum, fold its unit variants into one nested C# enum used as a single union case, leaving case types only for payload variants. Two known problems. The union's case identity would no longer determine `_variant` for the folded group, so the tag would be recovered from two different places depending on the case — the defect family behind `09b82d44` and `c928d53e`. And it removes `IsX`/`AsX` for the folded variants, which is existing public API and contrary to `union_names`' preservation-biased policy.
+
+## nullable.rs classifies only class delegates as nullable, so every other reference type gets an unguarded conversion
+
+```issue
+id: b4e07f12
+kind: bug
+severity: medium
+status: open
+```
+
+### Symptom
+
+`pass/model/common/types/info/nullable.rs` documents itself as deciding "whether a type is
+nullable in C# (i.e., a reference type / class)". Line 35 implements something much narrower:
+
+```rust
+let is_nullable = matches!(&ty.kind, TypeKind::Delegate(d) if d.kind == DelegateKind::Class);
+```
+
+Class **delegates** only. Every other C# reference type is reported non-nullable.
+
+The two consumers, `body_as_unmanaged.rs:47` and `body_to_unmanaged.rs:48`, use that answer to
+choose between a guarded and an unguarded field conversion, emitting `?{suffix} ?? default` when
+nullable and a bare suffix otherwise. So a composite field whose type is a reference type other
+than a class delegate gets an unguarded `.AsUnmanaged()` / `.ToUnmanaged()`.
+
+### This is not conditional on 3a
+
+Class-backed enums exist today, before any union work. `struct_class` emits an enum as a class
+whenever its managed conversion is `Into`; `tests/output/wire/option_value_type.rs` records
+exactly that for `Choice`, which carries a `String`, and names `OptionUtf8String` and the owned
+`Result` types as the same category. `is_cs_value_type`'s doc-comment adds that structs with
+`WireOnly` fields are emitted as classes.
+
+The mis-classified set today therefore already includes class-backed enums and class-backed
+composites. 3a widens it; it does not create it.
+
+### Measured, and not measured
+
+Measured statically: the classification at `nullable.rs:35`, both emission sites, and the
+class-backed-enum category via `struct_class` and `option_value_type.rs`. **Not executed** — no
+test yet reproduces a runtime `NullReferenceException` on a null class-backed field.
+
+### Same family as 31248473
+
+`31248473` closed wire's `is_cs_value_type` re-deriving struct-vs-class, a question
+`struct_class::Pass` owns. `nullable.rs` is another re-derivation of that same question in a
+different vocabulary — "is this a reference type" — and it is stale in the same way.
+`struct_class::is_class` already exists at `struct_class.rs:55` and is the authoritative answer.
+
+### Do not close this before `docs/csharp-unions.md` open item 1
+
+The obvious fix — delegate to `struct_class::is_class` — puts class-backed unions on the
+`?? default` branch, emitting `?.AsUnmanaged() ?? default`. For a union that yields a zeroed
+`Unmanaged`: discriminant 0, a fabricated variant crossing FFI, silently. That is precisely what
+3a's private constructor exists to prevent, and it is worse than the exception it replaces.
+
+Open item 1 decides what null at marshal-out should do. Widening `is_nullable` before that
+decision exists would pre-empt it by accident. Whichever way item 1 goes, class-backed unions
+must be excluded from the `?? default` path explicitly rather than by omission.
+
+### Adjacent, unargued
+
+Whether `?? default` is right even for the types it already covers. Substituting a zeroed
+`Unmanaged` for a null class delegate has the same shape of problem; the file asserts the policy
+in a doc-comment and never argues it.

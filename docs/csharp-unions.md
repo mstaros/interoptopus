@@ -374,9 +374,12 @@ compiling for every class-backed enum the moment 3a lands. Changelog entry requi
 that never construct generated types directly are unaffected, but that is a property of the
 consumer, not something this projection guarantees — verify it when regenerating.
 
-**OPEN:** what happens when `null` reaches the custom marshaller — today's
-`NullReferenceException`, or a deliberate `ArgumentNullException` / `InteropException`?
-Open item 1.
+**OPEN:** what happens when `null` reaches marshal-out. Measured: a class-backed union stored as
+a composite field gets an unguarded `.AsUnmanaged()`, so the NRE fires inside the enclosing
+composite's conversion, not in a marshaller (`nullable.rs:35`, `body_as_unmanaged.rs:47`). The
+decision is `InvalidOperationException` vs `ArgumentNullException` vs joining the existing
+`?? default` policy — the last silently fabricates discriminant 0 and must not be taken by
+default. Open item 1.
 
 ### `Value`
 
@@ -609,7 +612,7 @@ Items 0–1c, R and 3 are done. **1d is the first thing to fix** — it is a cor
 | 3f | open | **Case-type accessibility** — fix it explicitly; consumers keep them internal | 3b |
 | 4 | open | `ToUnmanaged` / `AsUnmanaged` empty guard | — |
 | 4a | open | `ToManaged` constructs via case ctors + validates tag | 3c |
-| 4b | open | Exception split (decided in Step 4; implementation only) | 4, 4a |
+| 4b | open | Exception split (decided in Step 4; implementation only) | 4, 4a, 1 |
 | 4c | open | `default(ResultX)` empty not `Ok`; `default(OptionX)` ≠ `NoneCase`. **A soundness obligation, not a preference** — the compiler assumes *"for struct unions, `default` produces a `Value` of null"* and reasons about exhaustiveness on it. `Value` must consult `_hasValue` before materialising a case | 3c, 4a |
 | 4d | partial | Wire has **two** throw sites, not one. Deserializer's unknown native tag → `InteropException`: **done**. Serializer's empty-state `else` should call `ExceptionForVariant()` instead of its own "Unknown variant": **open**, needs 4b's helper | 1d, 4b |
 | 5 | open | Snapshots move once; consumer projects compile the output | 3d, 4b |
@@ -665,8 +668,54 @@ Multi-field and named variant support. Retiring `IsOk` / `AsOk`.
 
 ## Open items
 
-1. **Null reaching the marshaller for a class-backed union** — today's `NullReferenceException`,
-   or a deliberate `ArgumentNullException` / `InteropException`? Gates item 3a.
+1. **Null at marshal-out for a class-backed union.**
+
+   **Direction.** Marshal-out only — `ToUnmanaged()` / `AsUnmanaged()`, and the same call emitted
+   on an enclosing composite's field. `Unmanaged.ToManaged()` constructs from native bytes and can
+   never receive a managed null, so it is out of scope.
+
+   **Position.** Three, and they are not one question: (a) the union instance passed as an
+   argument; (b) a class-backed union stored as a field of a composite; (c) a null element in a
+   collection of unions. `GetUninitializedObject` does **not** bound these — it is emitted only at
+   `wire/mod.rs:104` and `:264`, in the wire deserializer, a different path from marshal-out. It
+   supports test 5e; it says nothing here.
+
+   **Measured, not asserted.** Position (b) NREs today, and it does so *before* any marshaller.
+   `nullable.rs:35` defines nullability as `TypeKind::Delegate(d) if d.kind == DelegateKind::Class`
+   — class delegates only — and `body_as_unmanaged.rs:47` / `body_to_unmanaged.rs:48` emit the
+   `?... ?? default` form only when that holds. A class-backed union field therefore gets a bare
+   `.AsUnmanaged()`, and the dereference happens inside the enclosing composite's conversion, not
+   in a marshaller. Positions (a) and (c) are **unmeasured**, and reproducing them is cheap — one composite
+   carrying a class-backed union by value, one carrying a collection of them, through the
+   existing corpus. **Do it before 4b**: a different failure mode in either changes what 4b
+   implements, and 4b is the wrong place to discover it.
+
+   **The choice is three-way, not two.** `InvalidOperationException`, for consistency with the
+   Step 4 row for the struct empty state; `ArgumentNullException`, the conventional .NET answer
+   for a null argument at a public boundary; or joining the existing `?? default` policy and not
+   throwing at all.
+
+   The third is the trap. `nullable.rs` promises "reference type / class" in its doc-comment and
+   implements "class delegate"; after 3a class unions *are* reference types, so the gap invites a
+   one-line "fix". Taking it makes a null union emit `?.AsUnmanaged() ?? default`, producing a
+   zeroed `Unmanaged` — discriminant 0, a fabricated variant crossing FFI — which is exactly what
+   3a's private constructor exists to prevent. **Silent default is worse than the NRE.** However
+   this item is decided, class-backed unions must be excluded from that path explicitly. Filed as
+   `Issues.md` `b4e07f12`, which is a **present** defect independent of this plan: `nullable.rs`
+   already mis-classifies class-backed enums and class-backed composites, both of which exist
+   today. 3a widens that set; it does not create it.
+
+   **`InteropException` is excluded**, with its reason: it means *"severe error, should never
+   happen"*, and a consumer passing null is an ordinary mistake, not corruption.
+
+   **Gates 4b, not 3a.** 3a is the private parameterless constructor plus dropping `_hasValue`;
+   neither depends on which exception is thrown. The Remaining table already gives 3a's gate as
+   `—`; this item previously contradicted it and was wrong.
+
+   **No test row covers this yet.** 5e ("class union cannot produce non-null empty") concerns a
+   non-null invalid instance and does not exercise null at marshal-out. A row asserting "null
+   union at marshal-out throws the decided exception" is missing; it is not added here because
+   numbering new rows is not this item's call.
 2. ~~**Case→enum conversion.**~~ **Closed — the compiler provides it.** *"An implicit union
    conversion exists from each case type to the union type"*, and it *"works by calling the
    corresponding generated constructor"*. Two sanctioned shapes, and we choose per type:
