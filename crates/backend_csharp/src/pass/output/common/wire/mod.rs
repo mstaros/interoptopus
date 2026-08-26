@@ -439,6 +439,12 @@ impl WireCodeGen<'_> {
             lines.push(format!("{p}{{"));
             self.emit_serialize(lines, inner_id, &format!("{val}.Value"), depth, indent + 1);
         } else {
+            // `!= null`, deliberately, and NOT interchangeable with `is null` once unions land.
+            // Pattern matching on a union unwraps to `Value`, so for a class-backed union
+            // `x is null` succeeds when the reference is null *or* `Value` is null. The `!=`
+            // operator tests only the reference, which is what `Option` means here: a present
+            // but empty union is `Some`, not `None`. Rewriting this to `is not null` would
+            // silently conflate the two. See `docs/csharp-unions.md` §Null matching.
             lines.push(format!("{p}writer.Write((byte)({val} != null ? 1 : 0));"));
             lines.push(format!("{p}if ({val} != null)"));
             lines.push(format!("{p}{{"));

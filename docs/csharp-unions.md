@@ -41,9 +41,18 @@ consumer translates at the boundary rather than propagating case types outward.
 
 ---
 
-## 1. Representation: custom `[Union]`, not the `union` keyword
+## 1. Representation: a manual `[Union]` type, not the `union` keyword
 
-The `union` keyword was evaluated and rejected. Three reasons, in order of weight:
+`[Union]` here is `System.Runtime.CompilerServices.Union` — the real attribute, not one of ours.
+Writing the type by hand is a documented path, not a departure from the specification, which
+names our exact case: *"You might need different behavior if you want to adapt an existing type,
+create a class-based union, or use a custom storage strategy, or if you need interop support."*
+An earlier draft of this section read "custom `[Union]`", which implied a bespoke attribute and
+put the whole approach off-spec. It is not.
+
+What *is* rejected is the **keyword**, and the specification describes the generated form in the
+same terms this section arrived at independently: it *"is always a struct, always boxes
+value-type cases, and always stores contents as `object?`"*. Three reasons, in order of weight:
 
 **Storage.** A `union` declaration lowers to a struct whose entire storage is a single
 `object? Value` auto-property. Every payload-carrying enum crossing the FFI boundary would
@@ -576,20 +585,20 @@ Items 0–1c, R and 3 are done. **1d is the first thing to fix** — it is a cor
 
 | # | Status | Item | Gate |
 |---|---|---|---|
-| 1d | open | **`wire/mod.rs` bypasses the C# model.** Six sites emit `v.name`; `cs_type_name` skips `sanitize_rust_name`. `Issues.md` `4e9a17c3` | — |
+| 1d | **done** `f5057d4b` | ~~**`wire/mod.rs` bypasses the C# model.**~~ Six sites emit `v.name`; `cs_type_name` skips `sanitize_rust_name`. `Issues.md` `4e9a17c3` | — |
 | 3a | open | Class: private parameterless ctor, no `_hasValue` | — |
-| 3b | open | Nested `{case_type}` case types | 1d |
+| 3b | open | Nested `{case_type}` case types. **Precondition for 3e**, not just prior to it: same-payload variants (`A(u32)`, `B(u32)`) make the generated constructors ambiguous without distinct case types | 1d ✔ |
 | 3c | open | `Value` / `HasValue` / `TryGetValue` — consumes `_hasValue`, clears CS0169 | 3a, 3b |
 | 3d | open | `[Union]` + `IUnion` via joined interface list | 3c |
-| 3e | open | **Case→enum conversion** — decide whether the compiler synthesises it from `[Union]` or we emit operators | 3b |
+| 3e | open, **shrunk** | ~~decide whether the compiler synthesises it~~ — settled: it does, via the generated constructor. Reduces to "constructors are public and single-parameter"; nothing emitted for the conversion | 3b |
 | 3f | open | **Case-type accessibility** — fix it explicitly; consumers keep them internal | 3b |
 | 4 | open | `ToUnmanaged` / `AsUnmanaged` empty guard | — |
 | 4a | open | `ToManaged` constructs via case ctors + validates tag | 3c |
 | 4b | open | Exception split (decided in Step 4; implementation only) | 4, 4a |
-| 4c | open | `default(ResultX)` empty not `Ok`; `default(OptionX)` ≠ `NoneCase` | 3c, 4a |
+| 4c | open | `default(ResultX)` empty not `Ok`; `default(OptionX)` ≠ `NoneCase`. **A soundness obligation, not a preference** — the compiler assumes *"for struct unions, `default` produces a `Value` of null"* and reasons about exhaustiveness on it. `Value` must consult `_hasValue` before materialising a case | 3c, 4a |
 | 4d | partial | Wire has **two** throw sites, not one. Deserializer's unknown native tag → `InteropException`: **done**. Serializer's empty-state `else` should call `ExceptionForVariant()` instead of its own "Unknown variant": **open**, needs 4b's helper | 1d, 4b |
 | 5 | open | Snapshots move once; consumer projects compile the output | 3d, 4b |
-| 5c | open | Collision cases: `Value`, casing-fold, `B`/`IsB` — **write early; this is what catches 1d** | 1d |
+| 5c | partial | Collision cases: `Value`, `B`/`IsB`. ~~casing-fold~~ — no such class, `union_names` allocates case-sensitively. A Wire-reachable stem-moving collision is covered by `tests/output/wire/collision.rs`; the managed-side cases remain | 1d ✔ |
 | 5d | open | `default(struct).ToUnmanaged()` throws | 4 |
 | 5e | open | Class union cannot produce non-null empty | 3a |
 | 5f | open | Invalid native tag throws | 4a |
@@ -643,11 +652,23 @@ Multi-field and named variant support. Retiring `IsOk` / `AsOk`.
 
 1. **Null reaching the marshaller for a class-backed union** — today's `NullReferenceException`,
    or a deliberate `ArgumentNullException` / `InteropException`? Gates item 3a.
-2. **Case→enum conversion.** § 1's consumer API shows
-   `EnumPayload y = new EnumPayload.BCase(vector);`. Nothing in Steps 3–4 emits that conversion.
-   Either `[Union]` makes the compiler synthesise it — in which case say so once and close this —
-   or we emit user-defined operators, and item 3e is real work. Not tested is not the same as not
-   emitted. **A read against the preview SDK settles it; do that before starting 3b.**
+2. ~~**Case→enum conversion.**~~ **Closed — the compiler provides it.** *"An implicit union
+   conversion exists from each case type to the union type"*, and it *"works by calling the
+   corresponding generated constructor"*. Two sanctioned shapes, and we choose per type:
+   the **basic union pattern** (a public constructor per case type, single by-value or `in`
+   parameter, plus a public `object?` `Value`), or a **union member provider** (a nested
+   `IUnionMembers` declaring static `Create` per case type) for types needing a private
+   constructor or factory creation — the spec names `record class` unions.
+
+   So item 3e collapses from an emission family to a constructor-shape requirement. Nothing is
+   emitted for the conversion itself; what must be right is that the constructors are public and
+   take one parameter each.
+
+   **This makes 3b a precondition for 3e, not merely prior to it.** *"If more than one case type
+   is equally applicable to the source value, the union conversion is ambiguous, and the compiler
+   reports an error."* Rust enums routinely carry the same payload twice — `A(u32)`, `B(u32)` —
+   and two constructors both taking `uint` are ambiguous. The distinct nested `{case_type}`
+   wrappers are exactly what makes them resolvable.
 3. **Case-type accessibility.** Nested `{case_type}` types have no stated accessibility. They
    need enough for generated and consumer-internal use, and consumers (GixSharp rule 8) keep
    them out of their public surface. Fix it explicitly rather than inheriting a default.
