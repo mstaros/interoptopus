@@ -855,11 +855,44 @@ public partial struct EnumDocumented
 
 About 120 lines. Union projection (items 3b, 3c) then adds a nested case type per variant, `Value`, `HasValue` and `TryGetValue` on top.
 
+### The governing rule is anti-bloat, not the count
+
+A unit-only enum has no payload. Its case types are empty, its `Value` is nothing, and
+`TryGetValue` has nothing to get. Emitting that machinery is generating structure for a type
+that has no use for it, and that holds for one such enum as much as for a hundred.
+
+**The population count is evidence of payoff, not justification.** An earlier version of this
+issue reasoned the other way and reached the wrong conclusion by doing so; see below.
+
 ### How much of the population this is
 
-**Reference project: 4 of 6.** `EnumDocumented`, `EnumRenamedXYZ`, `EnumNegative`, `EnumExplicitThenImplicit` are unit-only; `EnumPayload` and `EnumExplicitPayload` carry payloads. `docs/csharp-unions.md` notes `_hasValue` currently trips CS0169 on **eight** generated types.
+**Reference project: 4 of 6.** `EnumDocumented`, `EnumRenamedXYZ`, `EnumNegative`,
+`EnumExplicitThenImplicit` are unit-only; `EnumPayload` and `EnumExplicitPayload` carry payloads.
+`docs/csharp-unions.md` notes `_hasValue` currently trips CS0169 on **eight** generated types.
 
-**gitoxide: a 20-enum sample, not a count.** 8 unit-only, 12 with payload — so *not* "mostly unit-only" as first assumed. Two caveats that matter more than the ratio: five of the twelve are `thiserror` error enums, which map to exceptions rather than unions, and several use variant shapes the inventory cannot represent at all — `AddedOrReplaced(Range<u32>, u32)`, `Deleted(u32, u32)`, `Io { path, source }`. `VariantKind::Tuple(TypeId)` holds exactly one `TypeId`, so multi-field and struct variants never reach the backend. Excluding errors it is 8 unit-only to 7 payload. The sample was filtered to files named `types.rs`, which likely over-represents both hint-style and error enums. **A real count over the crates a binding would wrap is not done.**
+**gitoxide `gix` crate — measured, and it corrects the earlier claim.** A syn visitor over
+`gix/src` (251 files, `pub` enums, excluding those named `Error`) classified 36 enums:
+
+| Class | Count | Representable |
+|---|---|---|
+| Pure unit | 15 | 15 |
+| Mixed | 4 | 2 |
+| Pure payload | 17 | 6 |
+| **Total** | **36** | **23** |
+
+"Representable" excludes what `VariantKind::Tuple(TypeId)` cannot carry — named-field variants,
+multi-field tuples, generics.
+
+**Unit-only is therefore 15 of 23 (65%), or 15 of 21 (71%) once `AsError` and `CleanupError` are
+dropped as error enums the name filter missed.** A previous version of this section reported
+"8 unit-only, 12 with payload — so *not* 'mostly unit-only' as first assumed" from a 20-enum
+sample filtered to files named `types.rs`. That sample counted the unrepresentable population
+alongside the representable one. **The first assumption was right; the sample misled it.**
+
+Caveat on scope: this is the `gix` porcelain crate only, not the `gix-*` plumbing crates or
+`gitoxide-core`, and **no `#[ffi]` annotation exists anywhere in gitoxide** — so it is a
+projection of what binding it would produce, not a count of what is bound. A count over another
+wrapped crate would change the payoff. It would not change the rule.
 
 ### The public surface is preservable
 
@@ -930,13 +963,77 @@ follows.
 
 C# **closed enums** — same enums with a `closed` modifier, strictly typed (no conversion from `int`) and exhaustive — restore what a plain enum lacks: no arbitrary casts, exhaustive matching without a default arm. That closes the gap option C opens, and it is what makes C the right destination rather than a regression.
 
-They are expected in **C# 16 preview, 6-8 months out**. So C should not land now on the strength of them; it would mean shipping an unvalidated projection and migrating twice. Option B is available immediately and is on the path to C rather than away from it.
+**Checked 2026-08-26: closed enums did not ship in C# 15.** Unions and closed hierarchies are both
+in .NET 11 preview 7 and ship with C# 15 in November 2026; closed enums are still described by
+Microsoft as *planned* and are listed as a proposal alongside closed hierarchies, which have since
+advanced while closed enums have not. The earlier "C# 16 preview, 6-8 months out" figure in this
+issue had no source and looks optimistic: a feature still labelled planned three months before the
+adjacent release ships is not obviously in the next one.
 
-Recommendation: **B now, C when closed enums ship.** Recorded rather than executed — this issue exists so the survey is not repeated.
+Two mechanical limits on closed enums that survive whenever they arrive:
 
-### Related
+- **A closed enum must declare a member for the integral value `0`.** `EnumExplicitThenImplicit
+  { A = 5, B, C }` yields 5, 6, 7 and therefore **can never be closed**. `EnumNegative
+  { A = -1, B = -0, C = 1 }` is fine — negatives are permitted, only the zero member is required.
+  So C is per-enum eligible, not uniform, and ineligible enums get a plain enum with neither
+  exhaustiveness nor today's type safety.
+- **Explicit conversion to a closed enum from a non-constant is an error.** This does not block
+  item 4a — it *mandates* it: the only legal path from a runtime discriminant to a closed enum is a
+  switch with constant arms and a throwing default, which is exactly 4a's validated switch.
 
-An adjacent idea, not costed here: for a *mixed* enum, fold its unit variants into one nested C# enum used as a single union case, leaving case types only for payload variants. Two known problems. The union's case identity would no longer determine `_variant` for the folded group, so the tag would be recovered from two different places depending on the case — the defect family behind `09b82d44` and `c928d53e`. And it removes `IsX`/`AsX` for the folded variants, which is existing public API and contrary to `union_names`' preservation-biased policy.
+Option B is available immediately and is on the path to C rather than away from it.
+
+### Two rules, not one — they rest on different claims
+
+Anti-bloat gets to **B and no further**. "Do not emit union machinery for a type with no payload"
+is self-justifying and needs nothing measured.
+
+It does **not** reach C. The struct's `Unmanaged` mirror and marshaller are not bloat in the same
+sense — they exist so the value can cross FFI. Removing them requires a separate claim: that a
+plain C# `enum` is blittable and crosses without translation, needing no mirror *because* it is
+blittable. That claim is probably true and is **not verified**. Two things are open:
+
+- What `Unmanaged` actually contains for a unit-only enum. If it is only the discriminant field,
+  the claim holds trivially. Not read.
+- How the Rust `#[repr]` maps to the C# underlying type. A plain C# enum defaults to `int`; a
+  `#[repr(u8)]` enum must be emitted as `: byte` or the widths disagree. `definition.rs` already
+  passes `discriminant_type.cs_name()`, so the information exists, but the mapping is unchecked.
+  `EnumNegative` additionally requires a signed underlying type.
+
+So B is safe on the rule alone. C depends on the above, and separately on closed enums, which
+**did not ship in C# 15** — see the trigger section below.
+
+Recommendation: **B on the anti-bloat rule, now. C once the blittability claim is verified**, with
+closed enums governing only the exhaustiveness half of C, not the emission half. Recorded rather
+than executed — this issue exists so the survey is not repeated.
+
+See also `5d1ae4c7`: this issue's original "single lever" mechanism is disproved, and any version
+of B or C needs the ten-site processing gate addressed first.
+
+### Related — folding mixed enums, DROPPED
+
+The idea: for a *mixed* enum, fold its unit variants into one nested C# enum used as a single
+union case, leaving case types only for payload variants. Dropped on three grounds, one of them
+measured.
+
+**Measured: it has almost no population.** Of the four mixed enums in `gix`, only two are
+representable — `TrackRenames` (2 unit of 3) and `SubSectionRequirement` (1 unit of 2). Folding
+would apply to two enums and save three case types. The best candidate by far, `Mode` in
+`remote/connection/fetch/update_refs/update.rs` at 8 unit variants of 10, is **not**
+representable: its two named-field variants cannot reach the backend.
+
+**It weakens exhaustiveness rather than strengthening it.** A switch over the folded union sees
+two cases — the nested enum and the payload case — and is exhaustive once both are covered, even
+though the folded variants have not been distinguished. Telling them apart requires an inner
+switch over a plain enum, which is exactly the case C# does *not* exhaustiveness-check. Folding
+moves variants out of the checked layer into the unchecked one.
+
+**Tag provenance.** The union's case identity would no longer determine `_variant` for the folded
+group, so the tag is recovered from two different places depending on the case — the defect family
+behind `09b82d44` and `c928d53e`.
+
+The `IsX`/`AsX` objection recorded earlier is *not* among the reasons; it rested on preserving
+public API, which is a weaker constraint where the consumers are owned.
 
 ## nullable.rs classifies only class delegates as nullable, so every other reference type gets an unguarded conversion
 
