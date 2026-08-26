@@ -145,6 +145,31 @@ public partial class OptionUtf8String : IDisposable
     }
 
 
+    // Union members
+    public bool HasValue => true;
+
+    public object? Value => _variant switch
+    {
+        0 => new SomeCase(_Some),
+        1 => new NoneCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out SomeCase value)
+    {
+        if (_variant == 0) { value = new SomeCase(_Some); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NoneCase value)
+    {
+        if (_variant == 1) { value = new NoneCase(); return true; }
+        value = default;
+        return false;
+    }
+
+
     /// <summary>
     /// Private so that <c>new OptionUtf8String()</c> cannot produce a variant-zero instance from
     /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
@@ -256,6 +281,7 @@ public partial struct OptionUint
         {
             var _managed = new OptionUint();
             _managed._variant = _variant;
+            _managed._hasValue = true;
             if (_variant == 0) _managed._Some = _Some._Some;
             return _managed;
         }
@@ -295,9 +321,34 @@ public partial struct OptionUint
     }
 
 
+    // Union members
+    public bool HasValue => _hasValue;
+
+    public object? Value => !_hasValue ? null : _variant switch
+    {
+        0 => new SomeCase(_Some),
+        1 => new NoneCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out SomeCase value)
+    {
+        if (_hasValue && _variant == 0) { value = new SomeCase(_Some); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NoneCase value)
+    {
+        if (_hasValue && _variant == 1) { value = new NoneCase(); return true; }
+        value = default;
+        return false;
+    }
+
+
     // Ctors
-    public static OptionUint Some(uint value) => new() { _variant = 0, _Some = value };
-    public static OptionUint None => new() { _variant = 1 };
+    public static OptionUint Some(uint value) => new() { _variant = 0, _Some = value, _hasValue = true };
+    public static OptionUint None => new() { _variant = 1, _hasValue = true };
 
     // Checks
     public bool IsSome => _variant == 0;
@@ -393,6 +444,7 @@ public partial struct OptionVec
         {
             var _managed = new OptionVec();
             _managed._variant = _variant;
+            _managed._hasValue = true;
             if (_variant == 0) _managed._Some = _Some._Some.ToManaged();
             return _managed;
         }
@@ -432,9 +484,34 @@ public partial struct OptionVec
     }
 
 
+    // Union members
+    public bool HasValue => _hasValue;
+
+    public object? Value => !_hasValue ? null : _variant switch
+    {
+        0 => new SomeCase(_Some),
+        1 => new NoneCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out SomeCase value)
+    {
+        if (_hasValue && _variant == 0) { value = new SomeCase(_Some); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NoneCase value)
+    {
+        if (_hasValue && _variant == 1) { value = new NoneCase(); return true; }
+        value = default;
+        return false;
+    }
+
+
     // Ctors
-    public static OptionVec Some(Vec value) => new() { _variant = 0, _Some = value };
-    public static OptionVec None => new() { _variant = 1 };
+    public static OptionVec Some(Vec value) => new() { _variant = 0, _Some = value, _hasValue = true };
+    public static OptionVec None => new() { _variant = 1, _hasValue = true };
 
     // Checks
     public bool IsSome => _variant == 0;
@@ -500,6 +577,14 @@ public partial struct ResultVoidVoid
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial struct ResultVoidVoid : IResult<Unit, Unit>
 {
+    public readonly record struct OkCase();
+
+    public readonly record struct ErrCase();
+
+    public readonly record struct PanicCase();
+
+    public readonly record struct NullCase();
+
 
     [StructLayout(LayoutKind.Explicit)]
     internal unsafe struct Unmanaged
@@ -514,6 +599,7 @@ public partial struct ResultVoidVoid : IResult<Unit, Unit>
         {
             var _managed = new ResultVoidVoid();
             _managed._variant = _variant;
+            _managed._hasValue = true;
             return _managed;
         }
     }
@@ -552,11 +638,52 @@ public partial struct ResultVoidVoid : IResult<Unit, Unit>
     }
 
 
+    // Union members
+    public bool HasValue => _hasValue;
+
+    public object? Value => !_hasValue ? null : _variant switch
+    {
+        0 => new OkCase(),
+        1 => new ErrCase(),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_hasValue && _variant == 0) { value = new OkCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_hasValue && _variant == 1) { value = new ErrCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_hasValue && _variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_hasValue && _variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
+    }
+
+
     // Ctors
-    public static ResultVoidVoid Ok => new() { _variant = 0 };
-    public static ResultVoidVoid Err => new() { _variant = 1 };
-    public static ResultVoidVoid Panic => new() { _variant = 2 };
-    public static ResultVoidVoid Null => new() { _variant = 3 };
+    public static ResultVoidVoid Ok => new() { _variant = 0, _hasValue = true };
+    public static ResultVoidVoid Err => new() { _variant = 1, _hasValue = true };
+    public static ResultVoidVoid Panic => new() { _variant = 2, _hasValue = true };
+    public static ResultVoidVoid Null => new() { _variant = 3, _hasValue = true };
 
     // Checks
     public bool IsOk => _variant == 0;
@@ -9091,6 +9218,39 @@ public partial class DataEnum
     }
 
 
+    // Union members
+    public bool HasValue => true;
+
+    public object? Value => _variant switch
+    {
+        0 => new SCase(_S),
+        1 => new VCase(_V),
+        2 => new HCase(_H),
+        _ => null,
+    };
+
+    public bool TryGetValue(out SCase value)
+    {
+        if (_variant == 0) { value = new SCase(_S); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out VCase value)
+    {
+        if (_variant == 1) { value = new VCase(_V); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out HCase value)
+    {
+        if (_variant == 2) { value = new HCase(_H); return true; }
+        value = default;
+        return false;
+    }
+
+
     /// <summary>
     /// Private so that <c>new DataEnum()</c> cannot produce a variant-zero instance from
     /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
@@ -9227,6 +9387,31 @@ public partial class Layer3String : IDisposable
     }
 
 
+    // Union members
+    public bool HasValue => true;
+
+    public object? Value => _variant switch
+    {
+        0 => new ACase(_A),
+        1 => new BCase(_B),
+        _ => null,
+    };
+
+    public bool TryGetValue(out ACase value)
+    {
+        if (_variant == 0) { value = new ACase(_A); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out BCase value)
+    {
+        if (_variant == 1) { value = new BCase(_B); return true; }
+        value = default;
+        return false;
+    }
+
+
     /// <summary>
     /// Private so that <c>new Layer3String()</c> cannot produce a variant-zero instance from
     /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
@@ -9302,7 +9487,6 @@ public partial class Layer3String : IDisposable
 public partial struct EnumDocumented
 {
     byte _variant;
-    bool _hasValue;
 }
 
 
@@ -9358,7 +9542,6 @@ public partial struct EnumDocumented
         if (_variant == 2) return new EnumException();
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
     }
-
 
     // Ctors
     /// Variant A.
@@ -9431,7 +9614,6 @@ public partial struct EnumDocumented
 public partial struct EnumExplicitThenImplicit
 {
     byte _variant;
-    bool _hasValue;
 }
 
 
@@ -9487,7 +9669,6 @@ public partial struct EnumExplicitThenImplicit
         if (_variant == 7) return new EnumException();
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
     }
-
 
     // Ctors
     public static EnumExplicitThenImplicit A => new() { _variant = 5 };
@@ -9613,6 +9794,7 @@ public partial struct EnumExplicitPayload
         {
             var _managed = new EnumExplicitPayload();
             _managed._variant = _variant;
+            _managed._hasValue = true;
             if (_variant == 11) _managed._B = _B._B;
             if (_variant == 12) _managed._C = _C._C.ToManaged();
             return _managed;
@@ -9657,11 +9839,52 @@ public partial struct EnumExplicitPayload
     }
 
 
+    // Union members
+    public bool HasValue => _hasValue;
+
+    public object? Value => !_hasValue ? null : _variant switch
+    {
+        10 => new ACase(),
+        11 => new BCase(_B),
+        12 => new CCase(_C),
+        20 => new DCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out ACase value)
+    {
+        if (_hasValue && _variant == 10) { value = new ACase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out BCase value)
+    {
+        if (_hasValue && _variant == 11) { value = new BCase(_B); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out CCase value)
+    {
+        if (_hasValue && _variant == 12) { value = new CCase(_C); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out DCase value)
+    {
+        if (_hasValue && _variant == 20) { value = new DCase(); return true; }
+        value = default;
+        return false;
+    }
+
+
     // Ctors
-    public static EnumExplicitPayload A => new() { _variant = 10 };
-    public static EnumExplicitPayload B(uint value) => new() { _variant = 11, _B = value };
-    public static EnumExplicitPayload C(Vec3f32 value) => new() { _variant = 12, _C = value };
-    public static EnumExplicitPayload D => new() { _variant = 20 };
+    public static EnumExplicitPayload A => new() { _variant = 10, _hasValue = true };
+    public static EnumExplicitPayload B(uint value) => new() { _variant = 11, _B = value, _hasValue = true };
+    public static EnumExplicitPayload C(Vec3f32 value) => new() { _variant = 12, _C = value, _hasValue = true };
+    public static EnumExplicitPayload D => new() { _variant = 20, _hasValue = true };
 
     // Checks
     public bool IsA => _variant == 10;
@@ -9803,6 +10026,31 @@ public partial class OptionOptionResultOptionUtf8StringError : IDisposable
         if (_variant == 0) return new EnumException<OptionResultOptionUtf8StringError>(_Some);
         if (_variant == 1) return new EnumException();
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
+    }
+
+
+    // Union members
+    public bool HasValue => true;
+
+    public object? Value => _variant switch
+    {
+        0 => new SomeCase(_Some),
+        1 => new NoneCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out SomeCase value)
+    {
+        if (_variant == 0) { value = new SomeCase(_Some); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NoneCase value)
+    {
+        if (_variant == 1) { value = new NoneCase(); return true; }
+        value = default;
+        return false;
     }
 
 
@@ -9960,6 +10208,31 @@ public partial class OptionResultOptionUtf8StringError : IDisposable
     }
 
 
+    // Union members
+    public bool HasValue => true;
+
+    public object? Value => _variant switch
+    {
+        0 => new SomeCase(_Some),
+        1 => new NoneCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out SomeCase value)
+    {
+        if (_variant == 0) { value = new SomeCase(_Some); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NoneCase value)
+    {
+        if (_variant == 1) { value = new NoneCase(); return true; }
+        value = default;
+        return false;
+    }
+
+
     /// <summary>
     /// Private so that <c>new OptionResultOptionUtf8StringError()</c> cannot produce a variant-zero instance from
     /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
@@ -10071,6 +10344,7 @@ public partial struct OptionEnumPayload
         {
             var _managed = new OptionEnumPayload();
             _managed._variant = _variant;
+            _managed._hasValue = true;
             if (_variant == 0) _managed._Some = _Some._Some.ToManaged();
             return _managed;
         }
@@ -10110,9 +10384,34 @@ public partial struct OptionEnumPayload
     }
 
 
+    // Union members
+    public bool HasValue => _hasValue;
+
+    public object? Value => !_hasValue ? null : _variant switch
+    {
+        0 => new SomeCase(_Some),
+        1 => new NoneCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out SomeCase value)
+    {
+        if (_hasValue && _variant == 0) { value = new SomeCase(_Some); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NoneCase value)
+    {
+        if (_hasValue && _variant == 1) { value = new NoneCase(); return true; }
+        value = default;
+        return false;
+    }
+
+
     // Ctors
-    public static OptionEnumPayload Some(EnumPayload value) => new() { _variant = 0, _Some = value };
-    public static OptionEnumPayload None => new() { _variant = 1 };
+    public static OptionEnumPayload Some(EnumPayload value) => new() { _variant = 0, _Some = value, _hasValue = true };
+    public static OptionEnumPayload None => new() { _variant = 1, _hasValue = true };
 
     // Checks
     public bool IsSome => _variant == 0;
@@ -10208,6 +10507,7 @@ public partial struct OptionInner
         {
             var _managed = new OptionInner();
             _managed._variant = _variant;
+            _managed._hasValue = true;
             if (_variant == 0) _managed._Some = _Some._Some.ToManaged();
             return _managed;
         }
@@ -10247,9 +10547,34 @@ public partial struct OptionInner
     }
 
 
+    // Union members
+    public bool HasValue => _hasValue;
+
+    public object? Value => !_hasValue ? null : _variant switch
+    {
+        0 => new SomeCase(_Some),
+        1 => new NoneCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out SomeCase value)
+    {
+        if (_hasValue && _variant == 0) { value = new SomeCase(_Some); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NoneCase value)
+    {
+        if (_hasValue && _variant == 1) { value = new NoneCase(); return true; }
+        value = default;
+        return false;
+    }
+
+
     // Ctors
-    public static OptionInner Some(Inner value) => new() { _variant = 0, _Some = value };
-    public static OptionInner None => new() { _variant = 1 };
+    public static OptionInner Some(Inner value) => new() { _variant = 0, _Some = value, _hasValue = true };
+    public static OptionInner None => new() { _variant = 1, _hasValue = true };
 
     // Checks
     public bool IsSome => _variant == 0;
@@ -10406,6 +10731,47 @@ public partial class ResultOptionUtf8StringError : IResult<OptionUtf8String, Err
         if (_variant == 2) return new EnumException();
         if (_variant == 3) return new EnumException();
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
+    }
+
+
+    // Union members
+    public bool HasValue => true;
+
+    public object? Value => _variant switch
+    {
+        0 => new OkCase(_Ok),
+        1 => new ErrCase(_Err),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_variant == 0) { value = new OkCase(_Ok); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_variant == 1) { value = new ErrCase(_Err); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
     }
 
 
@@ -10607,6 +10973,47 @@ public partial class ResultServiceAsyncCancelError : IResult<IntPtr, Error>, IDi
     }
 
 
+    // Union members
+    public bool HasValue => true;
+
+    public object? Value => _variant switch
+    {
+        0 => new OkCase(_Ok),
+        1 => new ErrCase(_Err),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_variant == 0) { value = new OkCase(_Ok); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_variant == 1) { value = new ErrCase(_Err); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
+    }
+
+
     /// <summary>
     /// Private so that <c>new ResultServiceAsyncCancelError()</c> cannot produce a variant-zero instance from
     /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
@@ -10801,6 +11208,47 @@ public partial class ResultServiceAsyncCtorError : IResult<IntPtr, Error>, IDisp
         if (_variant == 2) return new EnumException();
         if (_variant == 3) return new EnumException();
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
+    }
+
+
+    // Union members
+    public bool HasValue => true;
+
+    public object? Value => _variant switch
+    {
+        0 => new OkCase(_Ok),
+        1 => new ErrCase(_Err),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_variant == 0) { value = new OkCase(_Ok); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_variant == 1) { value = new ErrCase(_Err); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
     }
 
 
@@ -11001,6 +11449,47 @@ public partial class ResultServiceAsyncPanicError : IResult<IntPtr, Error>, IDis
     }
 
 
+    // Union members
+    public bool HasValue => true;
+
+    public object? Value => _variant switch
+    {
+        0 => new OkCase(_Ok),
+        1 => new ErrCase(_Err),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_variant == 0) { value = new OkCase(_Ok); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_variant == 1) { value = new ErrCase(_Err); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
+    }
+
+
     /// <summary>
     /// Private so that <c>new ResultServiceAsyncPanicError()</c> cannot produce a variant-zero instance from
     /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
@@ -11195,6 +11684,47 @@ public partial class ResultServiceAsyncResultError : IResult<IntPtr, Error>, IDi
         if (_variant == 2) return new EnumException();
         if (_variant == 3) return new EnumException();
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
+    }
+
+
+    // Union members
+    public bool HasValue => true;
+
+    public object? Value => _variant switch
+    {
+        0 => new OkCase(_Ok),
+        1 => new ErrCase(_Err),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_variant == 0) { value = new OkCase(_Ok); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_variant == 1) { value = new ErrCase(_Err); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
     }
 
 
@@ -11395,6 +11925,47 @@ public partial class ResultServiceAsyncSleepError : IResult<IntPtr, Error>, IDis
     }
 
 
+    // Union members
+    public bool HasValue => true;
+
+    public object? Value => _variant switch
+    {
+        0 => new OkCase(_Ok),
+        1 => new ErrCase(_Err),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_variant == 0) { value = new OkCase(_Ok); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_variant == 1) { value = new ErrCase(_Err); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
+    }
+
+
     /// <summary>
     /// Private so that <c>new ResultServiceAsyncSleepError()</c> cannot produce a variant-zero instance from
     /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
@@ -11589,6 +12160,47 @@ public partial class ResultServiceAsyncStructsError : IResult<IntPtr, Error>, ID
         if (_variant == 2) return new EnumException();
         if (_variant == 3) return new EnumException();
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
+    }
+
+
+    // Union members
+    public bool HasValue => true;
+
+    public object? Value => _variant switch
+    {
+        0 => new OkCase(_Ok),
+        1 => new ErrCase(_Err),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_variant == 0) { value = new OkCase(_Ok); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_variant == 1) { value = new ErrCase(_Err); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
     }
 
 
@@ -11789,6 +12401,47 @@ public partial class ResultServiceAsyncVecStringError : IResult<IntPtr, Error>, 
     }
 
 
+    // Union members
+    public bool HasValue => true;
+
+    public object? Value => _variant switch
+    {
+        0 => new OkCase(_Ok),
+        1 => new ErrCase(_Err),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_variant == 0) { value = new OkCase(_Ok); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_variant == 1) { value = new ErrCase(_Err); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
+    }
+
+
     /// <summary>
     /// Private so that <c>new ResultServiceAsyncVecStringError()</c> cannot produce a variant-zero instance from
     /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
@@ -11983,6 +12636,47 @@ public partial class ResultServiceAsyncWireError : IResult<IntPtr, Error>, IDisp
         if (_variant == 2) return new EnumException();
         if (_variant == 3) return new EnumException();
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
+    }
+
+
+    // Union members
+    public bool HasValue => true;
+
+    public object? Value => _variant switch
+    {
+        0 => new OkCase(_Ok),
+        1 => new ErrCase(_Err),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_variant == 0) { value = new OkCase(_Ok); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_variant == 1) { value = new ErrCase(_Err); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
     }
 
 
@@ -12183,6 +12877,47 @@ public partial class ResultServiceCallbacksError : IResult<IntPtr, Error>, IDisp
     }
 
 
+    // Union members
+    public bool HasValue => true;
+
+    public object? Value => _variant switch
+    {
+        0 => new OkCase(_Ok),
+        1 => new ErrCase(_Err),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_variant == 0) { value = new OkCase(_Ok); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_variant == 1) { value = new ErrCase(_Err); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
+    }
+
+
     /// <summary>
     /// Private so that <c>new ResultServiceCallbacksError()</c> cannot produce a variant-zero instance from
     /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
@@ -12377,6 +13112,47 @@ public partial class ResultServiceDependentError : IResult<IntPtr, Error>, IDisp
         if (_variant == 2) return new EnumException();
         if (_variant == 3) return new EnumException();
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
+    }
+
+
+    // Union members
+    public bool HasValue => true;
+
+    public object? Value => _variant switch
+    {
+        0 => new OkCase(_Ok),
+        1 => new ErrCase(_Err),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_variant == 0) { value = new OkCase(_Ok); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_variant == 1) { value = new ErrCase(_Err); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
     }
 
 
@@ -12577,6 +13353,47 @@ public partial class ResultServiceIgnoringMethodsError : IResult<IntPtr, Error>,
     }
 
 
+    // Union members
+    public bool HasValue => true;
+
+    public object? Value => _variant switch
+    {
+        0 => new OkCase(_Ok),
+        1 => new ErrCase(_Err),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_variant == 0) { value = new OkCase(_Ok); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_variant == 1) { value = new ErrCase(_Err); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
+    }
+
+
     /// <summary>
     /// Private so that <c>new ResultServiceIgnoringMethodsError()</c> cannot produce a variant-zero instance from
     /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
@@ -12771,6 +13588,47 @@ public partial class ResultServiceMainError : IResult<IntPtr, Error>, IDisposabl
         if (_variant == 2) return new EnumException();
         if (_variant == 3) return new EnumException();
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
+    }
+
+
+    // Union members
+    public bool HasValue => true;
+
+    public object? Value => _variant switch
+    {
+        0 => new OkCase(_Ok),
+        1 => new ErrCase(_Err),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_variant == 0) { value = new OkCase(_Ok); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_variant == 1) { value = new ErrCase(_Err); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
     }
 
 
@@ -12971,6 +13829,47 @@ public partial class ResultServiceMultipleCtorsError : IResult<IntPtr, Error>, I
     }
 
 
+    // Union members
+    public bool HasValue => true;
+
+    public object? Value => _variant switch
+    {
+        0 => new OkCase(_Ok),
+        1 => new ErrCase(_Err),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_variant == 0) { value = new OkCase(_Ok); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_variant == 1) { value = new ErrCase(_Err); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
+    }
+
+
     /// <summary>
     /// Private so that <c>new ResultServiceMultipleCtorsError()</c> cannot produce a variant-zero instance from
     /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
@@ -13165,6 +14064,47 @@ public partial class ResultServiceResultError : IResult<IntPtr, Error>, IDisposa
         if (_variant == 2) return new EnumException();
         if (_variant == 3) return new EnumException();
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
+    }
+
+
+    // Union members
+    public bool HasValue => true;
+
+    public object? Value => _variant switch
+    {
+        0 => new OkCase(_Ok),
+        1 => new ErrCase(_Err),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_variant == 0) { value = new OkCase(_Ok); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_variant == 1) { value = new ErrCase(_Err); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
     }
 
 
@@ -13365,6 +14305,47 @@ public partial class ResultServiceStringsError : IResult<IntPtr, Error>, IDispos
     }
 
 
+    // Union members
+    public bool HasValue => true;
+
+    public object? Value => _variant switch
+    {
+        0 => new OkCase(_Ok),
+        1 => new ErrCase(_Err),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_variant == 0) { value = new OkCase(_Ok); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_variant == 1) { value = new ErrCase(_Err); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
+    }
+
+
     /// <summary>
     /// Private so that <c>new ResultServiceStringsError()</c> cannot produce a variant-zero instance from
     /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
@@ -13562,6 +14543,47 @@ public partial class ResultServiceVariousSlicesError : IResult<IntPtr, Error>, I
     }
 
 
+    // Union members
+    public bool HasValue => true;
+
+    public object? Value => _variant switch
+    {
+        0 => new OkCase(_Ok),
+        1 => new ErrCase(_Err),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_variant == 0) { value = new OkCase(_Ok); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_variant == 1) { value = new ErrCase(_Err); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
+    }
+
+
     /// <summary>
     /// Private so that <c>new ResultServiceVariousSlicesError()</c> cannot produce a variant-zero instance from
     /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
@@ -13756,6 +14778,47 @@ public partial class ResultUseStringError : IResult<UseString, Error>, IDisposab
         if (_variant == 2) return new EnumException();
         if (_variant == 3) return new EnumException();
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
+    }
+
+
+    // Union members
+    public bool HasValue => true;
+
+    public object? Value => _variant switch
+    {
+        0 => new OkCase(_Ok),
+        1 => new ErrCase(_Err),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_variant == 0) { value = new OkCase(_Ok); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_variant == 1) { value = new ErrCase(_Err); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
     }
 
 
@@ -13957,6 +15020,47 @@ public partial class ResultUtf8StringError : IResult<Utf8String, Error>, IDispos
     }
 
 
+    // Union members
+    public bool HasValue => true;
+
+    public object? Value => _variant switch
+    {
+        0 => new OkCase(_Ok),
+        1 => new ErrCase(_Err),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_variant == 0) { value = new OkCase(_Ok); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_variant == 1) { value = new ErrCase(_Err); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
+    }
+
+
     /// <summary>
     /// Private so that <c>new ResultUtf8StringError()</c> cannot produce a variant-zero instance from
     /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
@@ -14152,6 +15256,47 @@ public partial class ResultVecUtf8StringError : IResult<VecUtf8String, Error>, I
         if (_variant == 2) return new EnumException();
         if (_variant == 3) return new EnumException();
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
+    }
+
+
+    // Union members
+    public bool HasValue => true;
+
+    public object? Value => _variant switch
+    {
+        0 => new OkCase(_Ok),
+        1 => new ErrCase(_Err),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_variant == 0) { value = new OkCase(_Ok); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_variant == 1) { value = new ErrCase(_Err); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
     }
 
 
@@ -14353,6 +15498,47 @@ public partial class ResultWireOfHashMapStringStringError : IResult<WireOfHashMa
     }
 
 
+    // Union members
+    public bool HasValue => true;
+
+    public object? Value => _variant switch
+    {
+        0 => new OkCase(_Ok),
+        1 => new ErrCase(_Err),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_variant == 0) { value = new OkCase(_Ok); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_variant == 1) { value = new ErrCase(_Err); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
+    }
+
+
     /// <summary>
     /// Private so that <c>new ResultWireOfHashMapStringStringError()</c> cannot produce a variant-zero instance from
     /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
@@ -14503,6 +15689,7 @@ public partial struct ResultNestedArrayError : IResult<NestedArray, Error>
         {
             var _managed = new ResultNestedArrayError();
             _managed._variant = _variant;
+            _managed._hasValue = true;
             if (_variant == 0) _managed._Ok = _Ok._Ok.ToManaged();
             if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
             return _managed;
@@ -14547,11 +15734,52 @@ public partial struct ResultNestedArrayError : IResult<NestedArray, Error>
     }
 
 
+    // Union members
+    public bool HasValue => _hasValue;
+
+    public object? Value => !_hasValue ? null : _variant switch
+    {
+        0 => new OkCase(_Ok),
+        1 => new ErrCase(_Err),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_hasValue && _variant == 0) { value = new OkCase(_Ok); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_hasValue && _variant == 1) { value = new ErrCase(_Err); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_hasValue && _variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_hasValue && _variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
+    }
+
+
     // Ctors
-    public static ResultNestedArrayError Ok(NestedArray value) => new() { _variant = 0, _Ok = value };
-    public static ResultNestedArrayError Err(Error value) => new() { _variant = 1, _Err = value };
-    public static ResultNestedArrayError Panic => new() { _variant = 2 };
-    public static ResultNestedArrayError Null => new() { _variant = 3 };
+    public static ResultNestedArrayError Ok(NestedArray value) => new() { _variant = 0, _Ok = value, _hasValue = true };
+    public static ResultNestedArrayError Err(Error value) => new() { _variant = 1, _Err = value, _hasValue = true };
+    public static ResultNestedArrayError Panic => new() { _variant = 2, _hasValue = true };
+    public static ResultNestedArrayError Null => new() { _variant = 3, _hasValue = true };
 
     // Checks
     public bool IsOk => _variant == 0;
@@ -14684,6 +15912,7 @@ public partial struct ResultOptionEnumPayloadError : IResult<OptionEnumPayload, 
         {
             var _managed = new ResultOptionEnumPayloadError();
             _managed._variant = _variant;
+            _managed._hasValue = true;
             if (_variant == 0) _managed._Ok = _Ok._Ok.ToManaged();
             if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
             return _managed;
@@ -14728,11 +15957,52 @@ public partial struct ResultOptionEnumPayloadError : IResult<OptionEnumPayload, 
     }
 
 
+    // Union members
+    public bool HasValue => _hasValue;
+
+    public object? Value => !_hasValue ? null : _variant switch
+    {
+        0 => new OkCase(_Ok),
+        1 => new ErrCase(_Err),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_hasValue && _variant == 0) { value = new OkCase(_Ok); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_hasValue && _variant == 1) { value = new ErrCase(_Err); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_hasValue && _variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_hasValue && _variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
+    }
+
+
     // Ctors
-    public static ResultOptionEnumPayloadError Ok(OptionEnumPayload value) => new() { _variant = 0, _Ok = value };
-    public static ResultOptionEnumPayloadError Err(Error value) => new() { _variant = 1, _Err = value };
-    public static ResultOptionEnumPayloadError Panic => new() { _variant = 2 };
-    public static ResultOptionEnumPayloadError Null => new() { _variant = 3 };
+    public static ResultOptionEnumPayloadError Ok(OptionEnumPayload value) => new() { _variant = 0, _Ok = value, _hasValue = true };
+    public static ResultOptionEnumPayloadError Err(Error value) => new() { _variant = 1, _Err = value, _hasValue = true };
+    public static ResultOptionEnumPayloadError Panic => new() { _variant = 2, _hasValue = true };
+    public static ResultOptionEnumPayloadError Null => new() { _variant = 3, _hasValue = true };
 
     // Checks
     public bool IsOk => _variant == 0;
@@ -14865,6 +16135,7 @@ public partial struct ResultUintError : IResult<uint, Error>
         {
             var _managed = new ResultUintError();
             _managed._variant = _variant;
+            _managed._hasValue = true;
             if (_variant == 0) _managed._Ok = _Ok._Ok;
             if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
             return _managed;
@@ -14909,11 +16180,52 @@ public partial struct ResultUintError : IResult<uint, Error>
     }
 
 
+    // Union members
+    public bool HasValue => _hasValue;
+
+    public object? Value => !_hasValue ? null : _variant switch
+    {
+        0 => new OkCase(_Ok),
+        1 => new ErrCase(_Err),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_hasValue && _variant == 0) { value = new OkCase(_Ok); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_hasValue && _variant == 1) { value = new ErrCase(_Err); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_hasValue && _variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_hasValue && _variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
+    }
+
+
     // Ctors
-    public static ResultUintError Ok(uint value) => new() { _variant = 0, _Ok = value };
-    public static ResultUintError Err(Error value) => new() { _variant = 1, _Err = value };
-    public static ResultUintError Panic => new() { _variant = 2 };
-    public static ResultUintError Null => new() { _variant = 3 };
+    public static ResultUintError Ok(uint value) => new() { _variant = 0, _Ok = value, _hasValue = true };
+    public static ResultUintError Err(Error value) => new() { _variant = 1, _Err = value, _hasValue = true };
+    public static ResultUintError Panic => new() { _variant = 2, _hasValue = true };
+    public static ResultUintError Null => new() { _variant = 3, _hasValue = true };
 
     // Checks
     public bool IsOk => _variant == 0;
@@ -15046,6 +16358,7 @@ public partial struct ResultUlongError : IResult<ulong, Error>
         {
             var _managed = new ResultUlongError();
             _managed._variant = _variant;
+            _managed._hasValue = true;
             if (_variant == 0) _managed._Ok = _Ok._Ok;
             if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
             return _managed;
@@ -15090,11 +16403,52 @@ public partial struct ResultUlongError : IResult<ulong, Error>
     }
 
 
+    // Union members
+    public bool HasValue => _hasValue;
+
+    public object? Value => !_hasValue ? null : _variant switch
+    {
+        0 => new OkCase(_Ok),
+        1 => new ErrCase(_Err),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_hasValue && _variant == 0) { value = new OkCase(_Ok); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_hasValue && _variant == 1) { value = new ErrCase(_Err); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_hasValue && _variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_hasValue && _variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
+    }
+
+
     // Ctors
-    public static ResultUlongError Ok(ulong value) => new() { _variant = 0, _Ok = value };
-    public static ResultUlongError Err(Error value) => new() { _variant = 1, _Err = value };
-    public static ResultUlongError Panic => new() { _variant = 2 };
-    public static ResultUlongError Null => new() { _variant = 3 };
+    public static ResultUlongError Ok(ulong value) => new() { _variant = 0, _Ok = value, _hasValue = true };
+    public static ResultUlongError Err(Error value) => new() { _variant = 1, _Err = value, _hasValue = true };
+    public static ResultUlongError Panic => new() { _variant = 2, _hasValue = true };
+    public static ResultUlongError Null => new() { _variant = 3, _hasValue = true };
 
     // Checks
     public bool IsOk => _variant == 0;
@@ -15215,6 +16569,7 @@ public partial struct ResultVoidError : IResult<Unit, Error>
         {
             var _managed = new ResultVoidError();
             _managed._variant = _variant;
+            _managed._hasValue = true;
             if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
             return _managed;
         }
@@ -15256,11 +16611,52 @@ public partial struct ResultVoidError : IResult<Unit, Error>
     }
 
 
+    // Union members
+    public bool HasValue => _hasValue;
+
+    public object? Value => !_hasValue ? null : _variant switch
+    {
+        0 => new OkCase(),
+        1 => new ErrCase(_Err),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_hasValue && _variant == 0) { value = new OkCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_hasValue && _variant == 1) { value = new ErrCase(_Err); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_hasValue && _variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_hasValue && _variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
+    }
+
+
     // Ctors
-    public static ResultVoidError Ok => new() { _variant = 0 };
-    public static ResultVoidError Err(Error value) => new() { _variant = 1, _Err = value };
-    public static ResultVoidError Panic => new() { _variant = 2 };
-    public static ResultVoidError Null => new() { _variant = 3 };
+    public static ResultVoidError Ok => new() { _variant = 0, _hasValue = true };
+    public static ResultVoidError Err(Error value) => new() { _variant = 1, _Err = value, _hasValue = true };
+    public static ResultVoidError Panic => new() { _variant = 2, _hasValue = true };
+    public static ResultVoidError Null => new() { _variant = 3, _hasValue = true };
 
     // Checks
     public bool IsOk => _variant == 0;
@@ -15345,7 +16741,6 @@ public partial struct ResultVoidError : IResult<Unit, Error>
 public partial struct EnumNegative
 {
     sbyte _variant;
-    bool _hasValue;
 }
 
 
@@ -15401,7 +16796,6 @@ public partial struct EnumNegative
         if (_variant == 1) return new EnumException();
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
     }
-
 
     // Ctors
     public static EnumNegative A => new() { _variant = -1 };
@@ -15518,6 +16912,7 @@ public partial struct EnumNum
         {
             var _managed = new EnumNum();
             _managed._variant = _variant;
+            _managed._hasValue = true;
             if (_variant == 0) _managed._A = _A._A;
             if (_variant == 2) _managed._C = _C._C;
             return _managed;
@@ -15561,10 +16956,43 @@ public partial struct EnumNum
     }
 
 
+    // Union members
+    public bool HasValue => _hasValue;
+
+    public object? Value => !_hasValue ? null : _variant switch
+    {
+        0 => new ACase(_A),
+        1 => new BCase(),
+        2 => new CCase(_C),
+        _ => null,
+    };
+
+    public bool TryGetValue(out ACase value)
+    {
+        if (_hasValue && _variant == 0) { value = new ACase(_A); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out BCase value)
+    {
+        if (_hasValue && _variant == 1) { value = new BCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out CCase value)
+    {
+        if (_hasValue && _variant == 2) { value = new CCase(_C); return true; }
+        value = default;
+        return false;
+    }
+
+
     // Ctors
-    public static EnumNum A(nuint value) => new() { _variant = 0, _A = value };
-    public static EnumNum B => new() { _variant = 1 };
-    public static EnumNum C(nint value) => new() { _variant = 2, _C = value };
+    public static EnumNum A(nuint value) => new() { _variant = 0, _A = value, _hasValue = true };
+    public static EnumNum B => new() { _variant = 1, _hasValue = true };
+    public static EnumNum C(nint value) => new() { _variant = 2, _C = value, _hasValue = true };
 
     // Checks
     public bool IsA => _variant == 0;
@@ -15676,6 +17104,7 @@ public partial struct EnumPayload
         {
             var _managed = new EnumPayload();
             _managed._variant = _variant;
+            _managed._hasValue = true;
             if (_variant == 1) _managed._B = _B._B.ToManaged();
             if (_variant == 2) _managed._C = _C._C;
             return _managed;
@@ -15719,10 +17148,43 @@ public partial struct EnumPayload
     }
 
 
+    // Union members
+    public bool HasValue => _hasValue;
+
+    public object? Value => !_hasValue ? null : _variant switch
+    {
+        0 => new ACase(),
+        1 => new BCase(_B),
+        2 => new CCase(_C),
+        _ => null,
+    };
+
+    public bool TryGetValue(out ACase value)
+    {
+        if (_hasValue && _variant == 0) { value = new ACase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out BCase value)
+    {
+        if (_hasValue && _variant == 1) { value = new BCase(_B); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out CCase value)
+    {
+        if (_hasValue && _variant == 2) { value = new CCase(_C); return true; }
+        value = default;
+        return false;
+    }
+
+
     // Ctors
-    public static EnumPayload A => new() { _variant = 0 };
-    public static EnumPayload B(Vec3f32 value) => new() { _variant = 1, _B = value };
-    public static EnumPayload C(uint value) => new() { _variant = 2, _C = value };
+    public static EnumPayload A => new() { _variant = 0, _hasValue = true };
+    public static EnumPayload B(Vec3f32 value) => new() { _variant = 1, _B = value, _hasValue = true };
+    public static EnumPayload C(uint value) => new() { _variant = 2, _C = value, _hasValue = true };
 
     // Checks
     public bool IsA => _variant == 0;
@@ -15783,7 +17245,6 @@ public partial struct EnumPayload
 public partial struct EnumRenamed
 {
     byte _variant;
-    bool _hasValue;
 }
 
 
@@ -15837,7 +17298,6 @@ public partial struct EnumRenamed
         if (_variant == 0) return new EnumException();
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
     }
-
 
     // Ctors
     public static EnumRenamed X => new() { _variant = 0 };
@@ -15895,7 +17355,6 @@ public partial struct EnumRenamed
 public partial struct Error
 {
     byte _variant;
-    bool _hasValue;
 }
 
 
@@ -15949,7 +17408,6 @@ public partial struct Error
         if (_variant == 0) return new EnumException();
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
     }
-
 
     // Ctors
     public static Error Fail => new() { _variant = 0 };
@@ -16007,7 +17465,6 @@ public partial struct Error
 public partial struct MyEnum
 {
     byte _variant;
-    bool _hasValue;
 }
 
 
@@ -16063,7 +17520,6 @@ public partial struct MyEnum
         if (_variant == 2) return new EnumException();
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
     }
-
 
     // Ctors
     public static MyEnum A => new() { _variant = 0 };

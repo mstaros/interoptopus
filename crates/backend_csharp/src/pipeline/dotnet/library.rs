@@ -72,6 +72,7 @@ pub struct DotnetLibraryConfig {
     pub output_service_types: output::dotnet::services::proxy::Config,
     pub output_enum_ty: output::common::types::enums::definition::Config,
     pub output_enum_body_case_types: output::common::types::enums::body_case_types::Config,
+    pub output_enum_body_union_members: output::common::types::enums::body_union_members::Config,
     pub output_enum_body_unmanaged_variant: output::common::types::enums::body_unmanaged_variant::Config,
     pub output_enum_body_unmanaged: output::common::types::enums::body_unmanaged::Config,
     pub output_enum_body_to_unmanaged: output::common::types::enums::body_to_unmanaged::Config,
@@ -160,6 +161,7 @@ pub struct IntermediateOutputPasses {
     pub service_proxy: output::dotnet::services::proxy::Pass,
     pub enum_ty: output::common::types::enums::definition::Pass,
     pub enum_body_case_types: output::common::types::enums::body_case_types::Pass,
+    pub enum_body_union_members: output::common::types::enums::body_union_members::Pass,
     pub enum_body_unmanaged_variant: output::common::types::enums::body_unmanaged_variant::Pass,
     pub enum_body_unmanaged: output::common::types::enums::body_unmanaged::Pass,
     pub enum_body_to_unmanaged: output::common::types::enums::body_to_unmanaged::Pass,
@@ -274,6 +276,7 @@ impl DotnetLibrary {
                 service_proxy: output::dotnet::services::proxy::Pass::new(config.output_service_types),
                 enum_ty: output::common::types::enums::definition::Pass::new(config.output_enum_ty),
                 enum_body_case_types: output::common::types::enums::body_case_types::Pass::new(config.output_enum_body_case_types),
+                enum_body_union_members: output::common::types::enums::body_union_members::Pass::new(config.output_enum_body_union_members),
                 enum_body_unmanaged_variant: output::common::types::enums::body_unmanaged_variant::Pass::new(config.output_enum_body_unmanaged_variant),
                 enum_body_unmanaged: output::common::types::enums::body_unmanaged::Pass::new(config.output_enum_body_unmanaged),
                 enum_body_to_unmanaged: output::common::types::enums::body_to_unmanaged::Pass::new(config.output_enum_body_to_unmanaged),
@@ -362,15 +365,16 @@ impl DotnetLibrary {
         o.service_proxy.process(&mut pass_meta, &self.output_master, &m.type_all)?;
         o.enum_ty.process(&mut pass_meta, &self.output_master, &m.type_all, &m.type_struct_class, &m.type_disposable, OperationMode::Plugin)?;
         o.enum_body_case_types.process(&mut pass_meta, &self.output_master, &m.type_all, OperationMode::Plugin)?;
+        o.enum_body_union_members.process(&mut pass_meta, &self.output_master, &m.type_all, &m.type_struct_class)?;
         o.enum_body_unmanaged_variant.process(&mut pass_meta, &self.output_master, &m.type_all, &o.unmanaged_names, OperationMode::Plugin)?;
-        o.enum_body_unmanaged.process(&mut pass_meta, &self.output_master, &m.type_all, &o.unmanaged_conversion, OperationMode::Plugin)?;
+        o.enum_body_unmanaged.process(&mut pass_meta, &self.output_master, &m.type_all, &o.unmanaged_conversion, &m.type_struct_class, OperationMode::Plugin)?;
         o.enum_body_to_unmanaged.process(&mut pass_meta, &self.output_master, &m.type_all, &o.unmanaged_conversion, OperationMode::Plugin)?;
         o.enum_body_as_unmanaged.process(&mut pass_meta, &self.output_master, &m.type_all, &o.unmanaged_conversion, OperationMode::Plugin)?;
-        o.enum_body_ctors.process(&mut pass_meta, &self.output_master, &m.type_all, OperationMode::Plugin)?;
+        o.enum_body_ctors.process(&mut pass_meta, &self.output_master, &m.type_all, &m.type_struct_class, OperationMode::Plugin)?;
         o.enum_body_from_call.process(&mut pass_meta, &self.output_master, &m.type_all, &m.id_maps, &m.exceptions, OperationMode::Plugin)?;
         o.enum_body_exception_for_variant.process(&mut pass_meta, &self.output_master, &m.type_all, OperationMode::Plugin)?;
         o.enum_body_tostring.process(&mut pass_meta, &self.output_master, &m.type_all)?;
-        o.enum_body.process(&mut pass_meta, &self.output_master, &m.type_all, &m.type_struct_class, &m.type_disposable, &o.enum_body_case_types, &o.enum_body_unmanaged_variant, &o.enum_body_unmanaged, &o.enum_body_to_unmanaged, &o.enum_body_as_unmanaged, &o.enum_body_ctors, &o.enum_body_from_call, &o.enum_body_exception_for_variant, &o.enum_body_tostring, &o.unmanaged_conversion, OperationMode::Plugin)?;
+        o.enum_body.process(&mut pass_meta, &self.output_master, &m.type_all, &m.type_struct_class, &m.type_disposable, &o.enum_body_case_types, &o.enum_body_union_members, &o.enum_body_unmanaged_variant, &o.enum_body_unmanaged, &o.enum_body_to_unmanaged, &o.enum_body_as_unmanaged, &o.enum_body_ctors, &o.enum_body_from_call, &o.enum_body_exception_for_variant, &o.enum_body_tostring, &o.unmanaged_conversion, OperationMode::Plugin)?;
         o.enums.process(&mut pass_meta, &self.output_master, &m.type_all, &o.enum_ty, &o.enum_body)?;
         o.util.process(&mut pass_meta, &self.output_master, &m.type_all)?;
         o.delegates_class.process(&mut pass_meta, &self.output_master, &m.type_all, &o.unmanaged_names, &o.unmanaged_conversion)?;

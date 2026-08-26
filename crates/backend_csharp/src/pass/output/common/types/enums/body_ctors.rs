@@ -26,6 +26,7 @@ impl Pass {
         _pass_meta: &mut crate::pass::PassMeta,
         output_master: &output::common::master::Pass,
         types: &model::common::types::all::Pass,
+        struct_class: &model::common::types::info::struct_class::Pass,
         mode: crate::pass::OperationMode,
     ) -> OutputResult {
         let templates = output_master.templates();
@@ -62,7 +63,14 @@ impl Pass {
                 })
                 .collect();
 
+            // `_hasValue` exists only on struct-backed, union-projected enums; see
+            // `definition.cs`. A factory produces a well-formed value, so it is the primary
+            // place the flag is set. Without this write the flag stays `false` and `Value`
+            // would report `null` for every value the consumer constructs.
+            let writes_has_value = struct_class.is_struct(*type_id) && data_enum.variants.iter().any(|v| v.can_carry_payload);
+
             let mut context = Context::new();
+            context.insert("writes_has_value", &writes_has_value);
             context.insert("name", name);
             context.insert("variants", &variants);
 

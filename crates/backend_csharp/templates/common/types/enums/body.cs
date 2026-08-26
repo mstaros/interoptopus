@@ -18,6 +18,10 @@
     {{ as_unmanaged | indent }}
 {% endif %}
     {{ exception_for_variant | indent }}
+{%- if union_members %}
+
+    {{ union_members | indent }}
+{% endif -%}
 {% if struct_or_class == "class" %}
     /// <summary>
     /// Private so that <c>new {{ name }}()</c> cannot produce a variant-zero instance from

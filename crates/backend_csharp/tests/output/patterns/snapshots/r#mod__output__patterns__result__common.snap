@@ -99,6 +99,7 @@ public partial struct ResultUintVoid : IResult<uint, Unit>
         {
             var _managed = new ResultUintVoid();
             _managed._variant = _variant;
+            _managed._hasValue = true;
             if (_variant == 0) _managed._Ok = _Ok._Ok;
             return _managed;
         }
@@ -140,11 +141,52 @@ public partial struct ResultUintVoid : IResult<uint, Unit>
     }
 
 
+    // Union members
+    public bool HasValue => _hasValue;
+
+    public object? Value => !_hasValue ? null : _variant switch
+    {
+        0 => new OkCase(_Ok),
+        1 => new ErrCase(),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_hasValue && _variant == 0) { value = new OkCase(_Ok); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_hasValue && _variant == 1) { value = new ErrCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_hasValue && _variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_hasValue && _variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
+    }
+
+
     // Ctors
-    public static ResultUintVoid Ok(uint value) => new() { _variant = 0, _Ok = value };
-    public static ResultUintVoid Err => new() { _variant = 1 };
-    public static ResultUintVoid Panic => new() { _variant = 2 };
-    public static ResultUintVoid Null => new() { _variant = 3 };
+    public static ResultUintVoid Ok(uint value) => new() { _variant = 0, _Ok = value, _hasValue = true };
+    public static ResultUintVoid Err => new() { _variant = 1, _hasValue = true };
+    public static ResultUintVoid Panic => new() { _variant = 2, _hasValue = true };
+    public static ResultUintVoid Null => new() { _variant = 3, _hasValue = true };
 
     // Checks
     public bool IsOk => _variant == 0;

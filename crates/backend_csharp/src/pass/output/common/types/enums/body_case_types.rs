@@ -59,7 +59,7 @@ impl Pass {
             // union gives every variant a case type, unit variants included — an empty
             // case type is what keeps a mixed enum exhaustive in the compiler-checked
             // layer, and folding unit variants together was considered and dropped.
-            if !data_enum.variants.iter().any(|v| v.ty.is_some()) {
+            if !data_enum.variants.iter().any(|v| v.can_carry_payload) {
                 continue;
             }
 

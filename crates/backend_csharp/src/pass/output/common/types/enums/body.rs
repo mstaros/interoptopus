@@ -28,6 +28,7 @@ impl Pass {
         struct_class: &model::common::types::info::struct_class::Pass,
         disposable: &model::common::types::info::disposable::Pass,
         enum_body_case_types: &output::common::types::enums::body_case_types::Pass,
+        enum_body_union_members: &output::common::types::enums::body_union_members::Pass,
         enum_body_unmanaged_variant: &output::common::types::enums::body_unmanaged_variant::Pass,
         enum_body_unmanaged: &output::common::types::enums::body_unmanaged::Pass,
         enum_body_to_unmanaged: &output::common::types::enums::body_to_unmanaged::Pass,
@@ -85,6 +86,7 @@ impl Pass {
             };
 
             let case_types = enum_body_case_types.get(*type_id).unwrap_or(&[]);
+            let union_members = enum_body_union_members.get(*type_id).map_or("", std::string::String::as_str);
             let unmanaged_variants = enum_body_unmanaged_variant.get(*type_id).unwrap_or(&[]);
             let unmanaged = enum_body_unmanaged.get(*type_id).map_or("", std::string::String::as_str);
             let to_unmanaged = enum_body_to_unmanaged.get(*type_id).map_or("", std::string::String::as_str);
@@ -134,6 +136,7 @@ impl Pass {
             context.insert("result_has_unit_methods", &result_interface.as_ref().is_some_and(|r| r.ok_is_unit || r.err_is_unit));
             context.insert("disposable_variants", &disposable_variants);
             context.insert("case_types", &case_types);
+            context.insert("union_members", &union_members);
             context.insert("unmanaged_variants", &unmanaged_variants);
             context.insert("unmanaged", &unmanaged);
             context.insert("to_unmanaged", &to_unmanaged);

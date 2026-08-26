@@ -812,6 +812,47 @@ public partial class ResultNestedAError : IResult<NestedA, Error>, IDisposable
     }
 
 
+    // Union members
+    public bool HasValue => true;
+
+    public object? Value => _variant switch
+    {
+        0 => new OkCase(_Ok),
+        1 => new ErrCase(_Err),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_variant == 0) { value = new OkCase(_Ok); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_variant == 1) { value = new ErrCase(_Err); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
+    }
+
+
     /// <summary>
     /// Private so that <c>new ResultNestedAError()</c> cannot produce a variant-zero instance from
     /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
@@ -925,7 +966,6 @@ public partial class ResultNestedAError : IResult<NestedA, Error>, IDisposable
 public partial struct Error
 {
     byte _variant;
-    bool _hasValue;
 }
 
 
@@ -979,7 +1019,6 @@ public partial struct Error
         if (_variant == 0) return new EnumException();
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
     }
-
 
     // Ctors
     public static Error Fail => new() { _variant = 0 };

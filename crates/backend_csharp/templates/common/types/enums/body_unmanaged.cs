@@ -15,6 +15,9 @@ internal unsafe struct Unmanaged
     {
         var _managed = new {{ name }}();
         _managed._variant = _variant;
+        {%- if writes_has_value %}
+        _managed._hasValue = true;
+        {%- endif %}
         {%- for v in variants %}
         if (_variant == {{ v.id }}) _managed._{{ v.name }} = _{{ v.name }}._{{ v.name }}{{ v.to_managed }};
         {%- endfor %}

@@ -57,7 +57,6 @@ public static partial class Interop {
 public partial struct Color
 {
     byte _variant;
-    bool _hasValue;
 }
 
 
@@ -113,7 +112,6 @@ public partial struct Color
         if (_variant == 2) return new EnumException();
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
     }
-
 
     // Ctors
     public static Color Red => new() { _variant = 0 };

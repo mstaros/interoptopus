@@ -55,7 +55,19 @@ impl Pass {
                     }
                 };
 
-                cs_variants.push(Variant { name: rust_variant.name.clone(), docs: rust_variant.docs.clone(), tag, ty: cs_variant_type_id, stem: String::new(), case_type: String::new() });
+                // Asks whether the *declaration* has a payload slot, not whether it resolved to one.
+                // A `Tuple(())` variant is payload-capable even though its C# payload is absent.
+                let can_carry_payload = matches!(rust_variant.kind, lang::types::VariantKind::Tuple(_));
+
+                cs_variants.push(Variant {
+                    name: rust_variant.name.clone(),
+                    docs: rust_variant.docs.clone(),
+                    tag,
+                    ty: cs_variant_type_id,
+                    can_carry_payload,
+                    stem: String::new(),
+                    case_type: String::new(),
+                });
             }
 
             if !all_variants_available {

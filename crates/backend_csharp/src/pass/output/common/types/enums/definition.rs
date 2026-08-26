@@ -51,6 +51,13 @@ impl Pass {
 
             let ty = *type_id;
             let is_struct = struct_class.is_struct(ty);
+
+            // Same eligibility rule as 3b (`docs/csharp-unions.md` "Two layers, two rules"):
+            // a `DataEnum` with no payload-carrying variant receives no union machinery, and
+            // `_hasValue` is union machinery. Without this the field would be emitted on
+            // unit-only enums where nothing reads it, which is CS0169 — see `Issues.md`
+            // `8f4c1e2a`, where six of the nineteen were exactly that.
+            let is_union_projected = data_enum.variants.iter().any(|v| v.can_carry_payload);
             let struct_or_class = if is_struct { "struct" } else { "class" };
 
             let variants: Vec<HashMap<&str, String>> = data_enum
@@ -74,6 +81,7 @@ impl Pass {
             context.insert("is_disposable", &is_disposable);
             context.insert("visibility", &visibility);
             context.insert("is_struct", &is_struct);
+            context.insert("is_union_projected", &is_union_projected);
             context.insert("discriminant_type", data_enum.discriminant_type.cs_name());
 
             let rendered = templates.render("common/types/enums/definition.cs", &context)?;

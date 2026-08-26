@@ -80,17 +80,17 @@ impl Pass {
                 }
                 lang::types::TypePattern::Option(rust_ty) => {
                     let Some(payload) = resolve_payload(*rust_ty, id_map) else { continue };
-                    TypeKind::DataEnum(DataEnum { variants: vec![variant("Some", 0, payload), variant("None", 1, None)], discriminant_type: Primitive::UInt })
+                    TypeKind::DataEnum(DataEnum { variants: vec![payload_variant("Some", 0, payload), unit_variant("None", 1)], discriminant_type: Primitive::UInt })
                 }
                 lang::types::TypePattern::Result(rust_ok, rust_err) => {
                     let Some(ok_payload) = resolve_payload(*rust_ok, id_map) else { continue };
                     let Some(err_payload) = resolve_payload(*rust_err, id_map) else { continue };
                     TypeKind::DataEnum(DataEnum {
                         variants: vec![
-                            variant("Ok", 0, ok_payload),
-                            variant("Err", 1, err_payload),
-                            variant("Panic", 2, None),
-                            variant("Null", 3, None),
+                            payload_variant("Ok", 0, ok_payload),
+                            payload_variant("Err", 1, err_payload),
+                            unit_variant("Panic", 2),
+                            unit_variant("Null", 3),
                         ],
                         discriminant_type: Primitive::UInt,
                     })
@@ -140,8 +140,18 @@ fn field(name: &str, ty: TypeId) -> Field {
     Field { name: name.to_string(), docs: Docs::default(), visibility: Visibility::Public, ty }
 }
 
-fn variant(name: &str, tag: isize, ty: Option<TypeId>) -> Variant {
-    Variant { name: name.to_string(), docs: Docs::default(), tag, ty, stem: String::new(), case_type: String::new() }
+/// A synthesised variant whose declaration has a payload slot.
+///
+/// `can_carry_payload` is `true` even when `ty` is `None`, because `resolve_payload` maps a `()`
+/// payload to `None`. `Result<(), ()>` still declares `Ok(T)`/`Err(E)`; erasing that would make
+/// it indistinguishable from a unit-only enum and strip its union projection.
+fn payload_variant(name: &str, tag: isize, ty: Option<TypeId>) -> Variant {
+    Variant { name: name.to_string(), docs: Docs::default(), tag, ty, can_carry_payload: true, stem: String::new(), case_type: String::new() }
+}
+
+/// A synthesised variant with no payload slot at all — `None`, `Panic`, `Null`.
+fn unit_variant(name: &str, tag: isize) -> Variant {
+    Variant { name: name.to_string(), docs: Docs::default(), tag, ty: None, can_carry_payload: false, stem: String::new(), case_type: String::new() }
 }
 
 /// Resolves a Rust type to an optional C# variant payload.

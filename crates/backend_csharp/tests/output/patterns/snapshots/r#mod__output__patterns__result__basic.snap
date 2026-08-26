@@ -129,6 +129,7 @@ public partial struct ResultUintError : IResult<uint, Error>
         {
             var _managed = new ResultUintError();
             _managed._variant = _variant;
+            _managed._hasValue = true;
             if (_variant == 0) _managed._Ok = _Ok._Ok;
             if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
             return _managed;
@@ -173,11 +174,52 @@ public partial struct ResultUintError : IResult<uint, Error>
     }
 
 
+    // Union members
+    public bool HasValue => _hasValue;
+
+    public object? Value => !_hasValue ? null : _variant switch
+    {
+        0 => new OkCase(_Ok),
+        1 => new ErrCase(_Err),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_hasValue && _variant == 0) { value = new OkCase(_Ok); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_hasValue && _variant == 1) { value = new ErrCase(_Err); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_hasValue && _variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_hasValue && _variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
+    }
+
+
     // Ctors
-    public static ResultUintError Ok(uint value) => new() { _variant = 0, _Ok = value };
-    public static ResultUintError Err(Error value) => new() { _variant = 1, _Err = value };
-    public static ResultUintError Panic => new() { _variant = 2 };
-    public static ResultUintError Null => new() { _variant = 3 };
+    public static ResultUintError Ok(uint value) => new() { _variant = 0, _Ok = value, _hasValue = true };
+    public static ResultUintError Err(Error value) => new() { _variant = 1, _Err = value, _hasValue = true };
+    public static ResultUintError Panic => new() { _variant = 2, _hasValue = true };
+    public static ResultUintError Null => new() { _variant = 3, _hasValue = true };
 
     // Checks
     public bool IsOk => _variant == 0;
@@ -298,6 +340,7 @@ public partial struct ResultVoidError : IResult<Unit, Error>
         {
             var _managed = new ResultVoidError();
             _managed._variant = _variant;
+            _managed._hasValue = true;
             if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
             return _managed;
         }
@@ -339,11 +382,52 @@ public partial struct ResultVoidError : IResult<Unit, Error>
     }
 
 
+    // Union members
+    public bool HasValue => _hasValue;
+
+    public object? Value => !_hasValue ? null : _variant switch
+    {
+        0 => new OkCase(),
+        1 => new ErrCase(_Err),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_hasValue && _variant == 0) { value = new OkCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_hasValue && _variant == 1) { value = new ErrCase(_Err); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_hasValue && _variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_hasValue && _variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
+    }
+
+
     // Ctors
-    public static ResultVoidError Ok => new() { _variant = 0 };
-    public static ResultVoidError Err(Error value) => new() { _variant = 1, _Err = value };
-    public static ResultVoidError Panic => new() { _variant = 2 };
-    public static ResultVoidError Null => new() { _variant = 3 };
+    public static ResultVoidError Ok => new() { _variant = 0, _hasValue = true };
+    public static ResultVoidError Err(Error value) => new() { _variant = 1, _Err = value, _hasValue = true };
+    public static ResultVoidError Panic => new() { _variant = 2, _hasValue = true };
+    public static ResultVoidError Null => new() { _variant = 3, _hasValue = true };
 
     // Checks
     public bool IsOk => _variant == 0;
@@ -428,7 +512,6 @@ public partial struct ResultVoidError : IResult<Unit, Error>
 public partial struct Error
 {
     byte _variant;
-    bool _hasValue;
 }
 
 
@@ -482,7 +565,6 @@ public partial struct Error
         if (_variant == 0) return new EnumException();
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
     }
-
 
     // Ctors
     public static Error Fail => new() { _variant = 0 };

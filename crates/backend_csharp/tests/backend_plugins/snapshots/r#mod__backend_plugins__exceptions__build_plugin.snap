@@ -249,6 +249,47 @@ public partial class ResultNestedADotnetException : IResult<NestedA, DotnetExcep
     }
 
 
+    // Union members
+    public bool HasValue => true;
+
+    public object? Value => _variant switch
+    {
+        0 => new OkCase(_Ok),
+        1 => new ErrCase(_Err),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_variant == 0) { value = new OkCase(_Ok); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_variant == 1) { value = new ErrCase(_Err); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
+    }
+
+
     /// <summary>
     /// Private so that <c>new ResultNestedADotnetException()</c> cannot produce a variant-zero instance from
     /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
@@ -417,6 +458,7 @@ public partial struct ResultUintDotnetException : IResult<uint, DotnetException>
         {
             var _managed = new ResultUintDotnetException();
             _managed._variant = _variant;
+            _managed._hasValue = true;
             if (_variant == 0) _managed._Ok = _Ok._Ok;
             if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
             return _managed;
@@ -461,11 +503,52 @@ public partial struct ResultUintDotnetException : IResult<uint, DotnetException>
     }
 
 
+    // Union members
+    public bool HasValue => _hasValue;
+
+    public object? Value => !_hasValue ? null : _variant switch
+    {
+        0 => new OkCase(_Ok),
+        1 => new ErrCase(_Err),
+        2 => new PanicCase(),
+        3 => new NullCase(),
+        _ => null,
+    };
+
+    public bool TryGetValue(out OkCase value)
+    {
+        if (_hasValue && _variant == 0) { value = new OkCase(_Ok); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out ErrCase value)
+    {
+        if (_hasValue && _variant == 1) { value = new ErrCase(_Err); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out PanicCase value)
+    {
+        if (_hasValue && _variant == 2) { value = new PanicCase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out NullCase value)
+    {
+        if (_hasValue && _variant == 3) { value = new NullCase(); return true; }
+        value = default;
+        return false;
+    }
+
+
     // Ctors
-    public static ResultUintDotnetException Ok(uint value) => new() { _variant = 0, _Ok = value };
-    public static ResultUintDotnetException Err(DotnetException value) => new() { _variant = 1, _Err = value };
-    public static ResultUintDotnetException Panic => new() { _variant = 2 };
-    public static ResultUintDotnetException Null => new() { _variant = 3 };
+    public static ResultUintDotnetException Ok(uint value) => new() { _variant = 0, _Ok = value, _hasValue = true };
+    public static ResultUintDotnetException Err(DotnetException value) => new() { _variant = 1, _Err = value, _hasValue = true };
+    public static ResultUintDotnetException Panic => new() { _variant = 2, _hasValue = true };
+    public static ResultUintDotnetException Null => new() { _variant = 3, _hasValue = true };
 
     // Checks
     public bool IsOk => _variant == 0;

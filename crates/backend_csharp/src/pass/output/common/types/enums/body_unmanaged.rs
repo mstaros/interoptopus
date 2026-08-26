@@ -26,6 +26,7 @@ impl Pass {
         output_master: &output::common::master::Pass,
         types: &model::common::types::all::Pass,
         managed: &output::common::conversion::unmanaged_conversion::Pass,
+        struct_class: &model::common::types::info::struct_class::Pass,
         mode: crate::pass::OperationMode,
     ) -> OutputResult {
         let templates = output_master.templates();
@@ -58,7 +59,15 @@ impl Pass {
 
             let to_managed_method = managed.to_managed_name(*type_id);
 
+            // A value arriving from native is well-formed, so `ToManaged` must set the flag
+            // too — not only the factories. Item 4a replaces this whole method with a
+            // validated switch through case constructors, which establishes `_hasValue`
+            // implicitly; until then this is the write that keeps native-sourced values from
+            // reporting `Value == null`.
+            let writes_has_value = struct_class.is_struct(*type_id) && data_enum.variants.iter().any(|v| v.can_carry_payload);
+
             let mut context = Context::new();
+            context.insert("writes_has_value", &writes_has_value);
             context.insert("name", name);
             context.insert("to_managed_method", to_managed_method);
             context.insert("variants", &variants);

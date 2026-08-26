@@ -129,7 +129,7 @@ mod tests {
     use interoptopus::lang::meta::Docs;
 
     fn variant(name: &str, stem: &str, tag: isize) -> Variant {
-        Variant { name: name.to_string(), docs: Docs::default(), tag, ty: None, stem: stem.to_string(), case_type: String::new() }
+        Variant { name: name.to_string(), docs: Docs::default(), tag, ty: None, can_carry_payload: false, stem: stem.to_string(), case_type: String::new() }
     }
 
     fn data_enum_kind(variants: Vec<Variant>) -> TypeKind {

@@ -859,6 +859,7 @@ public partial struct EnumPayload
         {
             var _managed = new EnumPayload();
             _managed._variant = _variant;
+            _managed._hasValue = true;
             if (_variant == 1) _managed._B = _B._B.ToManaged();
             if (_variant == 2) _managed._C = _C._C;
             return _managed;
@@ -902,10 +903,43 @@ public partial struct EnumPayload
     }
 
 
+    // Union members
+    public bool HasValue => _hasValue;
+
+    public object? Value => !_hasValue ? null : _variant switch
+    {
+        0 => new ACase(),
+        1 => new BCase(_B),
+        2 => new CCase(_C),
+        _ => null,
+    };
+
+    public bool TryGetValue(out ACase value)
+    {
+        if (_hasValue && _variant == 0) { value = new ACase(); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out BCase value)
+    {
+        if (_hasValue && _variant == 1) { value = new BCase(_B); return true; }
+        value = default;
+        return false;
+    }
+
+    public bool TryGetValue(out CCase value)
+    {
+        if (_hasValue && _variant == 2) { value = new CCase(_C); return true; }
+        value = default;
+        return false;
+    }
+
+
     // Ctors
-    public static EnumPayload A => new() { _variant = 0 };
-    public static EnumPayload B(Vec3f32 value) => new() { _variant = 1, _B = value };
-    public static EnumPayload C(uint value) => new() { _variant = 2, _C = value };
+    public static EnumPayload A => new() { _variant = 0, _hasValue = true };
+    public static EnumPayload B(Vec3f32 value) => new() { _variant = 1, _B = value, _hasValue = true };
+    public static EnumPayload C(uint value) => new() { _variant = 2, _C = value, _hasValue = true };
 
     // Checks
     public bool IsA => _variant == 0;
@@ -966,7 +1000,6 @@ public partial struct EnumPayload
 public partial struct EnumRenamed
 {
     byte _variant;
-    bool _hasValue;
 }
 
 
@@ -1020,7 +1053,6 @@ public partial struct EnumRenamed
         if (_variant == 0) return new EnumException();
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
     }
-
 
     // Ctors
     public static EnumRenamed X => new() { _variant = 0 };

@@ -4,9 +4,9 @@
 {{ v.docs }}
 {%- endif %}
 {%- if v.has_payload %}
-public static {{ name }} {{ v.name }}({{ v.type }} value) => new() { _variant = {{ v.id }}, _{{ v.name }} = value };
+public static {{ name }} {{ v.name }}({{ v.type }} value) => new() { _variant = {{ v.id }}, _{{ v.name }} = value{% if writes_has_value %}, _hasValue = true{% endif %} };
 {%- else %}
-public static {{ name }} {{ v.name }} => new() { _variant = {{ v.id }} };
+public static {{ name }} {{ v.name }} => new() { _variant = {{ v.id }}{% if writes_has_value %}, _hasValue = true{% endif %} };
 {%- endif %}
 {%- endfor %}
 

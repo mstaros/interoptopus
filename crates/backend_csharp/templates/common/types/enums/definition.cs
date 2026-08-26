@@ -7,7 +7,7 @@
 {{ visibility }} partial {{ struct_or_class }} {{ name }}
 {
     {{ discriminant_type }} _variant;
-    {%- if is_struct %}
+    {%- if is_struct and is_union_projected %}
     bool _hasValue;
     {%- endif %}
     {%- for variant in variants %}
