@@ -45,7 +45,7 @@ Per CONTRIBUTING, this needs a reference-project test. Since the assertion is th
 id: ccb105a2
 kind: bug
 severity: low
-status: open
+status: closed
 ```
 
 ### Symptom
@@ -69,6 +69,26 @@ Filed upstream as `10b7b672` in `rust-mcp-transform`.
 ### Hazard
 
 The previous recommended action — `cargo insta review` — is destructive in that state. Accepting against stub baselines overwrites every LFS pointer with raw generated content, silently un-LFS-ing the snapshots. Before measuring this suite, confirm `crates/backend_csharp/tests/reference_project/snapshots/r#mod__reference_project__interop.snap` is ~847 KB and not three lines.
+
+### Resolution — closed, the test passes
+
+Measured 2026-08-26 on `master` at `318256c7`, in the real checkout, whole workspace:
+
+```
+cargo nextest run
+Summary [34.862s] 174 tests run: 174 passed, 3 skipped
+    PASS [1.431s] (134/174) interoptopus_csharp::mod reference_project::interop
+```
+
+Run twice (39.1s, 34.9s), identical result. `reference_project::interop` is neither failing nor
+skipped — it passes. The reference snapshot measured 858,865 bytes, so the stub condition this
+issue's Hazard warns about did not apply either.
+
+No `cargo insta review` was run to reach this state; the snapshot was already accepted at some
+point between this issue being filed and today, and the issue was simply never closed.
+
+**The Hazard note above is retained deliberately.** Checking the snapshot size before measuring
+the suite is cheap and still correct practice, even though the LFS cause is gone with `1383b84b`.
 ## Enum variant discriminants are not resolved per Rust's rules: explicit values don't advance the counter, and tuple variants fall back to the positional index
 
 ```issue

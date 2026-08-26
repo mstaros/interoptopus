@@ -9,7 +9,19 @@ done, what is next, and the things that cost time to discover.
 
 ## 1. State
 
-Committed on `master`, suite green (12 unit + 31 integration + doctests, 2 ignored):
+**Baseline, measured 2026-08-26 on `master` at `318256c7`:** `cargo nextest run` in the real
+checkout, whole workspace — **174 passed, 3 skipped, 0 failed**, across 38 binaries. Run twice
+(39.1s, 34.9s), identical. Reference snapshot 858,865 bytes.
+
+**Record the scope with the number.** Four different counts exist in this repo's history and none
+of the earlier three says what it covered: this section previously said "12 unit + 31 integration
++ doctests, 2 ignored"; the 2026-08-25 session handoff says 64 under nextest; `ccb105a2` says 33
+for `-p interoptopus_csharp`. They are not comparable, and the discrepancy between 64 and 174 is
+**unexplained** — it was not investigated, and the plausible causes (package-scoped run, a
+different filter, tests added since) were not distinguished. A bare pass count is not a baseline;
+the command and scope are what make it one.
+
+Earlier commits on `master`:
 
 | Commit | What |
 |---|---|
@@ -21,7 +33,8 @@ Committed on `master`, suite green (12 unit + 31 integration + doctests, 2 ignor
 | *(wiring commit)* | Pass wired into both pipelines |
 | `2bdbf054` | All nine name-deriving sites emit from `v.stem` |
 
-`Issues.md`: `09b82d44` closed. Open — `2a6da76a`, `ccb105a2`, `1383b84b`, `7c8cb22e`.
+`Issues.md`, as of `318256c7`. Open — `2a6da76a`, `4e9a17c3`, `7c8cb22e`, `79be256e`, `b4e07f12`,
+`5d1ae4c7`. Closed — `09b82d44`, `ccb105a2`, `1383b84b`, `31248473`, `c33b9cf5`, `e235bc7d`.
 
 Plan todo: items 0–0e and 1–1c done. **Item 3 is next.**
 
@@ -281,6 +294,13 @@ include it in the replacement, and its `expectedTransformedHash` is bound to the
 dry-ran — edit the text and you must dry-run again. Root aliases are **per server**: FileMcp's
 `$N` and the Rust editor's `$N` are different registries, so a transaction worktree alias from one
 cannot be resolved by the other.
+
+**PowerShell**: `2>&1` on a native command turns stderr into `ErrorRecord` objects, so `cargo`'s
+ordinary progress output renders in red with `NativeCommandError` and a `+ CategoryInfo` block —
+it looks exactly like a build failure and is not one. The first `Compiling` line takes the
+decoration and the build continues normally. It also pollutes any file you `Tee-Object` into. Use
+`cmd /c "cargo nextest run > out.txt 2>&1"` so the redirection happens outside the PowerShell
+pipeline, or `*>&1` if you must stay in it.
 
 **PowerShell**: use here-strings (`@'` … `'@`, delimiters alone on their line) for commit messages.
 Escaped quotes inside a double-quoted string terminate it early and scatter the message across
