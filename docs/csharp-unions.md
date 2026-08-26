@@ -359,8 +359,28 @@ Requires a .NET 11 Preview 5+ SDK for `UnionAttribute` / `IUnion`; verified agai
 stay `preview`, and the union spec still carries open questions that could move the emitted shape
 before then.
 
-Nothing yet verifies that `LangVersion=preview` is doing anything. The suite passing proves net11
-works; the preview gate is untested until Step 3 emits `[Union]`.
+**The preview gate is verified — measured 2026-08-26, ahead of Step 3.** A scratch project on
+preview 7, built twice against `LangVersion=preview` and `LangVersion=13`, with a manual `[Union]`
+struct carrying two nested `readonly record struct` case types, one public single-parameter
+constructor each, and a public `object? Value`:
+
+| Construct | `preview` | `13` |
+|---|---|---|
+| `[Union]` declaration, nested case types, constructors, `Value` | compiles | **compiles** |
+| Explicit `new Shape(new Shape.CircleCase(1.0))` | compiles | **compiles** |
+| Implicit `Shape s = new Shape.CircleCase(1.0)` | compiles | CS8652 |
+| `switch` over case types, no default arm | compiles, no CS8509 | CS8652 |
+
+CS8652 names the feature `unions` explicitly, so the gate is real and `LangVersion=preview` is
+load-bearing — but only for **use**, not for **declaration**.
+
+**Open, and it may narrow this section considerably.** The declaration shape and explicit
+construction are ordinary C# 13. Generated bindings construct through factories and, under item
+4a, through a validated switch of constructor calls — none of which is a conversion or a union
+pattern match. So it is possible that generated output needs no preview at all and the
+requirement falls entirely on consumer code that pattern matches. **Not yet established**: a
+second probe containing only emitted shapes is the way to settle it, and until then this section
+keeps the blanket requirement.
 
 ---
 
@@ -754,9 +774,14 @@ Multi-field and named variant support. Retiring `IsOk` / `AsOk`.
    non-null invalid instance and does not exercise null at marshal-out. A row asserting "null
    union at marshal-out throws the decided exception" is missing; it is not added here because
    numbering new rows is not this item's call.
-2. ~~**Case→enum conversion.**~~ **Closed — the compiler provides it.** *"An implicit union
-   conversion exists from each case type to the union type"*, and it *"works by calling the
-   corresponding generated constructor"*. Two sanctioned shapes, and we choose per type:
+2. ~~**Case→enum conversion.**~~ **Closed — the compiler provides it, and this is now confirmed by
+   compilation rather than by reading alone.** The spec says *"An implicit union conversion exists
+   from each case type to the union type"*, and it *"works by calling the corresponding generated
+   constructor"*. Measured 2026-08-26 on preview 7: `public static Shape FromCase() => new
+   Shape.CircleCase(1.0);` — a case-type expression where a union is expected, no cast — compiles
+   under `LangVersion=preview` and fails under `13` with CS8652 naming the feature `unions`. A
+   `switch` over the case types with **no default arm** compiled with no CS8509, so exhaustiveness
+   works as the projection assumes. See Step 2 §Toolchain for the full result table. Two sanctioned shapes, and we choose per type:
    the **basic union pattern** (a public constructor per case type, single by-value or `in`
    parameter, plus a public `object?` `Value`), or a **union member provider** (a nested
    `IUnionMembers` declaring static `Create` per case type) for types needing a private
