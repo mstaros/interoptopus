@@ -889,15 +889,32 @@ return _managed;
 
 The tag is copied blind. The only `InteropException("Illegal enum state detected")` is in `ExceptionForVariant()` and `ToString()` — the error-mapping and display paths, not marshalling. Validation is **item 4a, still open**. So switching to a plain enum forfeits nothing that exists today; it forfeits something planned.
 
-### The lever
+### The lever — DISPROVED, see `5d1ae4c7`
 
-`composites/body_unmanaged.rs` does **not** hardcode the mirror. Field types come from `unmanaged_names.name(f.ty)` and conversions from `managed.to_managed_suffix(f.ty)` — both passes. A containing struct asks the model rather than appending `.Unmanaged`. So if a unit-only enum reports "itself, no conversion", containing structs follow with no edit.
+This section originally reasoned that `managed_conversion` is the single lever: that
+`composites/body_unmanaged.rs` does not hardcode the mirror, that field types and conversions come
+from passes rather than string-appending `.Unmanaged`, and therefore that classifying a unit-only
+`DataEnum` as `AsIs` would make the downstream fall out.
 
-That points at `managed_conversion` as the single lever: `unmanaged_names`, `to_managed_suffix`, `struct_class::is_struct` and wire's `is_cs_value_type` all derive from it. Classify a unit-only `DataEnum` as `AsIs` and the downstream falls out.
+The first half is true and still useful — a containing struct does ask the model. **The conclusion
+is false.** Traced in `5d1ae4c7`: every enum output pass gates on `TypeKind::DataEnum` alone, in
+ten inline copies of the same three-arm match, none of which consults `managed_conversion`,
+`struct_class`, or variant shape. Reclassifying moves struct-vs-class and containing-type
+conversion; `body_unmanaged.rs`, `body_unmanaged_variant.rs`, `body_to_unmanaged.rs` and
+`body_as_unmanaged.rs` would each still fire.
+
+The real emission-suppression seam is `is_managed_only` in `enums/body.rs`, a single site — but it
+is the wrong predicate to extend, since it means *never crosses FFI* and a plain-enum projection
+crosses FFI precisely because it is blittable. See `5d1ae4c7` for the third-category question that
+follows.
 
 ### Open, and deliberately not guessed at
 
-- **What `managed_conversion` returns for a unit-only `DataEnum` today.** `is_struct` is `matches!(mc, AsIs | To)` and these are emitted as structs, so it is already `AsIs` or `To` — yet they still get an `Unmanaged` mirror and a marshaller. So the classification is necessary but evidently not sufficient; something else gates that emission and it has not been traced.
+- ~~**What `managed_conversion` returns for a unit-only `DataEnum` today.**~~ **Traced —
+  `5d1ae4c7`.** The observation that these are already `AsIs` or `To` yet still get an `Unmanaged`
+  mirror and a marshaller was correct, and the explanation is that nothing in the enum output
+  passes consults the classification at all. Emission is gated on `TypeKind::DataEnum`, in ten
+  places.
 - **Whether wire's emitted `value.IsA` resolves against an extension property.** `emit_enum_serialize` and `emit_enum_deserialize` emit `Is{stem}`, `As{stem}()` and the factory against the value. These survive as extension members, but that resolution is unverified.
 - **Whether `union_names` can allocate a reduced name family per variant.** It currently allocates all seven — stem, factory, is_check, accessor, field, unmanaged, case_type — unconditionally, with no unit/tuple distinction. Its stated policy is preservation-biased, and `IsX`/`AsX` are existing public API that must survive.
 
@@ -986,3 +1003,97 @@ must be excluded from the `?? default` path explicitly rather than by omission.
 Whether `?? default` is right even for the types it already covers. Substituting a zeroed
 `Unmanaged` for a null class delegate has the same shape of problem; the file asserts the policy
 in a doc-comment and never argues it.
+
+## Enum emission is gated on TypeKind::DataEnum in ten output passes, not on managed_conversion
+
+```issue
+id: 5d1ae4c7
+kind: bug
+severity: medium
+status: open
+```
+
+### What this traces
+
+`79be256e` names `managed_conversion` as the single lever for reclaiming unit-only enum
+machinery — *"Classify a unit-only `DataEnum` as `AsIs` and the downstream falls out"* — while
+also recording that something else gates the `Unmanaged` mirror and marshaller and **has not been
+traced**. Traced here. The lever hypothesis is false, and the real structure is different in a way
+that changes the cost of every option in that issue.
+
+### The processing gate
+
+Every enum output pass opens with the same three-arm match on `TypeKind`, with no reference to
+`managed_conversion`, `struct_class`, or variant shape:
+
+```rust
+let data_enum = match type_kind {
+    TypeKind::DataEnum(e) => e,
+    TypeKind::TypePattern(TypePattern::Result(_, _, e)) => e,
+    TypeKind::TypePattern(TypePattern::Option(_, e)) => e,
+    _ => continue,
+};
+```
+
+Ten sites, in two forms. Eight bind the payload: `definition.rs`, `body_unmanaged.rs`,
+`body_unmanaged_variant.rs`, `body_to_unmanaged.rs`, `body_as_unmanaged.rs`, `body_ctors.rs`,
+`body_exception_for_variant.rs`, `body_tostring.rs`. Two match for effect only and discard it:
+`all.rs` and `body.rs`. `all.rs`'s form binds `e` in two arms without using it.
+
+`body_from_call.rs` contains no `DataEnum` reference at all and reaches its data by another
+route. **Not traced.**
+
+### A helper already exists, one layer up
+
+`union_names.rs` declares `data_enum(kind) -> Option<&DataEnum>` and `data_enum_mut`, performing
+exactly this match, with a doc-comment explaining the three routes a `DataEnum` takes into the
+model. The ten output sites re-implement it inline rather than calling it.
+
+Same shape as `31248473` and `c33b9cf5`: a question one place owns, answered independently
+elsewhere. It matters here because any per-enum eligibility rule wants one seam, and there are
+currently ten.
+
+### The emission gate that does exist — and it is a single site
+
+`body.rs` computes two predicates the other passes do not:
+
+```rust
+let has_wire_only_payload = /* any variant payload is TypeKind::WireOnly */;
+let is_managed_only = has_wire_only_payload
+    || /* Result/Option whose Ok side is a Service */;
+```
+
+with the comment that a `DataEnum` carrying a `WireOnly` payload *"has no FFI-safe Unmanaged form
+— it only flows through `Wire<T>`"*.
+
+So a per-enum **"this enum has no `Unmanaged` representation"** concept already exists, at one
+site, and is not `managed_conversion`. The architecture is: sub-passes compute their fragments
+unconditionally; `body.rs` assembles and decides what to include. That is why unit-only enums are
+already `AsIs`-or-`To` yet still receive the full machinery — the classification was never
+load-bearing for emission.
+
+### Consequence for 79be256e
+
+Reclassifying a unit-only `DataEnum` as `AsIs` would move struct-vs-class (`definition.rs` reads
+`struct_class.is_struct`) and how containing types convert. It would **not** stop
+`body_unmanaged.rs`, `body_unmanaged_variant.rs`, `body_to_unmanaged.rs` or `body_as_unmanaged.rs`
+from firing, because none of them consults it. `79be256e`'s "The lever" section should be read as
+disproved, not as a plan.
+
+### What a unit-only projection would actually need
+
+`is_managed_only` is the wrong predicate to extend. Managed-only means *never crosses FFI*. A
+unit-only enum projected as a plain C# `enum` does cross FFI — it is blittable and needs no mirror
+*because* it is blittable, which is the opposite reason.
+
+That implies a third category alongside "full machinery" and "managed-only". Naming it, and
+deciding whether it belongs in the model or beside `is_managed_only` in `body.rs`, is not this
+issue's call and is deliberately not proposed here.
+
+### Measured, and not measured
+
+Static read of the pass sources. **No build, no generation, no snapshot.** `body_from_call.rs`'s
+gating is unchecked, and whether `is_managed_only` reaches the sub-passes or only suppresses
+inclusion at assembly time was inferred from the `.get(type_id).map_or("", ...)` pulls in
+`body.rs`, not confirmed by running the generator.
+
