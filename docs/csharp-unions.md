@@ -12,21 +12,32 @@ enum projection (see Decided).
 
 This plan governs the **generated layer** only. It is not a campaign to replace C# enums.
 
-**Generated layer (this document).** Interoptopus projects Rust sum types faithfully. Every
-`DataEnum` goes through the union machinery, *including unit-only ones* such as
-`FfiObjectType`. Not because a union is better for a scalar choice — it is not — but because
-the generator cannot tell a scalar choice from a payload alternative. That is domain knowledge
-it does not have, so any eligibility rule based on variant shape would be a guess. Uniform
-projection, no eligibility gate.
+**Generated layer (this document).** Interoptopus projects Rust sum types faithfully. A
+`DataEnum` goes through the union machinery unless it is **pure unit-only** — see the eligibility
+rule below.
 
-**That argument covers *domain* eligibility, not *mechanical* eligibility, and the distinction
-is now open.** Whether any variant carries a payload is not domain knowledge — it is
-`VariantKind::Tuple` versus `Unit`, visible in the inventory. `Issues.md` `79be256e` measures
-what uniform projection costs a payload-free enum today (about 120 lines: a struct, a
-discriminant field, an `Unmanaged` mirror, a marshaller — before 3b and 3c add a case type per
-variant, `Value`, `HasValue` and `TryGetValue`) and records three options with the trigger that
-would settle them. **Read it before starting 3b**: if unit-only enums are not to keep case
-types, emitting them now is work with a known expiry.
+The original rule here was uniform: every `DataEnum`, *including unit-only ones* such as
+`FfiObjectType`. Not because a union is better for a scalar choice — it is not — but because the
+generator cannot tell a scalar choice from a payload alternative. That is domain knowledge it does
+not have, so any eligibility rule based on variant shape would be a guess.
+
+**That argument covers *domain* eligibility, not *mechanical* eligibility, and the distinction is
+now settled.** Whether any variant carries a payload is not domain knowledge — it is
+`VariantKind::Tuple` versus `Unit`, visible in the inventory. The domain half stands and still
+governs everything else: the generator does not guess whether a payload-carrying enum is
+"really" a scalar choice.
+
+**Eligibility rule: a `DataEnum` with no payload-carrying variant does not receive union
+machinery.** No case types, no `Value`, no `HasValue`, no `TryGetValue`. The rule is anti-bloat
+and needs no population count to justify it: such an enum has no payload, so its case types are
+empty, its `Value` is nothing and `TryGetValue` has nothing to get. `Issues.md` `79be256e` records
+the rule, the measured cost (about 120 lines per enum: a struct, a discriminant field, an
+`Unmanaged` mirror, a marshaller) and the population it applies to.
+
+**Excluded enums keep their current representation.** Struct, `Unmanaged` mirror and marshaller
+all stay; this rule only declines to *add* union machinery on top. Projecting them as plain C#
+`enum`s instead is **option C in `79be256e` and is deferred** — it rests on a blittability claim
+that is not yet verified, and separately on closed enums, which did not ship in C# 15.
 
 **This document decides from the C# specification and the Rust inventory, and from nothing else.**
 A downstream consumer may *motivate* a shape by demonstrating that it occurs in practice; it never
@@ -101,6 +112,17 @@ So each Rust variant gets one nested `readonly record struct`. This removes two 
 problems that do not actually arise: unit variants get an empty case type, and two variants
 sharing a payload type (`E { A(u32), B(u32) }`) get two distinct case types rather than
 colliding.
+
+**Scope: this applies per *enum*, not per variant.** A pure unit-only `DataEnum` is excluded from
+union machinery entirely by the eligibility rule in §"Two layers, two rules" and never reaches
+this step. But every variant of an enum that *is* projected as a union gets a case type,
+**including its unit variants** — an empty case type is the solution to the unit-variant problem,
+not a cost. Folding the unit variants of a mixed enum into one nested C# enum was considered and
+dropped: it moves those variants out of the compiler-checked layer into a plain-enum switch, which
+C# does not check for exhaustiveness. See `Issues.md` `79be256e`.
+
+So 3b's scoping condition is a single check at the top of the pass — *does this enum have any
+payload-carrying variant?* — not a filter applied to each variant.
 
 ### Resulting consumer API
 
@@ -612,7 +634,7 @@ Items 0–1c, R and 3 are done. **1d is the first thing to fix** — it is a cor
 |---|---|---|---|
 | 1d | **done** `f5057d4b` | ~~**`wire/mod.rs` bypasses the C# model.**~~ Six sites emit `v.name`; `cs_type_name` skips `sanitize_rust_name`. `Issues.md` `4e9a17c3` | — |
 | 3a | open | Class: private parameterless ctor, no `_hasValue` | — |
-| 3b | open | Nested `{case_type}` case types. **Precondition for 3e**, not just prior to it: same-payload variants (`A(u32)`, `B(u32)`) make the generated constructors ambiguous without distinct case types | 1d ✔ |
+| 3b | open | Nested `{case_type}` case types, **for union-projected enums only** — skip any `DataEnum` with no payload-carrying variant (§"Two layers, two rules"); within a union-projected enum every variant gets one, unit variants included. **Precondition for 3e**, not just prior to it: same-payload variants (`A(u32)`, `B(u32)`) make the generated constructors ambiguous without distinct case types | 1d ✔ |
 | 3c | open | `Value` / `HasValue` / `TryGetValue` — consumes `_hasValue`, clears CS0169 | 3a, 3b |
 | 3d | open | `[Union]` + `IUnion` via joined interface list | 3c |
 | 3e | open, **shrunk** | ~~decide whether the compiler synthesises it~~ — settled: it does, via the generated constructor. Reduces to "constructors are public and single-parameter"; nothing emitted for the conversion | 3b |
