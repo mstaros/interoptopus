@@ -399,7 +399,14 @@ impl WireCodeGen<'_> {
             lines.push(format!("{pi}}}"));
         }
         if !e.variants.is_empty() {
-            lines.push(format!("{pi}else {{ throw new InvalidOperationException(\"Unknown variant tag\"); }}"));
+            // `InteropException`, not `InvalidOperationException`: this is a tag arriving from
+            // the native side that matches no variant, which `docs/csharp-unions.md` §Exceptions
+            // assigns to "unknown native discriminant" — corruption crossing the FFI boundary,
+            // meaning *severe error, should never happen*. The serializer's `else` above keeps
+            // `InvalidOperationException`, because an unmatched *managed* value is the empty
+            // union being marshalled out, which is the other row of that table. The old backend
+            // threw `InteropException` here too, so this restores it rather than inventing it.
+            lines.push(format!("{pi}else {{ throw new InteropException(\"Unknown variant tag\"); }}"));
         }
         lines.push(format!("{p}}}"));
     }

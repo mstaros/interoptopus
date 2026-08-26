@@ -587,7 +587,7 @@ Items 0–1c, R and 3 are done. **1d is the first thing to fix** — it is a cor
 | 4a | open | `ToManaged` constructs via case ctors + validates tag | 3c |
 | 4b | open | Exception split (decided in Step 4; implementation only) | 4, 4a |
 | 4c | open | `default(ResultX)` empty not `Ok`; `default(OptionX)` ≠ `NoneCase` | 3c, 4a |
-| 4d | open | Wire's enum serializer honours `ExceptionForVariant()` instead of its own "Unknown variant" | 1d, 4b |
+| 4d | partial | Wire has **two** throw sites, not one. Deserializer's unknown native tag → `InteropException`: **done**. Serializer's empty-state `else` should call `ExceptionForVariant()` instead of its own "Unknown variant": **open**, needs 4b's helper | 1d, 4b |
 | 5 | open | Snapshots move once; consumer projects compile the output | 3d, 4b |
 | 5c | open | Collision cases: `Value`, casing-fold, `B`/`IsB` — **write early; this is what catches 1d** | 1d |
 | 5d | open | `default(struct).ToUnmanaged()` throws | 4 |

@@ -24426,14 +24426,14 @@ public partial class WireOfDataEnum : IDisposable
                             {
                                 _val1 = MyEnum.C;
                             }
-                            else { throw new InvalidOperationException("Unknown variant tag"); }
+                            else { throw new InteropException("Unknown variant tag"); }
                         }
                         _p0[_key1] = _val1;
                     }
                 }
                 result = DataEnum.H(_p0);
             }
-            else { throw new InvalidOperationException("Unknown variant tag"); }
+            else { throw new InteropException("Unknown variant tag"); }
         }
         return result;
     }
@@ -24623,7 +24623,7 @@ public partial class WireOfMyEnum : IDisposable
             {
                 result = MyEnum.C;
             }
-            else { throw new InvalidOperationException("Unknown variant tag"); }
+            else { throw new InteropException("Unknown variant tag"); }
         }
         return result;
     }
