@@ -19,7 +19,14 @@ the generator cannot tell a scalar choice from a payload alternative. That is do
 it does not have, so any eligibility rule based on variant shape would be a guess. Uniform
 projection, no eligibility gate.
 
-**Consumer layer (out of scope here).** The public API a consumer such as GixSharp exposes is a
+**This document decides from the C# specification and the Rust inventory, and from nothing else.**
+A downstream consumer may *motivate* a shape by demonstrating that it occurs in practice; it never
+*constrains* what is emitted. One consumer's naming conventions, style rules or public-surface
+policy are not inputs here. Earlier drafts cited a particular consumer's domain types as worked
+examples and one of its style rules as a constraint; both were removed and the decision that
+depended on the latter was re-derived from the language.
+
+**Consumer layer (out of scope here).** The public API a consumer exposes is a
 separate decision, made per type:
 
 | Domain shape | C# form |
@@ -29,12 +36,11 @@ separate decision, made per type:
 | Bit combinations | `[Flags]` enum |
 | Product data | `record` / `struct` |
 
-The test is whether the product type permits impossible states. `GixHead` — `Detached(id)`,
-`SymbolicResolved(reference, id)`, `SymbolicUnborn(reference)` — is currently a record with
-`Target`, `Referent`, `IsDetached` and `IsUnborn`, which admits combinations that cannot exist;
-a closed sum type makes them unrepresentable. That is a union. `GixObjectType` is a closed set
-of numeric values with no per-case payload; it stays a plain `enum`, and exposing
-`GixObjectType.CommitCase` would be a straight regression.
+The test is whether the product type permits impossible states. A record carrying a target, a
+referent, and two independent `IsX` booleans admits combinations that cannot occur — both flags
+set, or neither with a referent present. A closed sum type makes those unrepresentable; that is a
+union. A closed set of numeric values with no per-case payload is not: it stays a plain `enum`,
+and bolting a `.SomethingCase` onto it would be a straight regression.
 
 Where the generated internal representation of a unit-only enum becomes union-like, the
 consumer translates at the boundary rather than propagating case types outward.
@@ -669,9 +675,18 @@ Multi-field and named variant support. Retiring `IsOk` / `AsOk`.
    reports an error."* Rust enums routinely carry the same payload twice — `A(u32)`, `B(u32)` —
    and two constructors both taking `uint` are ambiguous. The distinct nested `{case_type}`
    wrappers are exactly what makes them resolvable.
-3. **Case-type accessibility.** Nested `{case_type}` types have no stated accessibility. They
-   need enough for generated and consumer-internal use, and consumers (GixSharp rule 8) keep
-   them out of their public surface. Fix it explicitly rather than inheriting a default.
+3. ~~**Case-type accessibility.**~~ **Closed — the language forces it.** Nested `{case_type}` types
+   have no stated accessibility, and in C# a nested type defaults to **`private`**. Inheriting that
+   default does not give a suboptimal accessibility; it gives an unusable one — the case type
+   cannot be named outside the union, so pattern matching cannot mention it, and exhaustiveness
+   checking goes with it. That is the projection's main consumer-facing gain.
+
+   `internal` fails the same way one scope out: consumers pattern-match across an assembly
+   boundary. And under `IUnionMembers` the static `Create` signatures reference the case types, so
+   they must be at least as accessible as that interface.
+
+   So: **`public`**, stated explicitly at the emission site rather than inherited. Settle it during
+   3b, when the case types are first emitted.
 
 ### Closed
 

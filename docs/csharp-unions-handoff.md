@@ -38,13 +38,18 @@ but because the generator cannot distinguish a scalar choice from a payload alte
 domain knowledge it does not have, so any eligibility rule based on variant shape would be a
 guess.
 
-That is not a mandate for the consumer API. GixSharp decides per type: payload or state
+That is not a mandate for the consumer API. A consumer decides per type: payload or state
 alternatives → union, scalar choice → `enum`, bit combinations → `[Flags]`, product data →
-`record`. The test is whether the product type permits impossible states. `GixHead` should be a
-union because its record admits combinations that cannot exist; `GixObjectType` should stay a
-plain `enum`, and exposing `GixObjectType.CommitCase` would be a straight regression. Where a
+`record`. The test is whether the product type permits impossible states — a record with a
+target, a referent and two independent `IsX` booleans admits combinations that cannot occur, and
+should be a union; a closed set of numeric values with no per-case payload should stay a plain
+`enum`, where bolting a `.SomethingCase` onto it would be a straight regression. Where a
 unit-only enum's generated representation becomes union-like, translate at the boundary rather
 than propagating case types outward.
+
+Note the direction of that dependency: interoptopus decides what it emits from the C#
+specification and the Rust inventory. A consumer may motivate a shape by showing it occurs in
+practice, but never constrains the projection. See `csharp-unions.md` §0.
 
 Do not add an eligibility gate to interoptopus to try to enforce the consumer-layer rule. It
 cannot know enough to apply it.
