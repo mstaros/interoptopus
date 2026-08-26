@@ -230,6 +230,13 @@ Stems are the Rust variant name **verbatim** — the templates emit it unmodifie
 re-casing would rename members on enums with no collision at all. Templates must not re-sanitize
 after this pass. Keyword escaping is deliberately out of scope; see `Issues.md` `7c8cb22e`.
 
+**Open: the family is allocated unconditionally, with no unit/tuple distinction.** Three of the
+six derived names — `_{stem}`, `Unmanaged{stem}`, `{case_type}` — exist only for payload-carrying
+variants, so reserving them for a unit variant lets a collision on a never-emitted member move the
+stem and rename `Is{stem}`/`As{stem}`. That cuts against this section's own policy rather than
+with it. There is a real counter-argument from forward compatibility, and a reason to verify at
+the emission sites before acting; both are recorded in `Issues.md` `79be256e`.
+
 ### Reserved names
 
 `Value`, `HasValue`, `TryGetValue`, `Unmanaged`, `Marshaller`, `MarshallerMeta`, `ToUnmanaged`,

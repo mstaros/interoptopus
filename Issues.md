@@ -949,7 +949,37 @@ follows.
   passes consults the classification at all. Emission is gated on `TypeKind::DataEnum`, in ten
   places.
 - **Whether wire's emitted `value.IsA` resolves against an extension property.** `emit_enum_serialize` and `emit_enum_deserialize` emit `Is{stem}`, `As{stem}()` and the factory against the value. These survive as extension members, but that resolution is unverified.
-- **Whether `union_names` can allocate a reduced name family per variant.** It currently allocates all seven — stem, factory, is_check, accessor, field, unmanaged, case_type — unconditionally, with no unit/tuple distinction. Its stated policy is preservation-biased, and `IsX`/`AsX` are existing public API that must survive.
+- **Whether `union_names` can allocate a reduced name family per variant.** It currently allocates
+  all seven — stem, factory, is_check, accessor, field, unmanaged, case_type — unconditionally,
+  with no unit/tuple distinction.
+
+  **The preservation policy argues *for* reducing the family, not against it.** Step 1 records
+  that every emitted member derives from the stem — `{stem}`, `Is{stem}`, `As{stem}`, `_{stem}`,
+  `Unmanaged{stem}`, `{case_type}` — and they share one declaration space, so a stem is usable
+  only when *all* of them are free. Three exist only for payload-carrying variants: a unit variant
+  has nothing to store in `_{stem}`, nothing to place in `Unmanaged{stem}`, and an empty
+  `{case_type}`. Step 1 confirms the asymmetry is already real downstream — `body_as_unmanaged`
+  keeps only payload-carrying variants.
+
+  So reserving those three for a unit variant lets a collision on a member that is **never
+  emitted** force the stem to move, renaming `Is{stem}`, `As{stem}` and the factory — all public
+  API — to protect something that does not exist. That is the same failure the Rejected
+  alternatives table names for unconditional PascalCase stems: silently renaming public members on
+  non-colliding enums. Fewer reserved names means fewer constraints means fewer forced renames.
+
+  **The counter, which was not previously written down: unconditional allocation is
+  forward-compatible.** If a Rust variant later gains a payload, `_{stem}` and `{case_type}` are
+  already reserved and nothing renames. Reduce the family and adding a payload can force a stem
+  move — public API churning on an otherwise unrelated upstream change. Where the consumers are
+  owned this weighs less, but it means the current behaviour may be deliberate rather than an
+  oversight, and it is the reason this stays an open question rather than becoming a defect.
+
+  **Verify before reducing.** Step 1 closes by saying to treat any claim that a field is unused as
+  a claim to verify, not to repeat — written after `Variant::name` was assumed diagnostics-only and
+  turned out to be emitted directly at six wire sites (`4e9a17c3`, item 1d). *"Unit variants do not
+  need `_{stem}`"* is exactly such a claim. Check it at the emission sites first.
+
+  Inferred from the emission asymmetry Step 1 describes. **Not verified at the emission sites.**
 
 ### Three options
 
