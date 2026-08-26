@@ -647,9 +647,13 @@ the pass is `union_names`, it owns naming only, and there is no gate — see Dec
 
 ### Remaining
 
-Items 0–1c, R and 1d are done. **3a and 3b are the open front**, and they can proceed in
-parallel: 3a is representation (private parameterless constructor, drop `_hasValue` on classes)
-and 3b is emission (nested case types). 3c waits on both.
+Items 0–1c, R, 1d, **3a, 3b and 3f** are done. **3c is the next open item** and both its gates are
+now satisfied: it consumes the `_hasValue` that 3a leaves in place on struct-backed enums, and the
+case types that 3b emits.
+
+3a and 3b were independent and landed separately — 3a is representation (a private parameterless
+constructor on class-backed enums), 3b is emission (nested case types). Both are mutation-proven:
+the guard was inverted and the test observed to fail before being restored byte-identical.
 
 1d was previously named here as the first thing to fix; it landed in `f5057d4b`. It gated 3b
 because 3b introduces `{case_type}`, a new collision class, and every collision it resolves moves
@@ -662,12 +666,12 @@ not determinable from this document and has not been guessed at.
 | # | Status | Item | Gate |
 |---|---|---|---|
 | 1d | **done** `f5057d4b` | ~~**`wire/mod.rs` bypasses the C# model.**~~ Six sites emit `v.name`; `cs_type_name` skips `sanitize_rust_name`. `Issues.md` `4e9a17c3` | — |
-| 3a | open | Class: private parameterless ctor, no `_hasValue` | — |
-| 3b | open | Nested `{case_type}` case types, **for union-projected enums only** — skip any `DataEnum` with no payload-carrying variant (§"Two layers, two rules"); within a union-projected enum every variant gets one, unit variants included. **Precondition for 3e**, not just prior to it: same-payload variants (`A(u32)`, `B(u32)`) make the generated constructors ambiguous without distinct case types | 1d ✔ |
+| 3a | **done** `f630e225` | ~~Class: private parameterless ctor, no `_hasValue`~~ Declaring any constructor removes the implicit public one, so a single `private E() { }` is the whole change; nested types may still reach it, so factories and `Unmanaged.ToManaged()` are unaffected. The `_hasValue` half was already correct — `8c70868d` added that field to struct-backed enums only. Breaking change, changelog entry added | — |
+| 3b | **done** `4a19b0e3`, tests `9d6905bd` | ~~Nested `{case_type}` case types~~ New pass `body_case_types.rs`, scoped per enum by `variants.iter().any(\|v\| v.ty.is_some())` — a `DataEnum` with no payload-carrying variant is skipped entirely, while a union-projected enum gets a case type for **every** variant, unit ones included. Names came from `Variant::case_type`, already allocated and collision-resolved by `union_names`. Remains the precondition for 3e; see Open items #2 | 1d ✔ |
 | 3c | open | `Value` / `HasValue` / `TryGetValue` — consumes `_hasValue`, clears CS0169. **Same scope as 3b**: skip any `DataEnum` with no payload-carrying variant, or it gets these members with no cases behind them | 3a, 3b |
 | 3d | open | `[Union]` + `IUnion` via joined interface list | 3c |
 | 3e | open, **shrunk** | ~~decide whether the compiler synthesises it~~ — settled: it does, via the generated constructor. Reduces to "constructors are public and single-parameter"; nothing emitted for the conversion | 3b |
-| 3f | open, **decided** | **Case-type accessibility — `public`**, stated at the emission site rather than inherited. Settled in Open items #3: a nested type defaults to `private`, which is unusable because the case type cannot then be named outside the union, and `internal` fails the same way one scope out since consumers pattern-match across an assembly boundary. An earlier version of this row said "consumers keep them internal" and was wrong. Implementation folds into 3b | 3b |
+| 3f | **done** `4a19b0e3` | ~~**Case-type accessibility — `public`**~~ Emitted `public` at the site rather than inherited, since a nested type defaults to `private` — unusable, because the case type could not then be named outside the union — and `internal` fails the same way across an assembly boundary. Landed with 3b as planned; asserted by `enum_case_types::case_types_are_public` | 3b ✔ |
 | 4 | open | `ToUnmanaged` / `AsUnmanaged` empty guard | — |
 | 4a | open | `ToManaged` constructs via case ctors + validates tag | 3c |
 | 4b | open | Exception split (decided in Step 4; implementation only) | 4, 4a, 1 |
