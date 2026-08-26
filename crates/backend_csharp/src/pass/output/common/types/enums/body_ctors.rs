@@ -33,12 +33,7 @@ impl Pass {
 
         for (type_id, ty) in types.iter() {
             let type_kind = &ty.kind;
-            let data_enum = match type_kind {
-                TypeKind::DataEnum(e) => e,
-                TypeKind::TypePattern(TypePattern::Result(_, _, e)) => e,
-                TypeKind::TypePattern(TypePattern::Option(_, e)) => e,
-                _ => continue,
-            };
+            let Some(data_enum) = model::common::types::union_names::data_enum(type_kind) else { continue };
 
             let name = &ty.name;
 
@@ -67,7 +62,7 @@ impl Pass {
             // `definition.cs`. A factory produces a well-formed value, so it is the primary
             // place the flag is set. Without this write the flag stays `false` and `Value`
             // would report `null` for every value the consumer constructs.
-            let writes_has_value = struct_class.is_struct(*type_id) && data_enum.variants.iter().any(|v| v.can_carry_payload);
+            let writes_has_value = struct_class.is_struct(*type_id) && data_enum.is_union_projected();
 
             let mut context = Context::new();
             context.insert("writes_has_value", &writes_has_value);

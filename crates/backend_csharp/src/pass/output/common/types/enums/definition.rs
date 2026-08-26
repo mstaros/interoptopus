@@ -37,12 +37,7 @@ impl Pass {
 
         for (type_id, ty) in types.iter() {
             let type_kind = &ty.kind;
-            let data_enum = match type_kind {
-                TypeKind::DataEnum(e) => e,
-                TypeKind::TypePattern(TypePattern::Result(_, _, e)) => e,
-                TypeKind::TypePattern(TypePattern::Option(_, e)) => e,
-                _ => continue,
-            };
+            let Some(data_enum) = model::common::types::union_names::data_enum(type_kind) else { continue };
 
             let name = &ty.name;
             let docs = format_docs(&ty.docs);
@@ -57,7 +52,7 @@ impl Pass {
             // `_hasValue` is union machinery. Without this the field would be emitted on
             // unit-only enums where nothing reads it, which is CS0169 — see `Issues.md`
             // `8f4c1e2a`, where six of the nineteen were exactly that.
-            let is_union_projected = data_enum.variants.iter().any(|v| v.can_carry_payload);
+            let is_union_projected = data_enum.is_union_projected();
             let struct_or_class = if is_struct { "struct" } else { "class" };
 
             let variants: Vec<HashMap<&str, String>> = data_enum

@@ -45,12 +45,7 @@ impl Pass {
 
         for (type_id, ty) in types.iter() {
             let type_kind = &ty.kind;
-            let data_enum = match type_kind {
-                TypeKind::DataEnum(e) => e,
-                TypeKind::TypePattern(TypePattern::Result(_, _, e)) => e,
-                TypeKind::TypePattern(TypePattern::Option(_, e)) => e,
-                _ => continue,
-            };
+            let Some(data_enum) = model::common::types::union_names::data_enum(type_kind) else { continue };
 
             // Eligibility rule from `docs/csharp-unions.md` "Two layers, two rules": a
             // `DataEnum` with no payload-carrying variant receives no union machinery.
@@ -59,7 +54,7 @@ impl Pass {
             // union gives every variant a case type, unit variants included — an empty
             // case type is what keeps a mixed enum exhaustive in the compiler-checked
             // layer, and folding unit variants together was considered and dropped.
-            if !data_enum.variants.iter().any(|v| v.can_carry_payload) {
+            if !data_enum.is_union_projected() {
                 continue;
             }
 

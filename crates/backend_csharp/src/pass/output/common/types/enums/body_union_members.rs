@@ -52,14 +52,9 @@ impl Pass {
 
         for (type_id, ty) in types.iter() {
             let type_kind = &ty.kind;
-            let data_enum = match type_kind {
-                TypeKind::DataEnum(e) => e,
-                TypeKind::TypePattern(TypePattern::Result(_, _, e)) => e,
-                TypeKind::TypePattern(TypePattern::Option(_, e)) => e,
-                _ => continue,
-            };
+            let Some(data_enum) = model::common::types::union_names::data_enum(type_kind) else { continue };
 
-            if !data_enum.variants.iter().any(|v| v.can_carry_payload) {
+            if !data_enum.is_union_projected() {
                 continue;
             }
 

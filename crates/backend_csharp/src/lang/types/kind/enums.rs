@@ -42,3 +42,23 @@ pub struct DataEnum {
     /// The C# primitive used for the discriminant field.
     pub discriminant_type: Primitive,
 }
+
+impl DataEnum {
+    /// Whether this enum receives C# union projection.
+    ///
+    /// True when any variant *can* carry a payload. See [`Variant::can_carry_payload`] for why
+    /// that is not `ty.is_some()`; the two predicates are separated by exactly one fixture,
+    /// `enum_union_members::eligibility_asks_can_carry_not_does_carry`.
+    ///
+    /// The rule is per *enum*, not per variant: an enum projected as a union gives every
+    /// variant a case type, unit variants included, while an enum with no payload-capable
+    /// variant receives no case types, no `Value`, no `HasValue` and no `TryGetValue`. See
+    /// `docs/csharp-unions.md` "Two layers, two rules" and `Issues.md` `79be256e`.
+    ///
+    /// Call this rather than re-deriving the `any`. Five output sites carried their own copy
+    /// before this existed, which is the same shape as the gate `Issues.md` `5d1ae4c7` records.
+    #[must_use]
+    pub fn is_union_projected(&self) -> bool {
+        self.variants.iter().any(|v| v.can_carry_payload)
+    }
+}
