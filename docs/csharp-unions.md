@@ -19,6 +19,15 @@ the generator cannot tell a scalar choice from a payload alternative. That is do
 it does not have, so any eligibility rule based on variant shape would be a guess. Uniform
 projection, no eligibility gate.
 
+**That argument covers *domain* eligibility, not *mechanical* eligibility, and the distinction
+is now open.** Whether any variant carries a payload is not domain knowledge — it is
+`VariantKind::Tuple` versus `Unit`, visible in the inventory. `Issues.md` `79be256e` measures
+what uniform projection costs a payload-free enum today (about 120 lines: a struct, a
+discriminant field, an `Unmanaged` mirror, a marshaller — before 3b and 3c add a case type per
+variant, `Value`, `HasValue` and `TryGetValue`) and records three options with the trigger that
+would settle them. **Read it before starting 3b**: if unit-only enums are not to keep case
+types, emitting them now is work with a known expiry.
+
 **This document decides from the C# specification and the Rust inventory, and from nothing else.**
 A downstream consumer may *motivate* a shape by demonstrating that it occurs in practice; it never
 *constrains* what is emitted. One consumer's naming conventions, style rules or public-surface

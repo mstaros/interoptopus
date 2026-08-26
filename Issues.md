@@ -820,3 +820,103 @@ around it.
 
 Those six, and a later run of nineteen, turned out to be two further and entirely separate
 defects — neither in interoptopus. See the transaction that closed this issue.
+## Unit-only enums carry full union machinery; plain enum plus extension block would reclaim it
+
+```issue
+id: 79be256e
+kind: issue
+severity: medium
+status: open
+```
+
+### The shape
+
+A Rust enum with no payload-carrying variant is projected as a C# **struct** with a discriminant field, a custom marshaller and an `Unmanaged` mirror. Measured, from the reference snapshot, for `EnumDocumented { A, B, C }` — three symbols, no data:
+
+```csharp
+public partial struct EnumDocumented { byte _variant; bool _hasValue; }
+
+[NativeMarshalling(typeof(MarshallerMeta))]
+public partial struct EnumDocumented
+{
+    [StructLayout(LayoutKind.Explicit)]
+    internal unsafe struct Unmanaged { [FieldOffset(0)] internal byte _variant; internal EnumDocumented ToManaged() {...} }
+    internal Unmanaged ToUnmanaged() {...}
+    internal Unmanaged AsUnmanaged() {...}
+    public Exception ExceptionForVariant() {...}
+    public static EnumDocumented A => new() { _variant = 0 };   // x3
+    public bool IsA => _variant == 0;                            // x3
+    public void AsA() { if (_variant != 0) throw ExceptionForVariant(); }  // x3
+    public override string ToString() {...}
+    private struct MarshallerMeta { }
+    internal ref struct Marshaller {...}
+}
+```
+
+About 120 lines. Union projection (items 3b, 3c) then adds a nested case type per variant, `Value`, `HasValue` and `TryGetValue` on top.
+
+### How much of the population this is
+
+**Reference project: 4 of 6.** `EnumDocumented`, `EnumRenamedXYZ`, `EnumNegative`, `EnumExplicitThenImplicit` are unit-only; `EnumPayload` and `EnumExplicitPayload` carry payloads. `docs/csharp-unions.md` notes `_hasValue` currently trips CS0169 on **eight** generated types.
+
+**gitoxide: a 20-enum sample, not a count.** 8 unit-only, 12 with payload — so *not* "mostly unit-only" as first assumed. Two caveats that matter more than the ratio: five of the twelve are `thiserror` error enums, which map to exceptions rather than unions, and several use variant shapes the inventory cannot represent at all — `AddedOrReplaced(Range<u32>, u32)`, `Deleted(u32, u32)`, `Io { path, source }`. `VariantKind::Tuple(TypeId)` holds exactly one `TypeId`, so multi-field and struct variants never reach the backend. Excluding errors it is 8 unit-only to 7 payload. The sample was filtered to files named `types.rs`, which likely over-represents both hint-style and error enums. **A real count over the crates a binding would wrap is not done.**
+
+### The public surface is preservable
+
+Everything consumer-facing survives a plain `enum` plus a C# 14 extension block. Extension *properties* are what make this work — classic extension methods could not give back `IsA` as a property.
+
+| today | plain enum + extension block |
+|---|---|
+| `A`, `B`, `C` static properties | enum members |
+| `IsA` bool property | extension property |
+| `AsA()` — `public void`, throws on mismatch | extension method |
+| `ExceptionForVariant()` | extension method |
+| `ToString()` returning `"A"` | free — enum's built-in returns the member name |
+
+Everything removed is `private`, `internal`, or `[EditorBrowsable(Never)]`: `_variant`, `_hasValue`, `Unmanaged`, `ToUnmanaged`, `AsUnmanaged`, `Marshaller`, `MarshallerMeta`, `ToManaged`.
+
+One behaviour change: `ToString()` today throws `InteropException` on an out-of-range discriminant; a plain enum returns the number as a string. Benign, arguably better.
+
+### THE VALIDATION ARGUMENT IS FALSE — correcting the record
+
+An earlier draft of this reasoning kept the struct on the grounds that it validates unknown native discriminants. It does not. `Unmanaged::ToManaged` is:
+
+```csharp
+var _managed = new EnumDocumented();
+_managed._variant = _variant;
+return _managed;
+```
+
+The tag is copied blind. The only `InteropException("Illegal enum state detected")` is in `ExceptionForVariant()` and `ToString()` — the error-mapping and display paths, not marshalling. Validation is **item 4a, still open**. So switching to a plain enum forfeits nothing that exists today; it forfeits something planned.
+
+### The lever
+
+`composites/body_unmanaged.rs` does **not** hardcode the mirror. Field types come from `unmanaged_names.name(f.ty)` and conversions from `managed.to_managed_suffix(f.ty)` — both passes. A containing struct asks the model rather than appending `.Unmanaged`. So if a unit-only enum reports "itself, no conversion", containing structs follow with no edit.
+
+That points at `managed_conversion` as the single lever: `unmanaged_names`, `to_managed_suffix`, `struct_class::is_struct` and wire's `is_cs_value_type` all derive from it. Classify a unit-only `DataEnum` as `AsIs` and the downstream falls out.
+
+### Open, and deliberately not guessed at
+
+- **What `managed_conversion` returns for a unit-only `DataEnum` today.** `is_struct` is `matches!(mc, AsIs | To)` and these are emitted as structs, so it is already `AsIs` or `To` — yet they still get an `Unmanaged` mirror and a marshaller. So the classification is necessary but evidently not sufficient; something else gates that emission and it has not been traced.
+- **Whether wire's emitted `value.IsA` resolves against an extension property.** `emit_enum_serialize` and `emit_enum_deserialize` emit `Is{stem}`, `As{stem}()` and the factory against the value. These survive as extension members, but that resolution is unverified.
+- **Whether `union_names` can allocate a reduced name family per variant.** It currently allocates all seven — stem, factory, is_check, accessor, field, unmanaged, case_type — unconditionally, with no unit/tuple distinction. Its stated policy is preservation-biased, and `IsX`/`AsX` are existing public API that must survive.
+
+### Three options
+
+**A. Status quo.** Uniform union projection over every `DataEnum`. No break. Keeps ~120 lines per unit-only enum and adds case types, `Value`, `HasValue`, `TryGetValue` on top.
+
+**B. Skip union machinery for unit-only enums, keep the struct.** Costs nothing and breaks nothing — the case types are not yet emitted, so declining to emit them is not a removal. Does not reclaim the existing 120 lines. Available now, independent of any language feature. Also removes the CS0169 `_hasValue` warnings honestly rather than by consuming a field with no meaning for a payload-free type.
+
+**C. Plain `enum` plus extension block.** Reclaims the whole 120 lines and the marshaller. Breaking change to the generated surface, comparable to item 3a's private constructor which the plan already accepts unconditionally. Consumer-facing members are preservable per the table above.
+
+### The trigger
+
+C# **closed enums** — same enums with a `closed` modifier, strictly typed (no conversion from `int`) and exhaustive — restore what a plain enum lacks: no arbitrary casts, exhaustive matching without a default arm. That closes the gap option C opens, and it is what makes C the right destination rather than a regression.
+
+They are expected in **C# 16 preview, 6-8 months out**. So C should not land now on the strength of them; it would mean shipping an unvalidated projection and migrating twice. Option B is available immediately and is on the path to C rather than away from it.
+
+Recommendation: **B now, C when closed enums ship.** Recorded rather than executed — this issue exists so the survey is not repeated.
+
+### Related
+
+An adjacent idea, not costed here: for a *mixed* enum, fold its unit variants into one nested C# enum used as a single union case, leaving case types only for payload variants. Two known problems. The union's case identity would no longer determine `_variant` for the folded group, so the tag would be recovered from two different places depending on the case — the defect family behind `09b82d44` and `c928d53e`. And it removes `IsX`/`AsX` for the folded variants, which is existing public API and contrary to `union_names`' preservation-biased policy.
