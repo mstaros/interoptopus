@@ -18,7 +18,15 @@
     {{ as_unmanaged | indent }}
 {% endif %}
     {{ exception_for_variant | indent }}
-
+{% if struct_or_class == "class" %}
+    /// <summary>
+    /// Private so that <c>new {{ name }}()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private {{ name }}() { }
+{% endif %}
     {{ ctors | indent }}
 {% if from_call %}
     {{ from_call | indent }}

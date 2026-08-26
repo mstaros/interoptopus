@@ -812,6 +812,14 @@ public partial class ResultNestedAError : IResult<NestedA, Error>, IDisposable
     }
 
 
+    /// <summary>
+    /// Private so that <c>new ResultNestedAError()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private ResultNestedAError() { }
+
     // Ctors
     public static ResultNestedAError Ok(NestedA value) => new() { _variant = 0, _Ok = value };
     public static ResultNestedAError Err(Error value) => new() { _variant = 1, _Err = value };

@@ -191,6 +191,14 @@ public partial class ResultCounterError : IResult<IntPtr, Error>, IDisposable
     }
 
 
+    /// <summary>
+    /// Private so that <c>new ResultCounterError()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private ResultCounterError() { }
+
     // Ctors
     public static ResultCounterError Ok(IntPtr value) => new() { _variant = 0, _Ok = value };
     public static ResultCounterError Err(Error value) => new() { _variant = 1, _Err = value };

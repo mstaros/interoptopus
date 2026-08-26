@@ -249,6 +249,14 @@ public partial class ResultFliparooDotnetException : IResult<Fliparoo, DotnetExc
     }
 
 
+    /// <summary>
+    /// Private so that <c>new ResultFliparooDotnetException()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private ResultFliparooDotnetException() { }
+
     // Ctors
     public static ResultFliparooDotnetException Ok(Fliparoo value) => new() { _variant = 0, _Ok = value };
     public static ResultFliparooDotnetException Err(DotnetException value) => new() { _variant = 1, _Err = value };
@@ -456,6 +464,14 @@ public partial class ResultHeavyDotnetException : IResult<Heavy, DotnetException
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
     }
 
+
+    /// <summary>
+    /// Private so that <c>new ResultHeavyDotnetException()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private ResultHeavyDotnetException() { }
 
     // Ctors
     public static ResultHeavyDotnetException Ok(Heavy value) => new() { _variant = 0, _Ok = value };

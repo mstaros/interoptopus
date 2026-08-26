@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ⚠️ Breaking
+
+- **Class-backed enums no longer expose a public parameterless constructor.** `new EnumX()` on a
+  class-backed enum previously produced a variant-zero instance from outside the type — a variant
+  the Rust side never sent, and one that `default(EnumX)` (a null reference) does not otherwise
+  admit. The constructor is now `private`; construct through the generated factories instead.
+  Struct-backed enums are unaffected, since their empty state is carried by `_hasValue`.
+
 ## [0.16.4](https://github.com/ralfbiedert/interoptopus/compare/interoptopus_csharp-v0.16.3...interoptopus_csharp-v0.16.4)
 
 ### 🐛 Bug Fixes

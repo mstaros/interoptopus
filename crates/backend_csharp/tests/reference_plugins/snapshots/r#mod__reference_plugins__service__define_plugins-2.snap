@@ -1025,6 +1025,14 @@ public partial class ResultWireOfHashMapStringStringError : IResult<WireOfHashMa
     }
 
 
+    /// <summary>
+    /// Private so that <c>new ResultWireOfHashMapStringStringError()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private ResultWireOfHashMapStringStringError() { }
+
     // Ctors
     public static ResultWireOfHashMapStringStringError Ok(WireOfHashMapStringString value) => new() { _variant = 0, _Ok = value };
     public static ResultWireOfHashMapStringStringError Err(Error value) => new() { _variant = 1, _Err = value };

@@ -145,6 +145,14 @@ public partial class OptionUtf8String : IDisposable
     }
 
 
+    /// <summary>
+    /// Private so that <c>new OptionUtf8String()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private OptionUtf8String() { }
+
     // Ctors
     public static OptionUtf8String Some(Utf8String value) => new() { _variant = 0, _Some = value };
     public static OptionUtf8String None => new() { _variant = 1 };
@@ -9083,6 +9091,14 @@ public partial class DataEnum
     }
 
 
+    /// <summary>
+    /// Private so that <c>new DataEnum()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private DataEnum() { }
+
     // Ctors
     public static DataEnum S(string value) => new() { _variant = 0, _S = value };
     public static DataEnum V(List<byte> value) => new() { _variant = 1, _V = value };
@@ -9210,6 +9226,14 @@ public partial class Layer3String : IDisposable
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
     }
 
+
+    /// <summary>
+    /// Private so that <c>new Layer3String()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private Layer3String() { }
 
     // Ctors
     public static Layer3String A(Layer1String value) => new() { _variant = 0, _A = value };
@@ -9782,6 +9806,14 @@ public partial class OptionOptionResultOptionUtf8StringError : IDisposable
     }
 
 
+    /// <summary>
+    /// Private so that <c>new OptionOptionResultOptionUtf8StringError()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private OptionOptionResultOptionUtf8StringError() { }
+
     // Ctors
     public static OptionOptionResultOptionUtf8StringError Some(OptionResultOptionUtf8StringError value) => new() { _variant = 0, _Some = value };
     public static OptionOptionResultOptionUtf8StringError None => new() { _variant = 1 };
@@ -9927,6 +9959,14 @@ public partial class OptionResultOptionUtf8StringError : IDisposable
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
     }
 
+
+    /// <summary>
+    /// Private so that <c>new OptionResultOptionUtf8StringError()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private OptionResultOptionUtf8StringError() { }
 
     // Ctors
     public static OptionResultOptionUtf8StringError Some(ResultOptionUtf8StringError value) => new() { _variant = 0, _Some = value };
@@ -10369,6 +10409,14 @@ public partial class ResultOptionUtf8StringError : IResult<OptionUtf8String, Err
     }
 
 
+    /// <summary>
+    /// Private so that <c>new ResultOptionUtf8StringError()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private ResultOptionUtf8StringError() { }
+
     // Ctors
     public static ResultOptionUtf8StringError Ok(OptionUtf8String value) => new() { _variant = 0, _Ok = value };
     public static ResultOptionUtf8StringError Err(Error value) => new() { _variant = 1, _Err = value };
@@ -10559,6 +10607,14 @@ public partial class ResultServiceAsyncCancelError : IResult<IntPtr, Error>, IDi
     }
 
 
+    /// <summary>
+    /// Private so that <c>new ResultServiceAsyncCancelError()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private ResultServiceAsyncCancelError() { }
+
     // Ctors
     public static ResultServiceAsyncCancelError Ok(IntPtr value) => new() { _variant = 0, _Ok = value };
     public static ResultServiceAsyncCancelError Err(Error value) => new() { _variant = 1, _Err = value };
@@ -10747,6 +10803,14 @@ public partial class ResultServiceAsyncCtorError : IResult<IntPtr, Error>, IDisp
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
     }
 
+
+    /// <summary>
+    /// Private so that <c>new ResultServiceAsyncCtorError()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private ResultServiceAsyncCtorError() { }
 
     // Ctors
     public static ResultServiceAsyncCtorError Ok(IntPtr value) => new() { _variant = 0, _Ok = value };
@@ -10937,6 +11001,14 @@ public partial class ResultServiceAsyncPanicError : IResult<IntPtr, Error>, IDis
     }
 
 
+    /// <summary>
+    /// Private so that <c>new ResultServiceAsyncPanicError()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private ResultServiceAsyncPanicError() { }
+
     // Ctors
     public static ResultServiceAsyncPanicError Ok(IntPtr value) => new() { _variant = 0, _Ok = value };
     public static ResultServiceAsyncPanicError Err(Error value) => new() { _variant = 1, _Err = value };
@@ -11125,6 +11197,14 @@ public partial class ResultServiceAsyncResultError : IResult<IntPtr, Error>, IDi
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
     }
 
+
+    /// <summary>
+    /// Private so that <c>new ResultServiceAsyncResultError()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private ResultServiceAsyncResultError() { }
 
     // Ctors
     public static ResultServiceAsyncResultError Ok(IntPtr value) => new() { _variant = 0, _Ok = value };
@@ -11315,6 +11395,14 @@ public partial class ResultServiceAsyncSleepError : IResult<IntPtr, Error>, IDis
     }
 
 
+    /// <summary>
+    /// Private so that <c>new ResultServiceAsyncSleepError()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private ResultServiceAsyncSleepError() { }
+
     // Ctors
     public static ResultServiceAsyncSleepError Ok(IntPtr value) => new() { _variant = 0, _Ok = value };
     public static ResultServiceAsyncSleepError Err(Error value) => new() { _variant = 1, _Err = value };
@@ -11503,6 +11591,14 @@ public partial class ResultServiceAsyncStructsError : IResult<IntPtr, Error>, ID
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
     }
 
+
+    /// <summary>
+    /// Private so that <c>new ResultServiceAsyncStructsError()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private ResultServiceAsyncStructsError() { }
 
     // Ctors
     public static ResultServiceAsyncStructsError Ok(IntPtr value) => new() { _variant = 0, _Ok = value };
@@ -11693,6 +11789,14 @@ public partial class ResultServiceAsyncVecStringError : IResult<IntPtr, Error>, 
     }
 
 
+    /// <summary>
+    /// Private so that <c>new ResultServiceAsyncVecStringError()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private ResultServiceAsyncVecStringError() { }
+
     // Ctors
     public static ResultServiceAsyncVecStringError Ok(IntPtr value) => new() { _variant = 0, _Ok = value };
     public static ResultServiceAsyncVecStringError Err(Error value) => new() { _variant = 1, _Err = value };
@@ -11881,6 +11985,14 @@ public partial class ResultServiceAsyncWireError : IResult<IntPtr, Error>, IDisp
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
     }
 
+
+    /// <summary>
+    /// Private so that <c>new ResultServiceAsyncWireError()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private ResultServiceAsyncWireError() { }
 
     // Ctors
     public static ResultServiceAsyncWireError Ok(IntPtr value) => new() { _variant = 0, _Ok = value };
@@ -12071,6 +12183,14 @@ public partial class ResultServiceCallbacksError : IResult<IntPtr, Error>, IDisp
     }
 
 
+    /// <summary>
+    /// Private so that <c>new ResultServiceCallbacksError()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private ResultServiceCallbacksError() { }
+
     // Ctors
     public static ResultServiceCallbacksError Ok(IntPtr value) => new() { _variant = 0, _Ok = value };
     public static ResultServiceCallbacksError Err(Error value) => new() { _variant = 1, _Err = value };
@@ -12259,6 +12379,14 @@ public partial class ResultServiceDependentError : IResult<IntPtr, Error>, IDisp
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
     }
 
+
+    /// <summary>
+    /// Private so that <c>new ResultServiceDependentError()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private ResultServiceDependentError() { }
 
     // Ctors
     public static ResultServiceDependentError Ok(IntPtr value) => new() { _variant = 0, _Ok = value };
@@ -12449,6 +12577,14 @@ public partial class ResultServiceIgnoringMethodsError : IResult<IntPtr, Error>,
     }
 
 
+    /// <summary>
+    /// Private so that <c>new ResultServiceIgnoringMethodsError()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private ResultServiceIgnoringMethodsError() { }
+
     // Ctors
     public static ResultServiceIgnoringMethodsError Ok(IntPtr value) => new() { _variant = 0, _Ok = value };
     public static ResultServiceIgnoringMethodsError Err(Error value) => new() { _variant = 1, _Err = value };
@@ -12637,6 +12773,14 @@ public partial class ResultServiceMainError : IResult<IntPtr, Error>, IDisposabl
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
     }
 
+
+    /// <summary>
+    /// Private so that <c>new ResultServiceMainError()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private ResultServiceMainError() { }
 
     // Ctors
     public static ResultServiceMainError Ok(IntPtr value) => new() { _variant = 0, _Ok = value };
@@ -12827,6 +12971,14 @@ public partial class ResultServiceMultipleCtorsError : IResult<IntPtr, Error>, I
     }
 
 
+    /// <summary>
+    /// Private so that <c>new ResultServiceMultipleCtorsError()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private ResultServiceMultipleCtorsError() { }
+
     // Ctors
     public static ResultServiceMultipleCtorsError Ok(IntPtr value) => new() { _variant = 0, _Ok = value };
     public static ResultServiceMultipleCtorsError Err(Error value) => new() { _variant = 1, _Err = value };
@@ -13015,6 +13167,14 @@ public partial class ResultServiceResultError : IResult<IntPtr, Error>, IDisposa
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
     }
 
+
+    /// <summary>
+    /// Private so that <c>new ResultServiceResultError()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private ResultServiceResultError() { }
 
     // Ctors
     public static ResultServiceResultError Ok(IntPtr value) => new() { _variant = 0, _Ok = value };
@@ -13205,6 +13365,14 @@ public partial class ResultServiceStringsError : IResult<IntPtr, Error>, IDispos
     }
 
 
+    /// <summary>
+    /// Private so that <c>new ResultServiceStringsError()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private ResultServiceStringsError() { }
+
     // Ctors
     public static ResultServiceStringsError Ok(IntPtr value) => new() { _variant = 0, _Ok = value };
     public static ResultServiceStringsError Err(Error value) => new() { _variant = 1, _Err = value };
@@ -13394,6 +13562,14 @@ public partial class ResultServiceVariousSlicesError : IResult<IntPtr, Error>, I
     }
 
 
+    /// <summary>
+    /// Private so that <c>new ResultServiceVariousSlicesError()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private ResultServiceVariousSlicesError() { }
+
     // Ctors
     public static ResultServiceVariousSlicesError Ok(IntPtr value) => new() { _variant = 0, _Ok = value };
     public static ResultServiceVariousSlicesError Err(Error value) => new() { _variant = 1, _Err = value };
@@ -13582,6 +13758,14 @@ public partial class ResultUseStringError : IResult<UseString, Error>, IDisposab
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
     }
 
+
+    /// <summary>
+    /// Private so that <c>new ResultUseStringError()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private ResultUseStringError() { }
 
     // Ctors
     public static ResultUseStringError Ok(UseString value) => new() { _variant = 0, _Ok = value };
@@ -13773,6 +13957,14 @@ public partial class ResultUtf8StringError : IResult<Utf8String, Error>, IDispos
     }
 
 
+    /// <summary>
+    /// Private so that <c>new ResultUtf8StringError()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private ResultUtf8StringError() { }
+
     // Ctors
     public static ResultUtf8StringError Ok(Utf8String value) => new() { _variant = 0, _Ok = value };
     public static ResultUtf8StringError Err(Error value) => new() { _variant = 1, _Err = value };
@@ -13963,6 +14155,14 @@ public partial class ResultVecUtf8StringError : IResult<VecUtf8String, Error>, I
     }
 
 
+    /// <summary>
+    /// Private so that <c>new ResultVecUtf8StringError()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private ResultVecUtf8StringError() { }
+
     // Ctors
     public static ResultVecUtf8StringError Ok(VecUtf8String value) => new() { _variant = 0, _Ok = value };
     public static ResultVecUtf8StringError Err(Error value) => new() { _variant = 1, _Err = value };
@@ -14152,6 +14352,14 @@ public partial class ResultWireOfHashMapStringStringError : IResult<WireOfHashMa
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
     }
 
+
+    /// <summary>
+    /// Private so that <c>new ResultWireOfHashMapStringStringError()</c> cannot produce a variant-zero instance from
+    /// outside the type. Every non-null instance of a class-backed enum is valid, and this is
+    /// what keeps that true. Factories, case constructors and <c>Unmanaged.ToManaged()</c>
+    /// construct from inside the type and are unaffected.
+    /// </summary>
+    private ResultWireOfHashMapStringStringError() { }
 
     // Ctors
     public static ResultWireOfHashMapStringStringError Ok(WireOfHashMapStringString value) => new() { _variant = 0, _Ok = value };
