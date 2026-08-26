@@ -293,6 +293,20 @@ pre-release, because hostfxr will not roll forward from a release request to a p
 runtime. Leave it. CI installs the SDK on **every** OS; it used to be gated to Linux and pinned
 to 10.x, which the runtime pin above made unusable.
 
+**`dokono test selection fallback: affected_source_identity_invalid` is benign.** It appears in
+`commit_transaction`'s validation warnings on essentially every change to a non-root source
+module, and it **fails open**: `DokonoTestPlan::fallback` sets status `WorkspaceFallback`, clears
+`subjects` and `selected_step_ids`, and keeps `original_test_step`, so nothing is narrowed and the
+full step runs. `WorkspaceFallback` and `Skipped` are separate states and only `Skipped` emits its
+own warning, so a fallback warning never means tests were dropped.
+
+The trigger is narrow: the identity builder in `dokono_test_plan.rs` derives a `binary_id` only
+for conventional shapes — `tests/`, `benches/`, `examples/`, `src/main.rs`, `src/lib.rs`. Anything
+deeper under `src/` matches none of them, `SourceTestIdentity::new_named` rejects the identity, and
+the error maps to this code. The real limitation of the fallback is **over**-selection rather than
+under-selection; `source_name_fallback_can_overselect_same_named_tests_within_one_binary` asserts
+precisely that. Nothing to fix; the only loss is the speed benefit of narrowing.
+
 **MCP tool quirks worth knowing.** `Rust editor:str_replace` is parser-aware and will not match a
 pattern spanning categories — a pattern containing a string literal or a `//` comment silently
 returns zero matches. Use `search_and_replace` (regex) for those, but note its replacement does not
