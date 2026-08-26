@@ -1275,94 +1275,109 @@ Still not confirmed by running the generator: that the three template guards are
 consumers of the flag in the rendered output, and what the sub-passes cost when their fragments
 are rendered and discarded.
 
-## No project compiles generated C# any more, so 19 CS0169 went unseen
+## `_hasValue` was emitted, never written, never read — 19 CS0169 with nothing to surface them
 
 ```issue
 id: 8f4c1e2a
 kind: bug
-severity: high
-status: open
+severity: medium
+status: closed
 ```
+
+**Closed by item 3c (`bdd13b53`).** A forced rebuild of full-scale generated output now reports
+**0 warnings**, down from 19.
+
+> **Three claims in the original filing were wrong and are corrected below.** They were written
+> before the investigation finished and disproved later in the same session. The measurement held;
+> the diagnosis did not.
 
 ### Measured
 
-A forced rebuild of `crates/backend_csharp/benches/dotnet` — committed, full-scale generated
-output — on 2026-08-26:
+A forced rebuild of `crates/backend_csharp/benches/dotnet` on 2026-08-26:
 
 ```
 dotnet build -t:Rebuild -v:n
     19 Warning(s)
-    1 Error(s)
 ```
 
-**Every one of the 19 is CS0169, and every one is `_hasValue`.** Grouping the raw matches gives
-`38 warning CS0169` and nothing else — 38 because each is reported once per target-framework pass.
-There is no other warning of any kind in the entire generated surface.
+**Every one was CS0169, and every one was `_hasValue`.** No other warning of any kind in the
+entire generated surface — the warning profile was one defect repeated, not a long tail.
 
+### The defect
+
+`_hasValue` was emitted by `templates/common/types/enums/definition.cs` and touched nowhere else
+in the generator. Nothing wrote it, nothing read it.
+
+`docs/csharp-unions.md` described item 3c as consuming it and said *"the storage exists; what is
+missing is the reads"* — but the writes were missing too, so a `Value` consulting the flag would
+have returned `null` for every struct-backed union. That is why 3c could not be split into a
+writes step and a reads step: writes alone turn CS0169 into CS0414, still a warning.
+
+### Correction 1 — the feedback loop was not severed
+
+The original filing said *"Two projects exist to compile generated output. Neither currently
+does."* **That is false.**
+
+The twelve plugin fixtures compile generated C# on **every** `cargo test`, through
+`define_plugin!` → `prepare_plugin` → `dotnet build`. They were passing throughout. The loop is
+complete; the signal is discarded at one specific point — `build_and_stage` shells out and checks
+only the **exit status**:
+
+```rust
+let status = Command::new("dotnet").args(["build", "-c", "Release", "-v", "q"]).arg(&csproj).status()?;
+if !status.success() { ... }
 ```
-Interop.cs(8877,10): warning CS0169: The field 'EnumPayload._hasValue' is never used
-Interop.cs(3105,10): warning CS0169: The field 'EnumExplicitThenImplicit._hasValue' is never used
-Interop.cs(8603,10): warning CS0169: The field 'EnumNegative._hasValue' is never used
-Interop.cs(8440,10): warning CS0169: The field 'ResultVoidError._hasValue' is never used
+
+Warnings do not affect exit status, and `-v q` hides them. That is the whole failure, and it is
+why `TreatWarningsAsErrors` is the right lever: it converts the warning into a non-zero exit that
+this existing check already catches, with no change to the harness.
+
+`backend_plugins/exceptions.dll` is the proof case — its `Try<u32>` becomes a struct-backed
+`ResultUintDotnetException` carrying `_hasValue`, compiled green on every run.
+
+### Correction 2 — the output is regenerated, not committed
+
+The original filing called `benches/dotnet` *"committed, full-scale generated output"*. **It is
+gitignored.** `tests/reference_project/mod.rs` writes both output directories on every run:
+
+```rust
+multibuf.write_buffers_to("tests/reference_project/Bindings")?;
+multibuf.write_buffers_to("benches/dotnet")?;
 ```
 
-### The defect the compiler is naming
+So generation is wired to two directories and **nothing compiles either one** — a sharper defect
+than "the loop is broken". The 19 CS0169 were measured against fresh output, so the count stands.
 
-`_hasValue` is emitted by `templates/common/types/enums/definition.cs` and **that is its only
-occurrence in the generator**. Nothing writes it and nothing reads it. `docs/csharp-unions.md`
-describes item 3c as consuming it and says *"the storage exists; what is missing is the reads"* —
-the writes are missing too, so a `Value` that consulted the flag would return `null` for every
-struct-backed union, including well-formed ones.
+### Correction 3 — `benches/dotnet` is drifted, not structurally broken
 
-Item 4c makes the flag a soundness obligation rather than a convenience: the compiler assumes
-*"for struct unions, `default` produces a `Value` of null"* and reasons about exhaustiveness on it.
-So the field stays and the writes must exist.
+It fails at `Benchmark.cs(27)` with `CS0117: 'ServiceAsyncBasic' does not contain a definition for
+'Create'` — the generator emits `Simple()`. A second stale site follows at line 110 (`Call`).
 
-### Why nobody saw it
+`Benchmark.cs` has not changed since `9ebfc92`, **2026-04-14**, while the generator kept moving.
+A consumer nobody builds, drifting for four months. Not a generator regression, and fixing it is
+its own task.
 
-Two projects exist to compile generated output. **Neither currently does.**
+`tests/reference_project/Bindings` fails earlier still, at **restore**: `NU1100` on
+`Microsoft.NET.ILLink.Tasks`, pulled in by `IsAotCompatible`, with PackageSourceMapping excluding
+both configured sources. A build there reports `0 Warning(s)` — meaningless, since nothing
+compiled. That is an environment and package-source problem, and it belongs to item 5.
 
-- `benches/dotnet/dotnet_benchmarks.csproj` fails to compile:
-  `Benchmark.cs(27,46): error CS0117: 'ServiceAsyncBasic' does not contain a definition for
-  'Create'`. Committed generated output and a committed consumer that no longer agree. Nothing in
-  CI or the test suite builds it, so the drift went unnoticed and so did the warnings underneath.
-- `tests/reference_project/Bindings/Bindings.csproj` fails at **restore**, before compiling a
-  line: `NU1100: Unable to resolve 'Microsoft.NET.ILLink.Tasks (>= 11.0.0-preview.7.26381.103)'`.
-  `IsAotCompatible` pulls ILLink and PackageSourceMapping excludes both configured sources. A
-  build here reports `0 Warning(s)` — meaningless, since nothing compiled.
+### What actually fixed it
 
-The plugin fixtures *do* compile generated C# through `define_plugin!`, and they pass — but they
-build narrow per-plugin inventories, and warnings are not errors, so nothing fails.
+Item 3c, in one change:
 
-**This is the root cause of a defect class, not one field.** The same shape has now been recorded
-five times: `b4e07f12` (`nullable.rs` re-deriving reference-ness), `5d1ae4c7` (the processing gate
-re-implemented at ten sites), `31248473` (`is_cs_value_type` re-deriving struct-vs-class),
-`c33b9cf5` and `4e9a17c3` (wire re-deriving names). Each is an invariant spanning passes with no
-single owner. The compiler catches a useful subset of exactly that — and the feedback loop is
-severed at both ends.
+- `definition.cs` emits `_hasValue` only for union-projected enums, so six unit-only enums lost a
+  field nothing would ever read.
+- Factories and `Unmanaged.ToManaged` write it.
+- `HasValue`, `Value` and `TryGetValue` read it.
 
-### Fix, and why it is cheap
+### Still open: enforcement
 
-The warning surface is **one defect, not a long tail**, so no cleanup project blocks this:
+The fix removed today's 19. It does not stop the next one. `WarningsAsErrors` on the projects that
+compile generated output — the plugin fixtures — would make "field emitted with no reads"
+unlandable rather than discovered five items later.
 
-1. Fix the CS0117 in `Benchmark.cs` so something compiles generated output again.
-2. Enable `TreatWarningsAsErrors` on the projects that compile generated output.
-3. The 19 CS0169 become build failures.
-4. Item 3c's `_hasValue` writes clear them.
-
-After that, emitting a field without its writes is unlandable rather than discovered five items
-later.
-
-### Relation to item 5
-
-`docs/csharp-unions.md` item 5 is *"Snapshots move once; consumer projects compile the output"*,
-gated on 3d and 4b. That item is larger than it reads: **the consumer projects do not compile the
-output today**, for two unrelated reasons, and one of them is an environment and package-source
-problem rather than a code problem.
-
-### Not measured
-
-Whether `Bindings.csproj` produces additional warnings once it restores — it has never compiled
-here, so its warning profile is unknown and may differ from `benches/dotnet`. Whether the
-`ServiceAsyncBasic.Create` drift is a generator regression or a stale committed consumer was not
-investigated.
+Scope honestly: the fixtures are all **plugin-mode** (`DotnetLibrary`). Library-mode output
+(`RustLibrary` → `Bindings/`, `benches/dotnet/`) is what real consumers use, and neither of those
+compiles. Shared passes like `definition.cs` are covered either way, which is why this defect was
+catchable — but anything emitted only in library mode stays unguarded until item 5.
