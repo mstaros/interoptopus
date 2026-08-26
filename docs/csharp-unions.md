@@ -627,18 +627,27 @@ the pass is `union_names`, it owns naming only, and there is no gate — see Dec
 
 ### Remaining
 
-Items 0–1c, R and 3 are done. **1d is the first thing to fix** — it is a correctness hole that
-3b and 3c will convert into a build break. 3a can proceed in parallel.
+Items 0–1c, R and 1d are done. **3a and 3b are the open front**, and they can proceed in
+parallel: 3a is representation (private parameterless constructor, drop `_hasValue` on classes)
+and 3b is emission (nested case types). 3c waits on both.
+
+1d was previously named here as the first thing to fix; it landed in `f5057d4b`. It gated 3b
+because 3b introduces `{case_type}`, a new collision class, and every collision it resolves moves
+a stem — which was a place `wire` and `body.cs` disagreed until 1d closed it.
+
+**Unresolved in this line:** the claim that item "3" is done sits alongside 3a–3f listed open
+below. Either "3" is a superseded coarse item that 3a–3f replaced, or the claim is wrong. It was
+not determinable from this document and has not been guessed at.
 
 | # | Status | Item | Gate |
 |---|---|---|---|
 | 1d | **done** `f5057d4b` | ~~**`wire/mod.rs` bypasses the C# model.**~~ Six sites emit `v.name`; `cs_type_name` skips `sanitize_rust_name`. `Issues.md` `4e9a17c3` | — |
 | 3a | open | Class: private parameterless ctor, no `_hasValue` | — |
 | 3b | open | Nested `{case_type}` case types, **for union-projected enums only** — skip any `DataEnum` with no payload-carrying variant (§"Two layers, two rules"); within a union-projected enum every variant gets one, unit variants included. **Precondition for 3e**, not just prior to it: same-payload variants (`A(u32)`, `B(u32)`) make the generated constructors ambiguous without distinct case types | 1d ✔ |
-| 3c | open | `Value` / `HasValue` / `TryGetValue` — consumes `_hasValue`, clears CS0169 | 3a, 3b |
+| 3c | open | `Value` / `HasValue` / `TryGetValue` — consumes `_hasValue`, clears CS0169. **Same scope as 3b**: skip any `DataEnum` with no payload-carrying variant, or it gets these members with no cases behind them | 3a, 3b |
 | 3d | open | `[Union]` + `IUnion` via joined interface list | 3c |
 | 3e | open, **shrunk** | ~~decide whether the compiler synthesises it~~ — settled: it does, via the generated constructor. Reduces to "constructors are public and single-parameter"; nothing emitted for the conversion | 3b |
-| 3f | open | **Case-type accessibility** — fix it explicitly; consumers keep them internal | 3b |
+| 3f | open, **decided** | **Case-type accessibility — `public`**, stated at the emission site rather than inherited. Settled in Open items #3: a nested type defaults to `private`, which is unusable because the case type cannot then be named outside the union, and `internal` fails the same way one scope out since consumers pattern-match across an assembly boundary. An earlier version of this row said "consumers keep them internal" and was wrong. Implementation folds into 3b | 3b |
 | 4 | open | `ToUnmanaged` / `AsUnmanaged` empty guard | — |
 | 4a | open | `ToManaged` constructs via case ctors + validates tag | 3c |
 | 4b | open | Exception split (decided in Step 4; implementation only) | 4, 4a, 1 |
