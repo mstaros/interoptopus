@@ -161,6 +161,14 @@ either number as a regression signal**; compare pass/fail, not totals. If you ev
 that appears under one runner and not the other, that is a different thing and worth filing — this
 is not that.
 
+**One measurement against that, from the canary commit `4aad161`.** The validation runner
+reported *78 tests across 9 binaries, 3 skipped*. A local `cargo nextest run -p
+interoptopus_csharp` is *5 binaries, 2 skipped*. Those are not the same selection, so the
+premise recorded above — "same command, same worktree" — does not survive contact: validation
+runs a broader set than the package-scoped command it was being compared against. This does not
+fully explain 77 versus 78, and it is not offered as a resolution; it does mean the two figures
+probably never counted the same tests, which is a better lead than "unexplained".
+
 ### Plan state
 
 **Status lives in `docs/csharp-unions.md` § Todo/Remaining. That table is the single source, and
@@ -901,6 +909,30 @@ exactly what stripped `ResultVoidVoid` of its projection once already. `unit_var
 for `None`, `Panic` and `Null`. Every synthesised `Result`/`Option` carrier gets at least one
 `payload_variant` for its `Ok`/`Some` position, so `is_union_projected` is always true for them.
 A carrier reaching plain-enum would break `IResult` and `body_from_call`; it cannot.
+
+**A canary now sits ahead of this work — `pattern_ffi_slice_of_unit_enum`, landed in
+`4aad161` — and landing it already answered two things.** First, **slices of enums work today**:
+all fourteen plugin tests passed, so the generated C# for `SliceEnumDocumented` compiles and
+runs. Second, and more useful, **it took the non-blittable slice path**. The emitted type is a
+`class`, not a blittable view; its own doc comment says elements are marshalled from their
+unmanaged representation on each access, and it allocates a native copy through
+`Marshal.AllocHGlobal`. The indexer reads `Marshal.PtrToStructure<EnumDocumented.Unmanaged>` and
+calls `.ToManaged()`; `From()` calls `managed[i].AsUnmanaged()` and `Marshal.StructureToPtr`.
+There are two slice paths — `output::patterns::slice::basic` and `::non_blittable` — and an enum
+element takes the second.
+
+**That reframes the marshalling-mode question and adds a requirement nobody had recorded.**
+Interoptopus never asks the classic marshaller to blit an enum array; it copies element by
+element through generated members. So the pinning hazard may be moot *as generated* — but the
+members it copies through are `EnumDocumented.Unmanaged`, `AsUnmanaged()` and `ToManaged()`, and
+**none of them will exist once the type is a plain C# `enum`**. Step three must therefore teach
+the slice emitter the plain-enum shape as well, or it breaks every slice of a unit-only enum
+with a compile error. That is a far more concrete failure than "blittability", it is now known
+in advance rather than at the moment of breakage, and it is what the canary will catch.
+
+One unrelated defect visible in that output, pre-existing and not caused by the canary: the
+non-blittable slice emitter writes `}public partial class Slice…` with no newline between the
+closing brace and the following `partial`. It compiles; it is merely ugly.
 
 Open questions `79be256e` lists, plus one this work added:
 
