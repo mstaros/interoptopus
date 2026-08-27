@@ -10,4 +10,29 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
+  <!--
+      The Content glob above copies the native library these bindings P/Invoke into. It is
+      correct as written: a top-level `cargo build -p reference_project` puts the cdylib in
+      target\debug. Verified 2026-08-27 - do not "fix" the path. Building the crate only as a
+      test dependency leaves an unhashed copy in target\debug\deps with no hardlink up, which
+      is why the directory can look empty.
+
+      Provisioning is deliberately NOT done from MSBuild. An Exec running cargo here contends
+      with any other cargo holding the target directory lock; observed 2026-08-27 as
+      `failed to create file target\debug\reference_project.d`, cargo exit 101, in a plain
+      `dotnet build` with no outer cargo at all. Under `cargo test` it would block rather than
+      fail. Provision on the cargo side: build the crate with every feature enabled before
+      building or testing this project.
+
+      A fail-fast guard was attempted 2026-08-27 and removed. Hooked to
+      BeforeTargets="PrepareForBuild", it did not fire on an up-to-date project - that target is
+      skipped, and the guard with it. If you retry, hook something that always runs and verify it
+      fires in BOTH directions before trusting it. Until then the failure mode is
+      DllNotFoundException from the Interop static constructor, which looks like a marshalling
+      fault and is not.
+
+      The all-features flag is not optional: the bindings are generated with every feature
+      enabled, so a narrower build produces EntryPointNotFoundException, which looks like an
+      interop bug and is a build-configuration one. See docs/csharp-unions-handoff.md section 9.
+    -->
 </Project>
