@@ -988,18 +988,33 @@ holding `IntPtr _data`, allocating through `Marshal.AllocHGlobal` and copying ea
 `SliceInt` and `SliceBool`. The conversion became `AsIs`, the template selection followed, and
 nothing in `slices.rs` was touched.
 
-**But do not read that as proof it works, and an earlier version of this paragraph did.** It
+**Do not read the flip itself as proof, and an earlier version of this paragraph did.** It
 claimed "all fourteen plugin tests passed, so the generated C# for `SliceEnumDocumented` compiles
 and runs." That does not follow. `reference_project::interop` writes bindings to
 `tests/reference_project/Bindings` and `benches/dotnet` and asserts a snapshot — **it compiles
-nothing**. The plugin fixtures compile *plugin* inventories, declared by `plugin!`, which do not
-contain `pattern_ffi_slice_of_unit_enum`. The two facts were true and unrelated, and putting them
-in one sentence manufactured a conclusion.
+nothing**. The plugin fixtures compile plugin inventories, declared by `plugin!`, which do not
+contain `pattern_ffi_slice_of_unit_enum`. Two true, unrelated facts in one sentence manufactured
+a conclusion.
 
-**So the pinning path is generated but uncompiled and unrun.** Whether the classic marshaller
-accepts a pinned enum array is still open — the canary moved the question from "which template"
-to "does this template work", which is progress, but it did not answer it. §0's rule applies to
-this document as much as to the code: never conclude "it works" from snapshots.
+**It is now answered, by execution.** A pinned `EnumDocumented[]` survives the boundary:
+`[A,B,B]` → 2, `[B,A,B,C,B]` → 3, `[A,C,A]` → 0. Three lengths, three arrangements, which no
+wrong element stride satisfies jointly. And the risk was overstated from the start — **the enum
+never crosses as an enum**; `{ IntPtr, ulong }` does. `GCHandle.Alloc` is the only runtime
+component that touches the element type, and an `enum : byte` array pins as a `byte[]` does.
+
+**The condition that let this go unnoticed matters more than the answer, and is still open.**
+**Nothing in this repository compiles the generated reference bindings.** The plugin fixtures do
+compile generated C# — but only for the *plugin* inventory, so the reference output has no
+compiler pointed at it anywhere. That is how text-valid, C#-invalid output survived a green
+suite: after step three the generator emitted `IsA`/`IsB`/`IsC` accessors on types now projected
+as plain enums, at two sites, and every test passed. It was found only when something finally
+compiled the output.
+
+**Be precise about what failed, because "snapshots are weak" is the wrong lesson.** `insta`
+compared correctly and the accepted snapshot was accurate. A snapshot is a sound regression guard
+*once something has established the output is valid* — here nothing ever did, so it was guarding
+a baseline no one had checked. The fix is a compiler downstream of the reference bindings, not
+distrust of snapshots. Until that exists, expect the next defect of this shape.
 
 **There are two C# projects in `tests/reference_project/Tests/`, and an earlier version of this
 paragraph conflated them.** It named `InteropSpike.csproj` as the harness holding the
@@ -1029,21 +1044,36 @@ frozen and uses `byte`/`Vec3f32`, never an enum. So the work item is not "repair
 `pattern_ffi_slice_of_unit_enum` counts variants equal to `EnumDocumented::B` and returns the
 count, so `[A, B, B]` must return `2`. Content-derived, not an it-did-not-throw test.
 
-**Two practical traps for whoever writes it.** The bindings on disk are stale in a way that is
-worse than "pre-plain-enum": `Bindings/Interop.cs` still shows `EnumDocumented` as a struct
-carrying **`bool _hasValue`**, which item 3c's scoping removed from unit-only enums, so they
-predate that too. Regenerate first, in a transaction — `reference_project::interop` rewrites
-tracked `.cs` files and a `.snap`. And **nothing builds the cdylib**: `Bindings.csproj` copies
-`target/debug/*reference_project*` via a `Content` glob, but only `InteropSpike.csproj` ever ran
-`cargo build` to produce it. Without that, expect `DllNotFoundException`, not a marshalling
-failure.
+**Two practical traps for whoever writes it, and the second is a gap in the repository rather
+than a mistake you might make.** The bindings on disk are stale in a way worse than
+"pre-plain-enum": `Bindings/Interop.cs` still shows `EnumDocumented` as a struct carrying
+**`bool _hasValue`**, which item 3c's scoping removed from unit-only enums, so they predate that
+too. Regenerate first, in a transaction — `reference_project::interop` rewrites tracked `.cs`
+files and a `.snap`.
 
-**The cheaper route offered above does not work, and it will be reached for again if this is not
-said plainly.** Adding a slice-of-enum case to a plugin fixture cannot answer the pinning
-question: `plugin!` declares methods that **Rust calls into C#**, and pinning happens only when
-**C# builds a slice from a managed array and passes it to Rust**. That direction does not exist in
-a plugin. The reference-project bindings are the only place it does, which is the whole reason
-this section is about a C# project at all.
+**Nothing provisions the cdylib, and this is worth its own fix.** `Bindings.csproj` copies
+`target/debug/*reference_project*` through a `Content` glob — **the glob is correct**; a
+suspicion that it pointed at the wrong directory was checked on 2026-08-27 and was wrong.
+`target/debug` is exactly where `cargo build -p reference_project` puts a cdylib. The problem is
+that nobody runs that: `cargo test` builds the crate as a *dependency*, leaving the unhashed DLL
+in `target/debug/deps` with no hardlink up a level, and `Tests.csproj` has no cargo step at all.
+Only `InteropSpike.csproj` ever ran one, in a `BeforeTargets` hook.
+
+**So `DllNotFoundException` is the default outcome for anyone running that suite** — and it is
+worth naming beside the four-outcome triage above, because three of those four are code faults
+and this one is not. Diagnose it as provisioning before suspecting marshalling. A Rust test that
+shells out to `cargo build -p reference_project` is the better home for this than a
+`BeforeTargets` hook: it puts provisioning where `cargo test` will actually trigger it, and it
+avoids the cargo-inside-MSBuild-inside-cargo nesting flagged above. **Lift that step somewhere
+before deleting `InteropSpike.csproj`**, which is currently the only record of how the native
+library gets provisioned.
+
+**The plugin-fixture alternative is struck, not merely doubted.** Adding a slice-of-enum case to
+a plugin fixture *cannot* answer the pinning question: `plugin!` declares methods that **Rust
+calls into C#**, and pinning happens only when **C# builds a slice from a managed array and
+passes it to Rust**. That direction does not exist in a plugin. The reference-project bindings
+are the only place it does. Anyone who reaches for the cheap route here loses a day and learns
+nothing; that is why this section is about a C# project at all.
 
 **Read `slices.rs` before reasoning about this — the first version of these paragraphs got the
 mechanism backwards.** The split is not blittability and the emitter never tests for it. It is
@@ -1101,32 +1131,20 @@ Open questions `79be256e` lists, plus one this work added:
   against a one-byte C# side, but the macro never emits `Layout::C`, so that arm is unreachable
   here. Do not cite it as evidence of a mismatch risk. `EnumNegative` still needs a signed type,
   which the same mechanism supplies.
-- **Which marshalling mode the bindings run under.** `DisableRuntimeMarshalling` is **not**
-  emitted — `templates/rust/header.cs` is a ten-line comment banner with no assembly attributes.
-  Under the classic marshaller enums are layout-compatible but not universally blittable; enum
-  arrays and pinning are the failing cases. So the deciding question is whether a unit-only enum
-  can reach a slice element or a pinned array. **Measured by regex over the reference project,
-  2026-08-27: it cannot, today.** Every `Slice`/`SliceMut` element type in the corpus is `u8`,
-  `u32`, `i32`, `ffi::Bool`, `Vec3f32`, `CharArray`, `UseString`, `ffi::String`, `UseCStrPtr`,
-  `UseSliceByteInStruct` or `common::Vec`; every fixed array is `[u8; 16]`, `[u16; 5]` or
-  `[T; 16]`. The four unit-only enums — `EnumDocumented`, `EnumRenamedXYZ`, `EnumNegative`,
-  `EnumExplicitThenImplicit` — appear only by value in signatures and as plain struct fields.
-  **The nearest exercised case is `NestedArray`**, which carries `field_enum: EnumRenamedXYZ` and
-  is passed as `&mut NestedArray` by `nested_array_2`: a by-ref struct containing an enum, which
-  is the pinning question in mild form and is the first thing that would break. So option C
-  cannot break anything the suite currently measures — but **that is a fact about the corpus, not
-  a guarantee**, since a consumer can write `ffi::Slice<Color>` and `Slice<T>` only requires
-  `T: TypeInfo`. **Do not settle the blittability claim from memory** — it is exactly the kind of
-  specification-derived claim that was wrong twice already (3d's gate, `IUnion`'s namespace).
-  **But the obvious experiment cannot answer it yet, and the first version of this bullet said
-  otherwise.** Adding a reference-project function taking `Slice<EnumDocumented>` today generates
-  a slice of the current *struct* representation, because no plain C# `enum` is emitted anywhere
-  in this codebase; the plugin build would prove only that slices of structs work, which is
-  already known. Add the function anyway, but as a **canary placed ahead of the change**: land it
-  and accept its snapshot now, and when step three flips that element type from struct to `enum`
-  the same fixture either compiles and runs or does not, at the moment the answer matters and in
-  the only layer that proves generated C# compiles. Reasoning it out from the marshalling
-  documentation instead is the move that produced both wrong claims cited above.
+- **Which marshalling mode the bindings run under — answered by execution, and the question was
+  overstated.** `DisableRuntimeMarshalling` is **not** emitted; `templates/rust/header.cs` is a
+  ten-line comment banner with no assembly attributes. Earlier revisions of this bullet treated
+  that as a live classic-marshaller hazard — "enum arrays and pinning are the failing cases" —
+  and it was wrong. **A pinned `EnumDocumented[]` survives the boundary.** Three cases, run:
+  `[A,B,B]` → 2, `[B,A,B,C,B]` → 3, `[A,C,A]` → 0. Three lengths and three arrangements, which
+  a wrong element stride could not jointly satisfy — confirmation, not an it-did-not-throw pass.
+
+  **The reason it was never really at risk is worth keeping**, because it is the thing the
+  earlier framing got backwards: **the enum never crosses as an enum.** What crosses is
+  `{ IntPtr, ulong }`. The only runtime component that touches the element type is
+  `GCHandle.Alloc`, and an `enum : byte` array pins exactly as a `byte[]` does. There was no
+  marshaller decision to get wrong. Treat "classic marshaller cannot handle enum arrays" as
+  retired, not merely untested.
 - Exhaustiveness is genuinely lost. A `switch` over a plain C# `enum` is never exhaustive, because
   `(Color)99` compiles. Closed enums would have fixed this and **did not ship in C# 15**. A Roslyn
   analyzer is the interim substitute for the compile-time half; there is no runtime half to lose,
