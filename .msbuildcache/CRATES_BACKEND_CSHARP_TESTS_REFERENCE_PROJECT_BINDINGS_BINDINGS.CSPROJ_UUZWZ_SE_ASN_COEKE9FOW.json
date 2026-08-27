@@ -1,0 +1,119 @@
+{
+  "Files": {
+    "crates\\backend_csharp\\tests\\reference_project\\Bindings\\bin\\Debug\\net11.0\\Bindings.deps.json": {
+      "Hash": "MURMUR:62420A99D7128D87000000",
+      "LastWriteTime": 639234562117106947,
+      "FileSize": 418
+    },
+    "crates\\backend_csharp\\tests\\reference_project\\Bindings\\bin\\Debug\\net11.0\\Bindings.dll": {
+      "Hash": "MURMUR:0E11810FA2343E70000000",
+      "LastWriteTime": 639234562116162175,
+      "FileSize": 526336
+    },
+    "crates\\backend_csharp\\tests\\reference_project\\Bindings\\bin\\Debug\\net11.0\\Bindings.pdb": {
+      "Hash": "MURMUR:FBC7E220C3846F94000000",
+      "LastWriteTime": 639234562113783147,
+      "FileSize": 337808
+    },
+    "crates\\backend_csharp\\tests\\reference_project\\Bindings\\bin\\Debug\\net11.0\\libreference_project.d": {
+      "Hash": "MURMUR:F175F6A2A5AA402B000000",
+      "LastWriteTime": 639234574551829502,
+      "FileSize": 21583
+    },
+    "crates\\backend_csharp\\tests\\reference_project\\Bindings\\bin\\Debug\\net11.0\\libreference_project.rlib": {
+      "Hash": "MURMUR:3CE26A616B3FBB95000000",
+      "LastWriteTime": 639234574550901058,
+      "FileSize": 85474368
+    },
+    "crates\\backend_csharp\\tests\\reference_project\\Bindings\\bin\\Debug\\net11.0\\reference_project.d": {
+      "Hash": "MURMUR:564ACE7332E123F9000000",
+      "LastWriteTime": 639234574551829502,
+      "FileSize": 21579
+    },
+    "crates\\backend_csharp\\tests\\reference_project\\Bindings\\bin\\Debug\\net11.0\\reference_project.dll": {
+      "Hash": "MURMUR:88C5A70681AE8762000000",
+      "LastWriteTime": 639234574548691356,
+      "FileSize": 4223488
+    },
+    "crates\\backend_csharp\\tests\\reference_project\\Bindings\\bin\\Debug\\net11.0\\reference_project.dll.exp": {
+      "Hash": "MURMUR:CDD6EBA42ACE382D000000",
+      "LastWriteTime": 639234574547927949,
+      "FileSize": 35905
+    },
+    "crates\\backend_csharp\\tests\\reference_project\\Bindings\\bin\\Debug\\net11.0\\reference_project.dll.lib": {
+      "Hash": "MURMUR:314CF5B56615797A000000",
+      "LastWriteTime": 639234574547953173,
+      "FileSize": 62164
+    },
+    "crates\\backend_csharp\\tests\\reference_project\\Bindings\\bin\\Debug\\net11.0\\reference_project.pdb": {
+      "Hash": "MURMUR:66F09AEC76040120000000",
+      "LastWriteTime": 639234574548773439,
+      "FileSize": 26718208
+    },
+    "crates\\backend_csharp\\tests\\reference_project\\Bindings\\obj\\Debug\\net11.0\\.NETCoreApp,Version=v11.0.AssemblyAttributes.cs": {
+      "Hash": "MURMUR:002F314C05C1B81E000000",
+      "LastWriteTime": 639225774159271186,
+      "FileSize": 200
+    },
+    "crates\\backend_csharp\\tests\\reference_project\\Bindings\\obj\\Debug\\net11.0\\Bindings.AssemblyInfo.cs": {
+      "Hash": "MURMUR:223E68B0D657B859000000",
+      "LastWriteTime": 639234562031937548,
+      "FileSize": 1144
+    },
+    "crates\\backend_csharp\\tests\\reference_project\\Bindings\\obj\\Debug\\net11.0\\Bindings.AssemblyInfoInputs.cache": {
+      "Hash": "MURMUR:ECA33E817E2850D0000000",
+      "LastWriteTime": 639234562031684596,
+      "FileSize": 66
+    },
+    "crates\\backend_csharp\\tests\\reference_project\\Bindings\\obj\\Debug\\net11.0\\Bindings.assets.cache": {
+      "Hash": "MURMUR:8AC9696318350AC9000000",
+      "LastWriteTime": 639234562028761707,
+      "FileSize": 894
+    },
+    "crates\\backend_csharp\\tests\\reference_project\\Bindings\\obj\\Debug\\net11.0\\Bindings.csproj.CoreCompileInputs.cache": {
+      "Hash": "MURMUR:7C2EC1769063C37F000000",
+      "LastWriteTime": 639234562031985060,
+      "FileSize": 66
+    },
+    "crates\\backend_csharp\\tests\\reference_project\\Bindings\\obj\\Debug\\net11.0\\Bindings.csproj.FileListAbsolute.txt": {
+      "Hash": "MURMUR:8CF0382C0EFDA74D000000",
+      "LastWriteTime": 639234580304800235,
+      "FileSize": 3792
+    },
+    "crates\\backend_csharp\\tests\\reference_project\\Bindings\\obj\\Debug\\net11.0\\Bindings.csproj.Up2Date": {
+      "Hash": "MURMUR:1E57CF2792A900D06C1CDF",
+      "LastWriteTime": 639234583588461811,
+      "FileSize": 0
+    },
+    "crates\\backend_csharp\\tests\\reference_project\\Bindings\\obj\\Debug\\net11.0\\Bindings.dll": {
+      "Hash": "MURMUR:0E11810FA2343E70000000",
+      "LastWriteTime": 639234562116162175,
+      "FileSize": 526336
+    },
+    "crates\\backend_csharp\\tests\\reference_project\\Bindings\\obj\\Debug\\net11.0\\Bindings.GeneratedMSBuildEditorConfig.editorconfig": {
+      "Hash": "MURMUR:076BFEDC3307FB11000000",
+      "LastWriteTime": 639234562029831919,
+      "FileSize": 1214
+    },
+    "crates\\backend_csharp\\tests\\reference_project\\Bindings\\obj\\Debug\\net11.0\\Bindings.pdb": {
+      "Hash": "MURMUR:FBC7E220C3846F94000000",
+      "LastWriteTime": 639234562113783147,
+      "FileSize": 337808
+    },
+    "crates\\backend_csharp\\tests\\reference_project\\Bindings\\obj\\Debug\\net11.0\\Bindings.sourcelink.json": {
+      "Hash": "MURMUR:E391F0CBC73499B9000000",
+      "LastWriteTime": 639234562032238950,
+      "FileSize": 218
+    },
+    "crates\\backend_csharp\\tests\\reference_project\\Bindings\\obj\\Debug\\net11.0\\refint\\Bindings.dll": {
+      "Hash": "MURMUR:3D9647B3C8D5A4F1000000",
+      "LastWriteTime": 639234562116162175,
+      "FileSize": 202240
+    },
+    "crates\\backend_csharp\\tests\\reference_project\\Bindings\\obj\\Debug\\net11.0\\ref\\Bindings.dll": {
+      "Hash": "MURMUR:3D9647B3C8D5A4F1000000",
+      "LastWriteTime": 639234562116162175,
+      "FileSize": 202240
+    }
+  }
+}

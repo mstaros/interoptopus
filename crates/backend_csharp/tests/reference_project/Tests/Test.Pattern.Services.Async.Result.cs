@@ -24,7 +24,7 @@ public class TestPatternServicesAsyncResult
         }
         catch (EnumException<Error> e)
         {
-            Assert.True(e.Value.IsFail);
+            Assert.Equal(Error.Fail, e.Value);
             exceptionThrown = true;
         }
 

@@ -1,16 +1,16 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-    <PropertyGroup>
-        <TargetFramework>net11.0</TargetFramework>
-        <OutputType>Exe</OutputType>
-        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-        <Nullable>enable</Nullable>
-        <!-- Conditional aot flag so dynamic code execution is allowed for debug builds but disabled when publishing the .exe -->
-        <PublishAot Condition="'$(Configuration)' == 'Release'">true</PublishAot>
-    </PropertyGroup>
-    <ItemGroup>
-        <ProjectReference Include="..\Bindings\Bindings.csproj"/>
-    </ItemGroup>
-    <ItemGroup>
-        <PackageReference Include="xunit.v3.aot" Version="4.0.0-pre.128"/>
-    </ItemGroup>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+    <!-- Conditional aot flag so dynamic code execution is allowed for debug builds but disabled when publishing the .exe -->
+    <PublishAot Condition="'$(Configuration)' == 'Release'">true</PublishAot>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Bindings\Bindings.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3.aot" Version="4.0.0-pre.128" />
+  </ItemGroup>
 </Project>
