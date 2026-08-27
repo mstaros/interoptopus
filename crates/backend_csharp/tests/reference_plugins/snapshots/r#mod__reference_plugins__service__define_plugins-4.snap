@@ -879,6 +879,12 @@ public partial class ResultNestedAError : IResult<NestedA, Error>, IDisposable
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
 
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultNestedAError(OkCase value) { _variant = 0; _Ok = value.Value; }
+    public ResultNestedAError(ErrCase value) { _variant = 1; _Err = value.Value; }
+    public ResultNestedAError(PanicCase value) { _variant = 2; }
+    public ResultNestedAError(NullCase value) { _variant = 3; }
+
 
     
     // Pass-through helpers: plugin C# methods return the full Result themselves.
