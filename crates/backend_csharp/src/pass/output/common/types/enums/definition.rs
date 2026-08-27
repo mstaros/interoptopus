@@ -31,6 +31,7 @@ impl Pass {
         types: &model::common::types::all::Pass,
         struct_class: &model::common::types::info::struct_class::Pass,
         disposable: &model::common::types::info::disposable::Pass,
+        projection: &model::common::types::info::projection::Pass,
         mode: crate::pass::OperationMode,
     ) -> OutputResult {
         let templates = output_master.templates();
@@ -52,7 +53,7 @@ impl Pass {
             // `_hasValue` is union machinery. Without this the field would be emitted on
             // unit-only enums where nothing reads it, which is CS0169 — see `Issues.md`
             // `8f4c1e2a`, where six of the nineteen were exactly that.
-            let is_union_projected = data_enum.is_union_projected();
+            let is_union_projected = projection.is_union(ty);
             let struct_or_class = if is_struct { "struct" } else { "class" };
 
             let variants: Vec<HashMap<&str, String>> = data_enum

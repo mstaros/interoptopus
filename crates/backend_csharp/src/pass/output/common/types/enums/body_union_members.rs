@@ -47,6 +47,7 @@ impl Pass {
         output_master: &output::common::master::Pass,
         types: &model::common::types::all::Pass,
         struct_class: &model::common::types::info::struct_class::Pass,
+        projection: &model::common::types::info::projection::Pass,
     ) -> OutputResult {
         let templates = output_master.templates();
 
@@ -54,7 +55,7 @@ impl Pass {
             let type_kind = &ty.kind;
             let Some(data_enum) = model::common::types::union_names::data_enum(type_kind) else { continue };
 
-            if !data_enum.is_union_projected() {
+            if !projection.is_union(*type_id) {
                 continue;
             }
 

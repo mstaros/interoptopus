@@ -39,6 +39,7 @@ impl Pass {
         _pass_meta: &mut crate::pass::PassMeta,
         output_master: &output::common::master::Pass,
         types: &model::common::types::all::Pass,
+        projection: &model::common::types::info::projection::Pass,
         mode: crate::pass::OperationMode,
     ) -> OutputResult {
         let templates = output_master.templates();
@@ -54,7 +55,7 @@ impl Pass {
             // union gives every variant a case type, unit variants included — an empty
             // case type is what keeps a mixed enum exhaustive in the compiler-checked
             // layer, and folding unit variants together was considered and dropped.
-            if !data_enum.is_union_projected() {
+            if !projection.is_union(*type_id) {
                 continue;
             }
 

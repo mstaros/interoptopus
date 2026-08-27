@@ -154,4 +154,14 @@ impl Pass {
     pub fn projection(&self, ty: TypeId) -> Option<Projection> {
         self.projection.get(&ty).copied()
     }
+
+    /// Whether this type is projected as a C# 15 union.
+    ///
+    /// The convenience the output passes actually want. Note that a type answering `false` here
+    /// may be a non-union enum *or* not an enum at all; the passes that ask already skip
+    /// non-enums before reaching this, so the two collapse safely for them and nowhere else.
+    #[must_use]
+    pub fn is_union(&self, ty: TypeId) -> bool {
+        self.projection(ty) == Some(Projection::Union)
+    }
 }

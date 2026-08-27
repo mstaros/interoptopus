@@ -122,7 +122,7 @@ impl Pass {
             // neither. Deliberately *not* gated on `is_managed_only` — that guard governs the
             // `Unmanaged` mirror and the marshaller, and a managed-only enum can still be a
             // union. `DataEnum` in the reference project is exactly that case.
-            let is_union_projected = model::common::types::union_names::data_enum(type_kind).is_some_and(|de| de.is_union_projected());
+            let is_union_projected = projection.is_union(ty);
             context.insert("is_union_projected", &is_union_projected);
             context.insert("visibility", &visibility);
             context.insert("is_result", &result_interface.is_some());

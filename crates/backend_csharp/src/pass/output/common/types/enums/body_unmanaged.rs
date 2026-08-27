@@ -27,6 +27,7 @@ impl Pass {
         types: &model::common::types::all::Pass,
         managed: &output::common::conversion::unmanaged_conversion::Pass,
         struct_class: &model::common::types::info::struct_class::Pass,
+        projection: &model::common::types::info::projection::Pass,
         mode: crate::pass::OperationMode,
     ) -> OutputResult {
         let templates = output_master.templates();
@@ -59,7 +60,7 @@ impl Pass {
             // validated switch through case constructors, which establishes `_hasValue`
             // implicitly; until then this is the write that keeps native-sourced values from
             // reporting `Value == null`.
-            let writes_has_value = struct_class.is_struct(*type_id) && data_enum.is_union_projected();
+            let writes_has_value = struct_class.is_struct(*type_id) && projection.is_union(*type_id);
 
             let mut context = Context::new();
             context.insert("writes_has_value", &writes_has_value);

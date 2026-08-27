@@ -27,6 +27,7 @@ impl Pass {
         output_master: &output::common::master::Pass,
         types: &model::common::types::all::Pass,
         struct_class: &model::common::types::info::struct_class::Pass,
+        projection: &model::common::types::info::projection::Pass,
         mode: crate::pass::OperationMode,
     ) -> OutputResult {
         let templates = output_master.templates();
@@ -63,7 +64,7 @@ impl Pass {
             // `definition.cs`. A factory produces a well-formed value, so it is the primary
             // place the flag is set. Without this write the flag stays `false` and `Value`
             // would report `null` for every value the consumer constructs.
-            let writes_has_value = struct_class.is_struct(*type_id) && data_enum.is_union_projected();
+            let writes_has_value = struct_class.is_struct(*type_id) && projection.is_union(*type_id);
 
             let mut context = Context::new();
             context.insert("writes_has_value", &writes_has_value);
@@ -73,7 +74,7 @@ impl Pass {
             // is CS9385 "a union type must have at least one union creation member". They are
             // gated on projection alone, not on `writes_has_value`, because a class-backed
             // union needs them just as much and simply has no flag to set.
-            let is_union_projected = data_enum.is_union_projected();
+            let is_union_projected = projection.is_union(*type_id);
             context.insert("is_union_projected", &is_union_projected);
             context.insert("name", name);
             context.insert("variants", &variants);
