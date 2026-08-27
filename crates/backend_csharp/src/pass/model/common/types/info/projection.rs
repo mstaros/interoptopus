@@ -112,9 +112,9 @@ impl Pass {
             // to `ty.is_some()` passes the whole suite except one fixture; see the module
             // history in `docs/csharp-unions-handoff.md` §8.
             //
-            // `PlainEnum` is deliberately unreachable here. Step three is what routes to it.
+            // Step three routes not-union to `PlainEnum`. `Discriminant` is now unreachable, and that is expected rather than an oversight: not-union is exactly "no variant can carry a payload", which is exactly the unit-only population, which is exactly the plain-enum population. It is retained only until something is shown to force a unit-only enum to stay a struct. If nothing does, delete it.
             if let Some(data_enum) = model::common::types::union_names::data_enum(kind) {
-                let projection = if data_enum.is_union_projected() { Projection::Union } else { Projection::Discriminant };
+                let projection = if data_enum.is_union_projected() { Projection::Union } else { Projection::PlainEnum };
 
                 if self.projection.get(type_id) != Some(&projection) {
                     self.projection.insert(*type_id, projection);
@@ -163,5 +163,15 @@ impl Pass {
     #[must_use]
     pub fn is_union(&self, ty: TypeId) -> bool {
         self.projection(ty) == Some(Projection::Union)
+    }
+
+    /// Whether this type is emitted as a plain C# `enum` rather than a struct.
+    ///
+    /// The type has no `Unmanaged` mirror, no marshaller and no members, so its managed and
+    /// unmanaged representations are identical — which is what makes it `ManagedConversion::AsIs`
+    /// and, through that, what makes composites copy it and slices pin it.
+    #[must_use]
+    pub fn is_plain_enum(&self, ty: TypeId) -> bool {
+        self.projection(ty) == Some(Projection::PlainEnum)
     }
 }

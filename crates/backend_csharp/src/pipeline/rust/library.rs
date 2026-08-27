@@ -403,7 +403,7 @@ impl RustLibrary {
             r.run(m.type_map_opaque.process(&mut pass_meta, &m.id_maps, &mut m.type_kinds, &self.inventory.types))?;
             r.run(m.type_map_struct_fields.process(&mut pass_meta, &m.id_maps, &self.inventory.types))?;
             r.run(m.type_map_wire_only.process(&mut pass_meta, &m.id_maps, &mut m.type_kinds, &self.inventory.types))?;
-            r.run(m.type_managed_conversion.process(&mut pass_meta, &m.type_all))?;
+            r.run(m.type_managed_conversion.process(&mut pass_meta, &m.type_all, &m.type_projection))?;
             r.run(m.type_disposable.process(&mut pass_meta, &m.type_managed_conversion, &m.type_all))?;
             r.run(m.type_nullable.process(&mut pass_meta, &m.type_all))?;
             r.run(m.type_struct_class.process(&mut pass_meta, &m.type_managed_conversion, &m.type_all))?;

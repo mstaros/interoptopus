@@ -52,6 +52,11 @@ impl Pass {
                 _ => continue,
             }
 
+            if projection.is_plain_enum(*type_id) {
+                self.enum_body.insert(*type_id, String::new());
+                continue;
+            }
+
             let name = &ty.name;
             let visibility = ty.visibility.to_string();
 

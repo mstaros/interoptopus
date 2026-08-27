@@ -332,7 +332,7 @@ impl DotnetLibrary {
             r.run(m.type_names.process(&mut pass_meta, &m.id_maps, &m.type_kinds, &self.inventory.types))?;
             r.run(m.type_union_names.process(&mut pass_meta, &mut m.type_kinds, &m.type_names))?;
             r.run(m.type_all.process(&mut pass_meta, &m.type_kinds, &m.type_names, &m.id_maps, &self.inventory.types))?;
-            r.run(m.type_managed_conversion.process(&mut pass_meta, &m.type_all))?;
+            r.run(m.type_managed_conversion.process(&mut pass_meta, &m.type_all, &m.type_projection))?;
             r.run(m.type_struct_class.process(&mut pass_meta, &m.type_managed_conversion, &m.type_all))?;
             r.run(m.type_projection.process(&mut pass_meta, &m.type_all))?;
             r.run(m.type_disposable.process(&mut pass_meta, &m.type_managed_conversion, &m.type_all))?;

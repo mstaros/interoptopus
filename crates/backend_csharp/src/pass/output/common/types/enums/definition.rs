@@ -46,6 +46,23 @@ impl Pass {
             let is_disposable = disposable.is_disposable(*type_id).unwrap_or(false);
 
             let ty = *type_id;
+
+            if projection.is_plain_enum(ty) {
+                let variants: Vec<HashMap<&str, String>> =
+                    data_enum.variants.iter().map(|v| HashMap::from([("name", v.stem.clone()), ("tag", v.tag.to_string())])).collect();
+
+                let mut context = Context::new();
+                context.insert("name", name);
+                context.insert("docs", &docs);
+                context.insert("visibility", &visibility);
+                context.insert("variants", &variants);
+                context.insert("discriminant_type", data_enum.discriminant_type.cs_name());
+
+                let rendered = templates.render("common/types/enums/definition_plain_enum.cs", &context)?;
+                self.enum_ty.insert(*type_id, rendered);
+                continue;
+            }
+
             let is_struct = struct_class.is_struct(ty);
 
             // Same eligibility rule as 3b (`docs/csharp-unions.md` "Two layers, two rules"):

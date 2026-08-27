@@ -30,7 +30,12 @@ impl Pass {
     }
 
     #[allow(clippy::too_many_lines)]
-    pub fn process(&mut self, _pass_meta: &mut crate::pass::PassMeta, types: &model::common::types::all::Pass) -> ModelResult {
+    pub fn process(
+        &mut self,
+        _pass_meta: &mut crate::pass::PassMeta,
+        types: &model::common::types::all::Pass,
+        projection: &model::common::types::info::projection::Pass,
+    ) -> ModelResult {
         let mut outcome = Unchanged;
 
         for (cs_id, ty) in types.iter() {
@@ -114,29 +119,37 @@ impl Pass {
 
                 // Enums: at least To; Into if any variant data is Into
                 TypeKind::DataEnum(data_enum) => {
-                    let mut has_into = false;
-                    let mut pending = false;
-                    for variant in &data_enum.variants {
-                        if let Some(variant_ty) = variant.ty {
-                            match self.managed_conversion.get(&variant_ty) {
-                                Some(ManagedConversion::Into) => {
-                                    has_into = true;
-                                    break;
-                                }
-                                Some(_) => {}
-                                None => {
-                                    pending = true;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-
-                    if pending {
+                    if projection.projection(*cs_id).is_none() {
                         continue;
                     }
 
-                    if has_into { ManagedConversion::Into } else { ManagedConversion::To }
+                    if projection.is_plain_enum(*cs_id) {
+                        ManagedConversion::AsIs
+                    } else {
+                        let mut has_into = false;
+                        let mut pending = false;
+                        for variant in &data_enum.variants {
+                            if let Some(variant_ty) = variant.ty {
+                                match self.managed_conversion.get(&variant_ty) {
+                                    Some(ManagedConversion::Into) => {
+                                        has_into = true;
+                                        break;
+                                    }
+                                    Some(_) => {}
+                                    None => {
+                                        pending = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        if pending {
+                            continue;
+                        }
+
+                        if has_into { ManagedConversion::Into } else { ManagedConversion::To }
+                    }
                 }
 
                 // Composites: at least To; Into if any field is Into
