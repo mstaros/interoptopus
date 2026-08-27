@@ -105,6 +105,44 @@ impl<'a> CsLayout<'a> {
     }
 }
 
+/// Wire's view of one further model decision: is this enum emitted as a plain C# `enum`?
+///
+/// Kept separate from [`CsNames`] for the same reason [`CsLayout`] is: that type is named for
+/// identifiers and is deliberately narrow, and this is a different question with a different
+/// authority - `types::info::projection` owns it.
+///
+/// **Do not re-derive this predicate.** Two proxies look right and are not:
+///
+/// - `data_enum(kind).is_some()` - a plain-projected enum is *still* `TypeKind::DataEnum` in the
+///   model. Step three changed emission, not kind. `MyEnum` resolves a stem through
+///   [`CsNames::variant_stem`] and would answer "union" here.
+/// - "every variant is `VariantKind::Unit`" - `fallback.rs::payload_variant` sets
+///   `can_carry_payload: true` unconditionally, so synthesised `Result`/`Option` carriers stay
+///   union-projected while their Rust variants look unit-only.
+///
+/// Both are the shape of the mistake `docs/csharp-unions-handoff.md` section 8 records twice.
+pub struct CsProjection<'a> {
+    id_map: &'a model::common::id_map::Pass,
+    projection: &'a model::common::types::info::projection::Pass,
+}
+
+impl<'a> CsProjection<'a> {
+    #[must_use]
+    pub fn new(id_map: &'a model::common::id_map::Pass, projection: &'a model::common::types::info::projection::Pass) -> Self {
+        Self { id_map, projection }
+    }
+
+    /// Whether the C# type for `rust_id` is emitted as a plain C# `enum`.
+    ///
+    /// `false` for non-enums and for types the model has no entry for. Safe here: every caller
+    /// has already established it is looking at an enum, and the fallback is the union path that
+    /// was the only path before step three.
+    #[must_use]
+    pub fn is_plain_enum(&self, rust_id: RsTypeId) -> bool {
+        self.id_map.ty(rust_id).is_some_and(|cs_id| self.projection.is_plain_enum(cs_id))
+    }
+}
+
 /// Borrows the stem of the variant carrying `tag`, if the kind carries a `DataEnum` at all.
 ///
 /// Split out from [`CsNames`] so it is testable without constructing a pass. Resolution goes

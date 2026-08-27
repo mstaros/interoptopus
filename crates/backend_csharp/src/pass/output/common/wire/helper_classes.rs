@@ -8,7 +8,7 @@ use crate::lang::types::kind::TypeKind;
 use crate::lang::types::kind::wire::WireOnly;
 use crate::output::{FileType, Output};
 use crate::pass::output::common::wire::WireCodeGen;
-use crate::pass::output::common::wire::cs_names::{CsLayout, CsNames};
+use crate::pass::output::common::wire::cs_names::{CsLayout, CsNames, CsProjection};
 use crate::pass::{OutputResult, PassInfo, model, output};
 use interoptopus::inventory::Types as RsTypes;
 use interoptopus_backends::template::Context;
@@ -35,11 +35,12 @@ impl Pass {
         types: &model::common::types::all::Pass,
         id_map: &model::common::id_map::Pass,
         struct_class: &model::common::types::info::struct_class::Pass,
+        projection: &model::common::types::info::projection::Pass,
         rs_types: &RsTypes,
         wire_types: &output::common::wire::wire_type::Pass,
     ) -> OutputResult {
         let templates = output_master.templates();
-        let codegen = WireCodeGen { rs_types, cs: CsNames::new(types, id_map), layout: CsLayout::new(id_map, struct_class) };
+        let codegen = WireCodeGen { rs_types, cs: CsNames::new(types, id_map), layout: CsLayout::new(id_map, struct_class), projection: CsProjection::new(id_map, projection) };
 
         // Route each helper class to the output file its type is routed to.
         let mut helpers_by_output: HashMap<Output, Vec<String>> = HashMap::new();

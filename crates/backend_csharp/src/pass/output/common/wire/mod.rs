@@ -11,7 +11,7 @@ pub mod cs_names;
 pub mod helper_classes;
 pub mod wire_type;
 
-use self::cs_names::{CsLayout, CsNames};
+use self::cs_names::{CsLayout, CsNames, CsProjection};
 use interoptopus::inventory::{TypeId, Types as RsTypes};
 use interoptopus::lang::types::{Array, Layout, Primitive, Struct, TypeKind as RsTypeKind, VariantKind, WireOnly};
 
@@ -26,6 +26,9 @@ pub struct WireCodeGen<'a> {
     /// Whether `T?` yields `Nullable<T>` or a nullable reference. A separate question from
     /// identifiers, with a separate authority; see `Issues.md` 31248473.
     pub layout: CsLayout<'a>,
+    /// Whether an enum is emitted as a plain C# `enum`. A third question with a third
+    /// authority, kept apart for the reason `cs_names.rs` gives.
+    pub projection: CsProjection<'a>,
 }
 
 impl WireCodeGen<'_> {
@@ -344,6 +347,15 @@ impl WireCodeGen<'_> {
         let prim_cs = cs_primitive_name(prim);
         let p = pad(indent);
         let pi = pad(indent + 1);
+
+        // A plain C# `enum` has no `Is{Stem}` accessors - those belong to the union and
+        // discriminant-struct projections. Its underlying value *is* the tag, so the whole
+        // chain collapses to one write. Emitting the chain here is what produced CS1061 on
+        // `MyEnum` once step three started projecting unit-only enums as plain enums.
+        if self.projection.is_plain_enum(ty_id) {
+            lines.push(format!("{p}writer.Write(({prim_cs}){val});"));
+            return;
+        }
 
         for (index, variant) in e.variants.iter().enumerate() {
             let kw = if index == 0 { "if" } else { "else if" };
