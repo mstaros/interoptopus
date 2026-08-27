@@ -932,9 +932,16 @@ Open questions `79be256e` lists, plus one this work added:
   cannot break anything the suite currently measures — but **that is a fact about the corpus, not
   a guarantee**, since a consumer can write `ffi::Slice<Color>` and `Slice<T>` only requires
   `T: TypeInfo`. **Do not settle the blittability claim from memory** — it is exactly the kind of
-  specification-derived claim that was wrong twice already (3d's gate, `IUnion`'s namespace). Add
-  a reference-project function taking a slice of a unit-only enum and let the plugin build answer
-  it; that is cheap, and the plugin build is the only layer that proves the generated C# compiles.
+  specification-derived claim that was wrong twice already (3d's gate, `IUnion`'s namespace).
+  **But the obvious experiment cannot answer it yet, and the first version of this bullet said
+  otherwise.** Adding a reference-project function taking `Slice<EnumDocumented>` today generates
+  a slice of the current *struct* representation, because no plain C# `enum` is emitted anywhere
+  in this codebase; the plugin build would prove only that slices of structs work, which is
+  already known. Add the function anyway, but as a **canary placed ahead of the change**: land it
+  and accept its snapshot now, and when step three flips that element type from struct to `enum`
+  the same fixture either compiles and runs or does not, at the moment the answer matters and in
+  the only layer that proves generated C# compiles. Reasoning it out from the marshalling
+  documentation instead is the move that produced both wrong claims cited above.
 - Exhaustiveness is genuinely lost. A `switch` over a plain C# `enum` is never exhaustive, because
   `(Color)99` compiles. Closed enums would have fixed this and **did not ship in C# 15**. A Roslyn
   analyzer is the interim substitute for the compile-time half; there is no runtime half to lose,
