@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ⚠️ Breaking
 
+- **Unit-only enums are now emitted as plain C# enums.** An enum whose variants all carry no
+  payload was previously generated as a struct with `IsX`/`AsX` accessors, per-variant case
+  types, `Value`, `HasValue`, `TryGetValue` and a custom marshaller. It is now a plain C# enum
+  whose underlying type is the Rust discriminant — `public enum EnumDocumented : byte`. None of
+  those members exist on a plain enum, so any code referencing them fails to compile. Replace
+  `x.IsFail` with `x == Error.Fail`, and construct values as ordinary enum members. Enums with
+  at least one payload-carrying variant are unaffected and keep the union projection.
+
+- **Marshalling out a default struct-backed enum now throws.** A default-constructed value has
+  no variant set, and previously marshalled to Rust as variant zero — a variant the Rust side
+  never sends. `ToUnmanaged`/`AsUnmanaged` now throw `InvalidOperationException` with
+  "Cannot marshal a default X: it is empty and corresponds to no Rust variant. Construct one
+  through a case constructor or factory." Construct through the generated case constructors or
+  factories instead. Class-backed enums are unaffected, since their empty state is a null
+  reference rather than a cleared `_hasValue`.
+
 - **Class-backed enums no longer expose a public parameterless constructor.** `new EnumX()` on a
   class-backed enum previously produced a variant-zero instance from outside the type — a variant
   the Rust side never sent, and one that `default(EnumX)` (a null reference) does not otherwise
