@@ -917,13 +917,31 @@ like a `bool`, slices move to the pinning path, and `unmanaged_names` stops manu
 `X.Unmanaged` — all without touching those emitters. Get it wrong and no amount of work in
 `definition.rs` will help.
 
-**Settle the pass dependency first.** `managed_conversion` would have to consult `projection`,
-which nothing upstream of it does today: `projection` reads raw `TypeKind`s and is currently
-independent, while `struct_class` and `disposable` read `managed_conversion`. Two options, and
-they are not equivalent — thread `projection` into `managed_conversion` and let the convergence
-loop settle the cycle, or re-derive `!is_union_projected()` inside `managed_conversion` and
-accept a second copy of the predicate. The second is exactly the duplication step two just
-removed, so prefer the first, but check that the loop converges rather than assuming it.
+**The pass dependency, read rather than reasoned about — an earlier version of this paragraph
+called it a cycle and told you to check convergence. It is not a cycle.** `projection::process`
+takes only `type_all`; `managed_conversion::process` takes only `type_all`. Neither reads the
+other. Threading `projection` into `managed_conversion` adds one straight edge and there is
+nothing to converge.
+
+**The real hazard is the opposite pairing, and it is easy to miss.** `managed_conversion` is
+**write-once** — it opens with `if self.managed_conversion.contains_key(cs_id) { continue; }` and
+defers on a not-ready input by leaving the key absent (its `pending` flag). `projection`
+**recomputes every round**. A write-once consumer reading a recompute producer can cache an
+answer the producer later revises, which is precisely the staleness `projection`'s own module
+comment exists to prevent — reintroduced one pass downstream.
+
+**For this particular value it happens to be safe, and the reason is worth keeping.**
+`is_union_projected()` reads only `can_carry_payload`, which `enum_variants.rs` and `fallback.rs`
+set when the variant is constructed and nothing afterwards revises. It performs no lookup into
+other types, so it cannot change across rounds. Contrast `wire_only` in the same pass, which
+resolves a variant's payload type through `types.get` and *does* settle over rounds — that half
+is what the recompute idiom is actually for.
+
+**So the requirement is a not-ready guard, not convergence checking.** If
+`projection.projection(id)` is `None`, `continue` — exactly the existing `pending` idiom — rather
+than falling through to `To`. Without that guard `managed_conversion` can answer for an enum
+before `projection` has answered for it, cache `To`, and never revisit, because write-once passes
+do not come back.
 
 **Two routes remain. Try the first.**
 
