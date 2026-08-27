@@ -111,15 +111,26 @@ code may store contents any way it likes, and its `IntOrBool` example is our exa
 A reasonable fit for a **managed-only** enum that never crosses the boundary (item 5h), not for
 one that does.
 
-### What is emphatically not done
+### What is now done, and what that leaves
 
-**Unit-only enums are still emitted as structs.** `Color { Red, Green, Blue }` still produces
-~120 lines — struct, discriminant field, `Unmanaged` mirror, marshaller — exactly as before any of
-this work. **No plain C# `enum` is generated anywhere in this codebase.**
+**Unit-only enums are emitted as plain C# `enum`s.** As of `ca6aafa`, `Color { Red, Green, Blue }`
+produces `public enum Color : byte { Red = 0, Green = 1, Blue = 2, }` instead of ~120 lines of
+struct, discriminant field, `Unmanaged` mirror and marshaller. That is option C in `Issues.md`
+`79be256e`, and it was the objective. **This section previously said the opposite** — it is kept
+under a new heading rather than deleted so the change is visible to anyone who read the old one.
 
-That is option C in `Issues.md` `79be256e`, blocked on a design gap rather than effort: the model
-has no notion of *how a type is projected*, so reclassifying an enum does not stop four output
-passes emitting the mirror. §9 describes the pass being built to close that.
+The rule has two halves and both are required: **no variant can carry a payload**, *and* the
+discriminant is a type C# accepts as an `enum` base. `Primitive` has fifteen members and only
+eight qualify — `nint`, `nuint`, `float`, `bool` and `void` do not — so a unit-only enum with a
+non-integral discriminant keeps the struct. That is `Projection::Discriminant`, and it is the one
+exclusion that stops the three-value enum collapsing to a boolean.
+
+**What made it work was not the emitter.** `managed_conversion` classified every `DataEnum` as at
+least `To`, never `AsIs`; making the plain-enum population `AsIs` is the lever, and composites,
+slices and the mirror all followed without those emitters being touched. See §9.
+
+**Still open on this front:** the pinning question in §9, and `Discriminant` has no member in the
+reference corpus, so that branch is currently untested by anything.
 
 ---
 
@@ -969,13 +980,35 @@ for `None`, `Panic` and `Null`. Every synthesised `Result`/`Option` carrier gets
 `payload_variant` for its `Ok`/`Some` position, so `is_union_projected` is always true for them.
 A carrier reaching plain-enum would break `IResult` and `body_from_call`; it cannot.
 
-**A canary now sits ahead of this work — `pattern_ffi_slice_of_unit_enum`, landed in `4aad161`.**
-Landing it established one thing outright: **slices of enums work today.** All fourteen plugin
-tests passed, so the generated C# for `SliceEnumDocumented` compiles and runs. The emitted type
-is a `class` holding `IntPtr _data`, allocating a native copy through `Marshal.AllocHGlobal`;
-its indexer reads `Marshal.PtrToStructure<EnumDocumented.Unmanaged>` and calls `.ToManaged()`,
-and `From()` calls `managed[i].AsUnmanaged()` and `Marshal.StructureToPtr`. Copy per element,
-no pinning.
+**The canary fired, and it flipped exactly as predicted.** `pattern_ffi_slice_of_unit_enum`
+landed in `4aad161`; step three landed in `ca6aafa`. Before, `SliceEnumDocumented` was a class
+holding `IntPtr _data`, allocating through `Marshal.AllocHGlobal` and copying each element via
+`Marshal.PtrToStructure<EnumDocumented.Unmanaged>` and `AsUnmanaged()`. After, it holds
+**`GCHandle _handle`** — `fast.cs`, the pinning path, alongside `SliceByte`, `SliceUint`,
+`SliceInt` and `SliceBool`. The conversion became `AsIs`, the template selection followed, and
+nothing in `slices.rs` was touched.
+
+**But do not read that as proof it works, and an earlier version of this paragraph did.** It
+claimed "all fourteen plugin tests passed, so the generated C# for `SliceEnumDocumented` compiles
+and runs." That does not follow. `reference_project::interop` writes bindings to
+`tests/reference_project/Bindings` and `benches/dotnet` and asserts a snapshot — **it compiles
+nothing**. The plugin fixtures compile *plugin* inventories, declared by `plugin!`, which do not
+contain `pattern_ffi_slice_of_unit_enum`. The two facts were true and unrelated, and putting them
+in one sentence manufactured a conclusion.
+
+**So the pinning path is generated but uncompiled and unrun.** Whether the classic marshaller
+accepts a pinned enum array is still open — the canary moved the question from "which template"
+to "does this template work", which is progress, but it did not answer it. §0's rule applies to
+this document as much as to the code: never conclude "it works" from snapshots.
+
+**There is a project that would answer it.** `tests/reference_project/Tests/InteropSpike.csproj`
+and `ReferenceProject.slnx` hold hand-written xUnit tests against the reference bindings —
+`Test.Core.Enums.cs`, `Test.Core.Arrays.Nested.cs` and about thirty more. **Nothing in the Rust
+sources references either file**, so `cargo test` never builds them; searched 2026-08-27. Wiring
+that project into the suite, or adding a slice-of-enum case to a plugin fixture, is what would
+turn the canary into an actual test. `Test.Core.Enums.cs` itself only exercises `EnumPayload`,
+which is payload-carrying and unaffected; `Test.Core.Meta.cs` and `Test.Core.Arrays.Nested.cs`
+touch the unit-only enums and have not been checked.
 
 **Read `slices.rs` before reasoning about this — the first version of these paragraphs got the
 mechanism backwards.** The split is not blittability and the emitter never tests for it. It is
