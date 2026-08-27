@@ -27,6 +27,7 @@ pub struct DotnetLibraryConfig {
     pub model_type_all: model::common::types::all::Config,
     pub model_type_managed_conversion: model::common::types::info::managed_conversion::Config,
     pub model_type_struct_class: model::common::types::info::struct_class::Config,
+    pub model_type_projection: model::common::types::info::projection::Config,
     pub model_type_disposable: model::common::types::info::disposable::Config,
     pub model_type_nullable: model::common::types::info::nullable::Config,
     pub model_fn_all: model::common::fns::all::Config,
@@ -112,6 +113,7 @@ pub struct ModelPasses {
     pub type_all: model::common::types::all::Pass,
     pub type_managed_conversion: model::common::types::info::managed_conversion::Pass,
     pub type_struct_class: model::common::types::info::struct_class::Pass,
+    pub type_projection: model::common::types::info::projection::Pass,
     pub type_disposable: model::common::types::info::disposable::Pass,
     pub type_nullable: model::common::types::info::nullable::Pass,
     pub fns_all: model::common::fns::all::Pass,
@@ -228,6 +230,7 @@ impl DotnetLibrary {
                 type_all: model::common::types::all::Pass::new(config.model_type_all),
                 type_managed_conversion: model::common::types::info::managed_conversion::Pass::new(config.model_type_managed_conversion),
                 type_struct_class: model::common::types::info::struct_class::Pass::new(config.model_type_struct_class),
+                type_projection: model::common::types::info::projection::Pass::new(config.model_type_projection),
                 type_disposable: model::common::types::info::disposable::Pass::new(config.model_type_disposable),
                 type_nullable: model::common::types::info::nullable::Pass::new(config.model_type_nullable),
                 fns_all: model::common::fns::all::Pass::new(config.model_fn_all),
@@ -331,6 +334,7 @@ impl DotnetLibrary {
             r.run(m.type_all.process(&mut pass_meta, &m.type_kinds, &m.type_names, &m.id_maps, &self.inventory.types))?;
             r.run(m.type_managed_conversion.process(&mut pass_meta, &m.type_all))?;
             r.run(m.type_struct_class.process(&mut pass_meta, &m.type_managed_conversion, &m.type_all))?;
+            r.run(m.type_projection.process(&mut pass_meta, &m.type_all))?;
             r.run(m.type_disposable.process(&mut pass_meta, &m.type_managed_conversion, &m.type_all))?;
             r.run(m.type_nullable.process(&mut pass_meta, &m.type_all))?;
             r.run(m.type_util.process(&mut pass_meta, &mut m.type_kinds, &mut m.type_names, &mut m.type_all))?;
@@ -374,7 +378,7 @@ impl DotnetLibrary {
         o.enum_body_from_call.process(&mut pass_meta, &self.output_master, &m.type_all, &m.id_maps, &m.exceptions, OperationMode::Plugin)?;
         o.enum_body_exception_for_variant.process(&mut pass_meta, &self.output_master, &m.type_all, OperationMode::Plugin)?;
         o.enum_body_tostring.process(&mut pass_meta, &self.output_master, &m.type_all)?;
-        o.enum_body.process(&mut pass_meta, &self.output_master, &m.type_all, &m.type_struct_class, &m.type_disposable, &o.enum_body_case_types, &o.enum_body_union_members, &o.enum_body_unmanaged_variant, &o.enum_body_unmanaged, &o.enum_body_to_unmanaged, &o.enum_body_as_unmanaged, &o.enum_body_ctors, &o.enum_body_from_call, &o.enum_body_exception_for_variant, &o.enum_body_tostring, &o.unmanaged_conversion, OperationMode::Plugin)?;
+        o.enum_body.process(&mut pass_meta, &self.output_master, &m.type_all, &m.type_struct_class, &m.type_disposable, &m.type_projection, &o.enum_body_case_types, &o.enum_body_union_members, &o.enum_body_unmanaged_variant, &o.enum_body_unmanaged, &o.enum_body_to_unmanaged, &o.enum_body_as_unmanaged, &o.enum_body_ctors, &o.enum_body_from_call, &o.enum_body_exception_for_variant, &o.enum_body_tostring, &o.unmanaged_conversion, OperationMode::Plugin)?;
         o.enums.process(&mut pass_meta, &self.output_master, &m.type_all, &o.enum_ty, &o.enum_body)?;
         o.util.process(&mut pass_meta, &self.output_master, &m.type_all)?;
         o.delegates_class.process(&mut pass_meta, &self.output_master, &m.type_all, &o.unmanaged_names, &o.unmanaged_conversion)?;

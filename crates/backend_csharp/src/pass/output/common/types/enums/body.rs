@@ -27,6 +27,7 @@ impl Pass {
         types: &model::common::types::all::Pass,
         struct_class: &model::common::types::info::struct_class::Pass,
         disposable: &model::common::types::info::disposable::Pass,
+        projection: &model::common::types::info::projection::Pass,
         enum_body_case_types: &output::common::types::enums::body_case_types::Pass,
         enum_body_union_members: &output::common::types::enums::body_union_members::Pass,
         enum_body_unmanaged_variant: &output::common::types::enums::body_unmanaged_variant::Pass,
@@ -58,24 +59,12 @@ impl Pass {
             // FFI-safe Unmanaged form — it only flows through `Wire<T>`. Such enums
             // also hold no native resources (their payloads are GC-managed) so they
             // are not disposable.
-            let has_wire_only_payload = match type_kind {
-                TypeKind::DataEnum(de) => de
-                    .variants
-                    .iter()
-                    .any(|v| v.ty.is_some_and(|t| matches!(types.get(t).map(|x| &x.kind), Some(TypeKind::WireOnly(_))))),
-                _ => false,
-            };
+            let has_wire_only_payload = projection.has_wire_only_payload(*type_id).unwrap_or(false);
 
             // Managed-only types have no Unmanaged representation:
             //   - Result/Option whose Ok side is a Service.
             //   - DataEnum with WireOnly variant payloads.
-            let is_managed_only = has_wire_only_payload
-                || match type_kind {
-                    TypeKind::TypePattern(TypePattern::Result(ok_ty, _, _) | TypePattern::Option(ok_ty, _)) => {
-                        types.get(*ok_ty).is_some_and(|t| matches!(&t.kind, TypeKind::Service))
-                    }
-                    _ => false,
-                };
+            let is_managed_only = !projection.crosses_ffi(*type_id).unwrap_or(true);
 
             let ty = *type_id;
             let struct_or_class = if struct_class.is_struct(ty) { "struct" } else { "class" };
