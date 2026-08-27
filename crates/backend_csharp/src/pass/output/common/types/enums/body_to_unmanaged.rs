@@ -26,6 +26,8 @@ impl Pass {
         output_master: &output::common::master::Pass,
         types: &model::common::types::all::Pass,
         managed: &output::common::conversion::unmanaged_conversion::Pass,
+        struct_class: &model::common::types::info::struct_class::Pass,
+        projection: &model::common::types::info::projection::Pass,
         mode: crate::pass::OperationMode,
     ) -> OutputResult {
         let templates = output_master.templates();
@@ -52,7 +54,10 @@ impl Pass {
                 })
                 .collect();
 
+            let has_empty_state = struct_class.is_struct(*type_id) && projection.is_union(*type_id);
+
             let mut context = Context::new();
+            context.insert("has_empty_state", &has_empty_state);
             context.insert("name", name);
             context.insert("to_unmanaged", to_unmanaged);
             context.insert("variants", &variants);

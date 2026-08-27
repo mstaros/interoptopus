@@ -372,8 +372,8 @@ impl DotnetLibrary {
         o.enum_body_union_members.process(&mut pass_meta, &self.output_master, &m.type_all, &m.type_struct_class, &m.type_projection)?;
         o.enum_body_unmanaged_variant.process(&mut pass_meta, &self.output_master, &m.type_all, &o.unmanaged_names, OperationMode::Plugin)?;
         o.enum_body_unmanaged.process(&mut pass_meta, &self.output_master, &m.type_all, &o.unmanaged_conversion, &m.type_struct_class, &m.type_projection, OperationMode::Plugin)?;
-        o.enum_body_to_unmanaged.process(&mut pass_meta, &self.output_master, &m.type_all, &o.unmanaged_conversion, OperationMode::Plugin)?;
-        o.enum_body_as_unmanaged.process(&mut pass_meta, &self.output_master, &m.type_all, &o.unmanaged_conversion, OperationMode::Plugin)?;
+        o.enum_body_to_unmanaged.process(&mut pass_meta, &self.output_master, &m.type_all, &o.unmanaged_conversion, &m.type_struct_class, &m.type_projection, OperationMode::Plugin)?;
+        o.enum_body_as_unmanaged.process(&mut pass_meta, &self.output_master, &m.type_all, &o.unmanaged_conversion, &m.type_struct_class, &m.type_projection, OperationMode::Plugin)?;
         o.enum_body_ctors.process(&mut pass_meta, &self.output_master, &m.type_all, &m.type_struct_class, &m.type_projection, OperationMode::Plugin)?;
         o.enum_body_from_call.process(&mut pass_meta, &self.output_master, &m.type_all, &m.id_maps, &m.exceptions, OperationMode::Plugin)?;
         o.enum_body_exception_for_variant.process(&mut pass_meta, &self.output_master, &m.type_all, OperationMode::Plugin)?;
