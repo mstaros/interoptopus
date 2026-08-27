@@ -174,9 +174,10 @@ table.
 satisfied but unverified**: nothing is left to emit, but no fixture compiles an implicit
 conversion, so the synthesis claim is untested.
 
-**The front is item 4**, and §0 says where it is specified. **Running in parallel: the projection
-pass, step one of three landed** — see §9. That is the largest in-flight item and the precondition
-for option C, projecting unit-only enums as plain C# `enum`s, which is still **not done**.
+**Two tracks — see §0's table before choosing.** Track A is item 4, the plan's next unstarted row.
+**Track B is the objective**: the projection pass, whose step one landed in `1429746b`, ending in
+plain C# `enum`s for unit-only enums — option C, still **not done**, and the thing that was
+actually asked for. §9 specifies Track B; `csharp-unions.md` § Step 4 specifies Track A.
 
 Landing log — a record of what shipped, not a second status table:
 
@@ -393,8 +394,13 @@ not converge.
 
 **3d and 3e are no longer next.** `[Union]` and `IUnion` landed in `da741fa9`; the case
 constructors that 3e's claim rests on landed in `aa2d550d`. What remains of 3e is a fixture that
-compiles an implicit conversion — there is nothing left to emit. **The front is Step 4's
-marshalling**: item 4 (`ToUnmanaged`/`AsUnmanaged` empty guard, no gate), then 4a.
+compiles an implicit conversion — there is nothing left to emit.
+
+**This section covers Track A only — the plan's next row, which is not the objective.** Item 4
+(`ToUnmanaged`/`AsUnmanaged` empty guard, no gate), then 4a. **If you arrived here from a pointer
+saying "the front is 4", read §0's two-track table first**: plain C# enums are the thing that was
+asked for and is missing, and that work is Track B in §9. Item 4 is correct if you are working the
+plan in dependency order; it is not what anyone is waiting for.
 
 **4a is now unblocked in a way it was not before.** It constructs via case constructors, and those
 exist as of `aa2d550d`. It also deletes the stopgap 3c left behind — `_managed._hasValue = true;`
@@ -831,12 +837,48 @@ guard, and why a single flat enum of projections would lose the case.
 ### Step three — add plain-enum, the first step that changes output
 
 This is option C in `Issues.md` `79be256e`: unit-only enums become
-`public enum Color : byte { Red, Green, Blue }` instead of a ~120-line struct. Route them to the
-new shape and the passes that should not fire simply do not match — `body_unmanaged`,
-`body_unmanaged_variant`, `body_to_unmanaged`, `body_as_unmanaged` decline by construction rather
-than by anyone remembering.
+`public enum Color : byte { Red, Green, Blue }` instead of a ~120-line struct.
 
-Three things `79be256e` lists as open, and one this session added:
+**Read this before planning it — an earlier version of this section described the wrong
+mechanism.** It said four unmanaged passes would "decline by construction." That is not how enum
+output is assembled. Verified by reading `all.rs`, 2026-08-27:
+
+**There are two emitters, not twelve.** `all.rs` renders `templates/common/types/enums/all.cs`
+from exactly two inputs — `enum_definition` from `definition.rs` and `enum_body` from `body.rs`.
+The other ten passes under `enums/` (`body_case_types`, `body_union_members`, `body_ctors`,
+`body_unmanaged`, `body_unmanaged_variant`, `body_to_unmanaged`, `body_as_unmanaged`,
+`body_exception_for_variant`, `body_tostring`, `body_from_call`) are **fragments that `body.rs`
+composes**. Making them decline does not change the declaration shape; it only empties the body.
+
+**And a declining `body` deletes the type.** `all.rs` reads:
+
+```rust
+let Some(body) = enum_body.get(*type_id) else { continue };
+```
+
+So a `body.rs` that returns nothing for plain-enum types removes them from the generated output
+altogether rather than emitting an `enum`. Whatever else step three does, it must keep a rendered
+value for every type.
+
+**So the work is one of two shapes**, and choosing between them is the first decision:
+
+- Route at `all.rs` — detect the plain-enum projection and render a *different* template beside
+  `all.cs`, with `definition.rs`/`body.rs` untouched for those types; or
+- Branch inside `definition.rs` and `body.rs` so they produce the `enum` declaration and an empty
+  body, with `all.cs` unchanged.
+
+Either way **`definition.rs`, `body.rs` and `all.cs` are where the code goes.** The fragment
+passes can keep computing whatever they like — unused, they are wasted work but harmless.
+
+**Carriers can never reach plain-enum, and this is enforced, not incidental.**
+`fallback.rs::payload_variant` sets `can_carry_payload: true` **unconditionally**, with a doc
+comment giving the reason: `Result<(), ()>` still declares `Ok(T)`/`Err(E)`, and erasing that is
+exactly what stripped `ResultVoidVoid` of its projection once already. `unit_variant` is used only
+for `None`, `Panic` and `Null`. Every synthesised `Result`/`Option` carrier gets at least one
+`payload_variant` for its `Ok`/`Some` position, so `is_union_projected` is always true for them.
+A carrier reaching plain-enum would break `IResult` and `body_from_call`; it cannot.
+
+Open questions `79be256e` lists, plus one this work added:
 
 - What `Unmanaged` actually contains for a unit-only enum. Not read.
 - How Rust `#[repr]` maps to the C# underlying type. `definition.rs` already passes
