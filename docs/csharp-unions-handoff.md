@@ -1001,14 +1001,49 @@ accepts a pinned enum array is still open — the canary moved the question from
 to "does this template work", which is progress, but it did not answer it. §0's rule applies to
 this document as much as to the code: never conclude "it works" from snapshots.
 
-**There is a project that would answer it.** `tests/reference_project/Tests/InteropSpike.csproj`
-and `ReferenceProject.slnx` hold hand-written xUnit tests against the reference bindings —
-`Test.Core.Enums.cs`, `Test.Core.Arrays.Nested.cs` and about thirty more. **Nothing in the Rust
-sources references either file**, so `cargo test` never builds them; searched 2026-08-27. Wiring
-that project into the suite, or adding a slice-of-enum case to a plugin fixture, is what would
-turn the canary into an actual test. `Test.Core.Enums.cs` itself only exercises `EnumPayload`,
-which is payload-carrying and unaffected; `Test.Core.Meta.cs` and `Test.Core.Arrays.Nested.cs`
-touch the unit-only enums and have not been checked.
+**There are two C# projects in `tests/reference_project/Tests/`, and an earlier version of this
+paragraph conflated them.** It named `InteropSpike.csproj` as the harness holding the
+hand-written xUnit tests. It is not:
+
+| | `Tests.csproj` | `InteropSpike.csproj` |
+|---|---|---|
+| Test framework | `xunit.v3.aot` 4.0.0-pre.128 | `TUnit` 1.36.0 |
+| Compile items | default (on) | `EnableDefaultCompileItems=false`, one `<Compile>` for `InteropSpike.cs` — **which does not exist** |
+| In `ReferenceProject.slnx` | yes | **no** |
+| References `Bindings.csproj` | yes | yes |
+| Builds the cdylib | no | yes, an `Exec` running `cargo build -p reference_project` |
+
+So the ~30 `Test.*.cs` files — `Test.Core.Enums.cs`, `Test.Core.Arrays.Nested.cs` and the rest —
+belong to **`Tests.csproj`** and are compiled by it. `InteropSpike.csproj` is an abandoned spike
+in no solution, compiling a source file that was never added. `ReferenceProject.slnx` lists
+exactly `Bindings\Bindings.csproj` and `Tests\Tests.csproj`.
+
+**Nothing in the Rust sources references any of them, so `cargo test` never builds them**
+(searched 2026-08-27). That remains the gap.
+
+**But compiling them would not answer the question either — and this is the part worth keeping.**
+Grepped 2026-08-27: **no file under `Tests/` constructs a slice of anything.** Every
+`Slice*.From` / `.Slice(` call in the repository is in `benches/dotnet/Benchmark.cs`, which is
+frozen and uses `byte`/`Vec3f32`, never an enum. So the work item is not "repair a project", it is
+**write one test**; `Tests.csproj` is only the host. The entry point already exists —
+`pattern_ffi_slice_of_unit_enum` counts variants equal to `EnumDocumented::B` and returns the
+count, so `[A, B, B]` must return `2`. Content-derived, not an it-did-not-throw test.
+
+**Two practical traps for whoever writes it.** The bindings on disk are stale in a way that is
+worse than "pre-plain-enum": `Bindings/Interop.cs` still shows `EnumDocumented` as a struct
+carrying **`bool _hasValue`**, which item 3c's scoping removed from unit-only enums, so they
+predate that too. Regenerate first, in a transaction — `reference_project::interop` rewrites
+tracked `.cs` files and a `.snap`. And **nothing builds the cdylib**: `Bindings.csproj` copies
+`target/debug/*reference_project*` via a `Content` glob, but only `InteropSpike.csproj` ever ran
+`cargo build` to produce it. Without that, expect `DllNotFoundException`, not a marshalling
+failure.
+
+**The cheaper route offered above does not work, and it will be reached for again if this is not
+said plainly.** Adding a slice-of-enum case to a plugin fixture cannot answer the pinning
+question: `plugin!` declares methods that **Rust calls into C#**, and pinning happens only when
+**C# builds a slice from a managed array and passes it to Rust**. That direction does not exist in
+a plugin. The reference-project bindings are the only place it does, which is the whole reason
+this section is about a C# project at all.
 
 **Read `slices.rs` before reasoning about this — the first version of these paragraphs got the
 mechanism backwards.** The split is not blittability and the emitter never tests for it. It is
@@ -1053,9 +1088,19 @@ Open questions `79be256e` lists, plus one this work added:
   itself**, which means replacing struct, mirror and marshaller with a plain C# `enum` of the same
   underlying type changes nothing the native side can observe. What remains unanswered is the
   marshalling-mode bullet below, which is about blittability, not layout.
-- How Rust `#[repr]` maps to the C# underlying type. `definition.rs` already passes
-  `data_enum.discriminant_type.cs_name()` into the template context, so the information is
-  threaded to the place that needs it; `EnumNegative` needs a signed type.
+- How Rust `#[repr]` maps to the C# underlying type — **closed structurally, 2026-08-27, and the
+  answer is stronger than any empirical check.** `EnumDocumented` and friends carry no `#[repr]`
+  in source; the `#[ffi]` macro generates it. In `proc_macros_impl/src/types/emit.rs`,
+  `generate_repr` for `TypeData::Enum` always routes to `layout_tokens`, and
+  `discriminant.rs::optimal_discriminant` computes **one** `DiscriminantChoice` from which
+  `repr_attribute` emits the Rust `#[repr(..)]` and `layout_tokens` emits the C# `Layout`. One
+  choice drives both sides, so **divergence is impossible by construction** — not merely absent
+  in the current corpus. `A`/`B`/`C` auto-number to a max of 2, hence `#[repr(u8)]` and
+  `Layout::Primitive(U8)`, hence `byte`. Note this also makes the `_ => Primitive::Int` arm in
+  `kind/enum.rs` **dead for `#[ffi]` enums**: a `#[repr(C)]` fieldless enum would be four bytes
+  against a one-byte C# side, but the macro never emits `Layout::C`, so that arm is unreachable
+  here. Do not cite it as evidence of a mismatch risk. `EnumNegative` still needs a signed type,
+  which the same mechanism supplies.
 - **Which marshalling mode the bindings run under.** `DisableRuntimeMarshalling` is **not**
   emitted — `templates/rust/header.cs` is a ten-line comment banner with no assembly attributes.
   Under the classic marshaller enums are layout-compatible but not universally blittable; enum
