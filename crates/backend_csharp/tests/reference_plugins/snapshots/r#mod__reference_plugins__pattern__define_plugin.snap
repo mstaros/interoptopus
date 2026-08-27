@@ -954,7 +954,7 @@ public partial struct ResultVec3f32Error : IUnion, IResult<Vec3f32, Error>
     internal unsafe struct UnmanagedErr
     {
         internal uint _variant;
-        internal Error.Unmanaged _Err;
+        internal Error _Err;
     }
 
     
@@ -980,7 +980,7 @@ public partial struct ResultVec3f32Error : IUnion, IResult<Vec3f32, Error>
             _managed._variant = _variant;
             _managed._hasValue = true;
             if (_variant == 0) _managed._Ok = _Ok._Ok.ToManaged();
-            if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
+            if (_variant == 1) _managed._Err = _Err._Err;
             return _managed;
         }
     }
@@ -994,7 +994,7 @@ public partial struct ResultVec3f32Error : IUnion, IResult<Vec3f32, Error>
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok.ToUnmanaged();
-        if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -1007,7 +1007,7 @@ public partial struct ResultVec3f32Error : IUnion, IResult<Vec3f32, Error>
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok.AsUnmanaged();
-        if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -1168,113 +1168,11 @@ public partial struct ResultVec3f32Error : IUnion, IResult<Vec3f32, Error>
 
 
 
-public partial struct Error
+public enum Error : byte
 {
-    byte _variant;
+    Fail = 0,
 }
 
-
-[NativeMarshalling(typeof(MarshallerMeta))]
-public partial struct Error
-{
-
-    [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
-    {
-        [FieldOffset(0)]
-        internal byte _variant;
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        [Obsolete("This method is intended for use by generated code only.")]
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        internal Error ToManaged()
-        {
-            var _managed = new Error();
-            _managed._variant = _variant;
-            return _managed;
-        }
-    }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    [Obsolete("This method is intended for use by generated code only.")]
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged ToUnmanaged()
-    {
-        var _unmanaged = new Unmanaged();
-        _unmanaged._variant = _variant;
-        return _unmanaged;
-    }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    [Obsolete("This method is intended for use by generated code only.")]
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged AsUnmanaged()
-    {
-        var _unmanaged = new Unmanaged();
-        _unmanaged._variant = _variant;
-        return _unmanaged;
-    }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public Exception ExceptionForVariant()
-    {
-        if (_variant == 0) return new EnumException();
-        throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
-    }
-
-    // Ctors
-    public static Error Fail => new() { _variant = 0 };
-
-    // Checks
-    public bool IsFail => _variant == 0;
-
-    // Conversions
-    public void AsFail() { if (_variant != 0) throw ExceptionForVariant(); }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public override string ToString()
-    {
-        if (_variant == 0) return "Fail";
-        throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
-    }
-
-
-
-    [CustomMarshaller(typeof(Error), MarshalMode.Default, typeof(Marshaller))]
-    private struct MarshallerMeta { }
-
-    internal ref struct Marshaller
-    {
-        private Error _managed;
-        private Unmanaged _unmanaged;
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Marshaller(Error managed) { _managed = managed; }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Marshaller(Unmanaged unmanaged) { _unmanaged = unmanaged; }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void FromManaged(Error managed) { _managed = managed; }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.ToUnmanaged(); }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Error ToManaged() { return _unmanaged.ToManaged(); }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
-    }
-
-}
 
 
 public interface IPlugin

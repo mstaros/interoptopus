@@ -9532,126 +9532,13 @@ public partial class Layer3String : IUnion, IDisposable
 
 
 /// Documented enum.
-public partial struct EnumDocumented
+public enum EnumDocumented : byte
 {
-    byte _variant;
+    A = 0,
+    B = 1,
+    C = 2,
 }
 
-
-[NativeMarshalling(typeof(MarshallerMeta))]
-public partial struct EnumDocumented
-{
-
-    [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
-    {
-        [FieldOffset(0)]
-        internal byte _variant;
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        [Obsolete("This method is intended for use by generated code only.")]
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        internal EnumDocumented ToManaged()
-        {
-            var _managed = new EnumDocumented();
-            _managed._variant = _variant;
-            return _managed;
-        }
-    }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    [Obsolete("This method is intended for use by generated code only.")]
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged ToUnmanaged()
-    {
-        var _unmanaged = new Unmanaged();
-        _unmanaged._variant = _variant;
-        return _unmanaged;
-    }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    [Obsolete("This method is intended for use by generated code only.")]
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged AsUnmanaged()
-    {
-        var _unmanaged = new Unmanaged();
-        _unmanaged._variant = _variant;
-        return _unmanaged;
-    }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public Exception ExceptionForVariant()
-    {
-        if (_variant == 0) return new EnumException();
-        if (_variant == 1) return new EnumException();
-        if (_variant == 2) return new EnumException();
-        throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
-    }
-
-    // Ctors
-    /// Variant A.
-    public static EnumDocumented A => new() { _variant = 0 };
-    /// Variant B.
-    public static EnumDocumented B => new() { _variant = 1 };
-    /// Variant B.
-    public static EnumDocumented C => new() { _variant = 2 };
-
-    // Checks
-    public bool IsA => _variant == 0;
-    public bool IsB => _variant == 1;
-    public bool IsC => _variant == 2;
-
-    // Conversions
-    public void AsA() { if (_variant != 0) throw ExceptionForVariant(); }
-    public void AsB() { if (_variant != 1) throw ExceptionForVariant(); }
-    public void AsC() { if (_variant != 2) throw ExceptionForVariant(); }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public override string ToString()
-    {
-        if (_variant == 0) return "A";
-        if (_variant == 1) return "B";
-        if (_variant == 2) return "C";
-        throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
-    }
-
-
-
-    [CustomMarshaller(typeof(EnumDocumented), MarshalMode.Default, typeof(Marshaller))]
-    private struct MarshallerMeta { }
-
-    internal ref struct Marshaller
-    {
-        private EnumDocumented _managed;
-        private Unmanaged _unmanaged;
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Marshaller(EnumDocumented managed) { _managed = managed; }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Marshaller(Unmanaged unmanaged) { _unmanaged = unmanaged; }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void FromManaged(EnumDocumented managed) { _managed = managed; }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.ToUnmanaged(); }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public EnumDocumented ToManaged() { return _unmanaged.ToManaged(); }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
-    }
-
-}
 
 
 
@@ -9659,123 +9546,13 @@ public partial struct EnumDocumented
 /// 
 /// Rust assigns 5, 6, 7 here: an implicit discriminant is the previous one plus one.
 /// Present to pin down what the generator actually assigns. See `Issues.md` `09b82d44`.
-public partial struct EnumExplicitThenImplicit
+public enum EnumExplicitThenImplicit : byte
 {
-    byte _variant;
+    A = 5,
+    B = 6,
+    C = 7,
 }
 
-
-[NativeMarshalling(typeof(MarshallerMeta))]
-public partial struct EnumExplicitThenImplicit
-{
-
-    [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
-    {
-        [FieldOffset(0)]
-        internal byte _variant;
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        [Obsolete("This method is intended for use by generated code only.")]
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        internal EnumExplicitThenImplicit ToManaged()
-        {
-            var _managed = new EnumExplicitThenImplicit();
-            _managed._variant = _variant;
-            return _managed;
-        }
-    }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    [Obsolete("This method is intended for use by generated code only.")]
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged ToUnmanaged()
-    {
-        var _unmanaged = new Unmanaged();
-        _unmanaged._variant = _variant;
-        return _unmanaged;
-    }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    [Obsolete("This method is intended for use by generated code only.")]
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged AsUnmanaged()
-    {
-        var _unmanaged = new Unmanaged();
-        _unmanaged._variant = _variant;
-        return _unmanaged;
-    }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public Exception ExceptionForVariant()
-    {
-        if (_variant == 5) return new EnumException();
-        if (_variant == 6) return new EnumException();
-        if (_variant == 7) return new EnumException();
-        throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
-    }
-
-    // Ctors
-    public static EnumExplicitThenImplicit A => new() { _variant = 5 };
-    public static EnumExplicitThenImplicit B => new() { _variant = 6 };
-    public static EnumExplicitThenImplicit C => new() { _variant = 7 };
-
-    // Checks
-    public bool IsA => _variant == 5;
-    public bool IsB => _variant == 6;
-    public bool IsC => _variant == 7;
-
-    // Conversions
-    public void AsA() { if (_variant != 5) throw ExceptionForVariant(); }
-    public void AsB() { if (_variant != 6) throw ExceptionForVariant(); }
-    public void AsC() { if (_variant != 7) throw ExceptionForVariant(); }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public override string ToString()
-    {
-        if (_variant == 5) return "A";
-        if (_variant == 6) return "B";
-        if (_variant == 7) return "C";
-        throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
-    }
-
-
-
-    [CustomMarshaller(typeof(EnumExplicitThenImplicit), MarshalMode.Default, typeof(Marshaller))]
-    private struct MarshallerMeta { }
-
-    internal ref struct Marshaller
-    {
-        private EnumExplicitThenImplicit _managed;
-        private Unmanaged _unmanaged;
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Marshaller(EnumExplicitThenImplicit managed) { _managed = managed; }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Marshaller(Unmanaged unmanaged) { _unmanaged = unmanaged; }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void FromManaged(EnumExplicitThenImplicit managed) { _managed = managed; }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.ToUnmanaged(); }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public EnumExplicitThenImplicit ToManaged() { return _unmanaged.ToManaged(); }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
-    }
-
-}
 
 
 
@@ -10742,7 +10519,7 @@ public partial class ResultOptionUtf8StringError : IUnion, IResult<OptionUtf8Str
     internal unsafe struct UnmanagedErr
     {
         internal uint _variant;
-        internal Error.Unmanaged _Err;
+        internal Error _Err;
     }
 
     
@@ -10767,7 +10544,7 @@ public partial class ResultOptionUtf8StringError : IUnion, IResult<OptionUtf8Str
             var _managed = new ResultOptionUtf8StringError();
             _managed._variant = _variant;
             if (_variant == 0) _managed._Ok = _Ok._Ok.IntoManaged();
-            if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
+            if (_variant == 1) _managed._Err = _Err._Err;
             return _managed;
         }
     }
@@ -10781,7 +10558,7 @@ public partial class ResultOptionUtf8StringError : IUnion, IResult<OptionUtf8Str
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok.IntoUnmanaged();
-        if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -10794,7 +10571,7 @@ public partial class ResultOptionUtf8StringError : IUnion, IResult<OptionUtf8Str
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok.AsUnmanaged();
-        if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -10988,7 +10765,7 @@ public partial class ResultServiceAsyncCancelError : IUnion, IResult<IntPtr, Err
     internal unsafe struct UnmanagedErr
     {
         internal uint _variant;
-        internal Error.Unmanaged _Err;
+        internal Error _Err;
     }
 
     
@@ -11013,7 +10790,7 @@ public partial class ResultServiceAsyncCancelError : IUnion, IResult<IntPtr, Err
             var _managed = new ResultServiceAsyncCancelError();
             _managed._variant = _variant;
             if (_variant == 0) _managed._Ok = _Ok._Ok;
-            if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
+            if (_variant == 1) _managed._Err = _Err._Err;
             return _managed;
         }
     }
@@ -11027,7 +10804,7 @@ public partial class ResultServiceAsyncCancelError : IUnion, IResult<IntPtr, Err
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -11040,7 +10817,7 @@ public partial class ResultServiceAsyncCancelError : IUnion, IResult<IntPtr, Err
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -11233,7 +11010,7 @@ public partial class ResultServiceAsyncCtorError : IUnion, IResult<IntPtr, Error
     internal unsafe struct UnmanagedErr
     {
         internal uint _variant;
-        internal Error.Unmanaged _Err;
+        internal Error _Err;
     }
 
     
@@ -11258,7 +11035,7 @@ public partial class ResultServiceAsyncCtorError : IUnion, IResult<IntPtr, Error
             var _managed = new ResultServiceAsyncCtorError();
             _managed._variant = _variant;
             if (_variant == 0) _managed._Ok = _Ok._Ok;
-            if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
+            if (_variant == 1) _managed._Err = _Err._Err;
             return _managed;
         }
     }
@@ -11272,7 +11049,7 @@ public partial class ResultServiceAsyncCtorError : IUnion, IResult<IntPtr, Error
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -11285,7 +11062,7 @@ public partial class ResultServiceAsyncCtorError : IUnion, IResult<IntPtr, Error
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -11478,7 +11255,7 @@ public partial class ResultServiceAsyncPanicError : IUnion, IResult<IntPtr, Erro
     internal unsafe struct UnmanagedErr
     {
         internal uint _variant;
-        internal Error.Unmanaged _Err;
+        internal Error _Err;
     }
 
     
@@ -11503,7 +11280,7 @@ public partial class ResultServiceAsyncPanicError : IUnion, IResult<IntPtr, Erro
             var _managed = new ResultServiceAsyncPanicError();
             _managed._variant = _variant;
             if (_variant == 0) _managed._Ok = _Ok._Ok;
-            if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
+            if (_variant == 1) _managed._Err = _Err._Err;
             return _managed;
         }
     }
@@ -11517,7 +11294,7 @@ public partial class ResultServiceAsyncPanicError : IUnion, IResult<IntPtr, Erro
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -11530,7 +11307,7 @@ public partial class ResultServiceAsyncPanicError : IUnion, IResult<IntPtr, Erro
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -11723,7 +11500,7 @@ public partial class ResultServiceAsyncResultError : IUnion, IResult<IntPtr, Err
     internal unsafe struct UnmanagedErr
     {
         internal uint _variant;
-        internal Error.Unmanaged _Err;
+        internal Error _Err;
     }
 
     
@@ -11748,7 +11525,7 @@ public partial class ResultServiceAsyncResultError : IUnion, IResult<IntPtr, Err
             var _managed = new ResultServiceAsyncResultError();
             _managed._variant = _variant;
             if (_variant == 0) _managed._Ok = _Ok._Ok;
-            if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
+            if (_variant == 1) _managed._Err = _Err._Err;
             return _managed;
         }
     }
@@ -11762,7 +11539,7 @@ public partial class ResultServiceAsyncResultError : IUnion, IResult<IntPtr, Err
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -11775,7 +11552,7 @@ public partial class ResultServiceAsyncResultError : IUnion, IResult<IntPtr, Err
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -11968,7 +11745,7 @@ public partial class ResultServiceAsyncSleepError : IUnion, IResult<IntPtr, Erro
     internal unsafe struct UnmanagedErr
     {
         internal uint _variant;
-        internal Error.Unmanaged _Err;
+        internal Error _Err;
     }
 
     
@@ -11993,7 +11770,7 @@ public partial class ResultServiceAsyncSleepError : IUnion, IResult<IntPtr, Erro
             var _managed = new ResultServiceAsyncSleepError();
             _managed._variant = _variant;
             if (_variant == 0) _managed._Ok = _Ok._Ok;
-            if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
+            if (_variant == 1) _managed._Err = _Err._Err;
             return _managed;
         }
     }
@@ -12007,7 +11784,7 @@ public partial class ResultServiceAsyncSleepError : IUnion, IResult<IntPtr, Erro
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -12020,7 +11797,7 @@ public partial class ResultServiceAsyncSleepError : IUnion, IResult<IntPtr, Erro
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -12213,7 +11990,7 @@ public partial class ResultServiceAsyncStructsError : IUnion, IResult<IntPtr, Er
     internal unsafe struct UnmanagedErr
     {
         internal uint _variant;
-        internal Error.Unmanaged _Err;
+        internal Error _Err;
     }
 
     
@@ -12238,7 +12015,7 @@ public partial class ResultServiceAsyncStructsError : IUnion, IResult<IntPtr, Er
             var _managed = new ResultServiceAsyncStructsError();
             _managed._variant = _variant;
             if (_variant == 0) _managed._Ok = _Ok._Ok;
-            if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
+            if (_variant == 1) _managed._Err = _Err._Err;
             return _managed;
         }
     }
@@ -12252,7 +12029,7 @@ public partial class ResultServiceAsyncStructsError : IUnion, IResult<IntPtr, Er
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -12265,7 +12042,7 @@ public partial class ResultServiceAsyncStructsError : IUnion, IResult<IntPtr, Er
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -12458,7 +12235,7 @@ public partial class ResultServiceAsyncVecStringError : IUnion, IResult<IntPtr, 
     internal unsafe struct UnmanagedErr
     {
         internal uint _variant;
-        internal Error.Unmanaged _Err;
+        internal Error _Err;
     }
 
     
@@ -12483,7 +12260,7 @@ public partial class ResultServiceAsyncVecStringError : IUnion, IResult<IntPtr, 
             var _managed = new ResultServiceAsyncVecStringError();
             _managed._variant = _variant;
             if (_variant == 0) _managed._Ok = _Ok._Ok;
-            if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
+            if (_variant == 1) _managed._Err = _Err._Err;
             return _managed;
         }
     }
@@ -12497,7 +12274,7 @@ public partial class ResultServiceAsyncVecStringError : IUnion, IResult<IntPtr, 
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -12510,7 +12287,7 @@ public partial class ResultServiceAsyncVecStringError : IUnion, IResult<IntPtr, 
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -12703,7 +12480,7 @@ public partial class ResultServiceAsyncWireError : IUnion, IResult<IntPtr, Error
     internal unsafe struct UnmanagedErr
     {
         internal uint _variant;
-        internal Error.Unmanaged _Err;
+        internal Error _Err;
     }
 
     
@@ -12728,7 +12505,7 @@ public partial class ResultServiceAsyncWireError : IUnion, IResult<IntPtr, Error
             var _managed = new ResultServiceAsyncWireError();
             _managed._variant = _variant;
             if (_variant == 0) _managed._Ok = _Ok._Ok;
-            if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
+            if (_variant == 1) _managed._Err = _Err._Err;
             return _managed;
         }
     }
@@ -12742,7 +12519,7 @@ public partial class ResultServiceAsyncWireError : IUnion, IResult<IntPtr, Error
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -12755,7 +12532,7 @@ public partial class ResultServiceAsyncWireError : IUnion, IResult<IntPtr, Error
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -12948,7 +12725,7 @@ public partial class ResultServiceCallbacksError : IUnion, IResult<IntPtr, Error
     internal unsafe struct UnmanagedErr
     {
         internal uint _variant;
-        internal Error.Unmanaged _Err;
+        internal Error _Err;
     }
 
     
@@ -12973,7 +12750,7 @@ public partial class ResultServiceCallbacksError : IUnion, IResult<IntPtr, Error
             var _managed = new ResultServiceCallbacksError();
             _managed._variant = _variant;
             if (_variant == 0) _managed._Ok = _Ok._Ok;
-            if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
+            if (_variant == 1) _managed._Err = _Err._Err;
             return _managed;
         }
     }
@@ -12987,7 +12764,7 @@ public partial class ResultServiceCallbacksError : IUnion, IResult<IntPtr, Error
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -13000,7 +12777,7 @@ public partial class ResultServiceCallbacksError : IUnion, IResult<IntPtr, Error
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -13193,7 +12970,7 @@ public partial class ResultServiceDependentError : IUnion, IResult<IntPtr, Error
     internal unsafe struct UnmanagedErr
     {
         internal uint _variant;
-        internal Error.Unmanaged _Err;
+        internal Error _Err;
     }
 
     
@@ -13218,7 +12995,7 @@ public partial class ResultServiceDependentError : IUnion, IResult<IntPtr, Error
             var _managed = new ResultServiceDependentError();
             _managed._variant = _variant;
             if (_variant == 0) _managed._Ok = _Ok._Ok;
-            if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
+            if (_variant == 1) _managed._Err = _Err._Err;
             return _managed;
         }
     }
@@ -13232,7 +13009,7 @@ public partial class ResultServiceDependentError : IUnion, IResult<IntPtr, Error
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -13245,7 +13022,7 @@ public partial class ResultServiceDependentError : IUnion, IResult<IntPtr, Error
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -13438,7 +13215,7 @@ public partial class ResultServiceIgnoringMethodsError : IUnion, IResult<IntPtr,
     internal unsafe struct UnmanagedErr
     {
         internal uint _variant;
-        internal Error.Unmanaged _Err;
+        internal Error _Err;
     }
 
     
@@ -13463,7 +13240,7 @@ public partial class ResultServiceIgnoringMethodsError : IUnion, IResult<IntPtr,
             var _managed = new ResultServiceIgnoringMethodsError();
             _managed._variant = _variant;
             if (_variant == 0) _managed._Ok = _Ok._Ok;
-            if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
+            if (_variant == 1) _managed._Err = _Err._Err;
             return _managed;
         }
     }
@@ -13477,7 +13254,7 @@ public partial class ResultServiceIgnoringMethodsError : IUnion, IResult<IntPtr,
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -13490,7 +13267,7 @@ public partial class ResultServiceIgnoringMethodsError : IUnion, IResult<IntPtr,
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -13683,7 +13460,7 @@ public partial class ResultServiceMainError : IUnion, IResult<IntPtr, Error>, ID
     internal unsafe struct UnmanagedErr
     {
         internal uint _variant;
-        internal Error.Unmanaged _Err;
+        internal Error _Err;
     }
 
     
@@ -13708,7 +13485,7 @@ public partial class ResultServiceMainError : IUnion, IResult<IntPtr, Error>, ID
             var _managed = new ResultServiceMainError();
             _managed._variant = _variant;
             if (_variant == 0) _managed._Ok = _Ok._Ok;
-            if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
+            if (_variant == 1) _managed._Err = _Err._Err;
             return _managed;
         }
     }
@@ -13722,7 +13499,7 @@ public partial class ResultServiceMainError : IUnion, IResult<IntPtr, Error>, ID
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -13735,7 +13512,7 @@ public partial class ResultServiceMainError : IUnion, IResult<IntPtr, Error>, ID
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -13928,7 +13705,7 @@ public partial class ResultServiceMultipleCtorsError : IUnion, IResult<IntPtr, E
     internal unsafe struct UnmanagedErr
     {
         internal uint _variant;
-        internal Error.Unmanaged _Err;
+        internal Error _Err;
     }
 
     
@@ -13953,7 +13730,7 @@ public partial class ResultServiceMultipleCtorsError : IUnion, IResult<IntPtr, E
             var _managed = new ResultServiceMultipleCtorsError();
             _managed._variant = _variant;
             if (_variant == 0) _managed._Ok = _Ok._Ok;
-            if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
+            if (_variant == 1) _managed._Err = _Err._Err;
             return _managed;
         }
     }
@@ -13967,7 +13744,7 @@ public partial class ResultServiceMultipleCtorsError : IUnion, IResult<IntPtr, E
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -13980,7 +13757,7 @@ public partial class ResultServiceMultipleCtorsError : IUnion, IResult<IntPtr, E
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -14173,7 +13950,7 @@ public partial class ResultServiceResultError : IUnion, IResult<IntPtr, Error>, 
     internal unsafe struct UnmanagedErr
     {
         internal uint _variant;
-        internal Error.Unmanaged _Err;
+        internal Error _Err;
     }
 
     
@@ -14198,7 +13975,7 @@ public partial class ResultServiceResultError : IUnion, IResult<IntPtr, Error>, 
             var _managed = new ResultServiceResultError();
             _managed._variant = _variant;
             if (_variant == 0) _managed._Ok = _Ok._Ok;
-            if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
+            if (_variant == 1) _managed._Err = _Err._Err;
             return _managed;
         }
     }
@@ -14212,7 +13989,7 @@ public partial class ResultServiceResultError : IUnion, IResult<IntPtr, Error>, 
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -14225,7 +14002,7 @@ public partial class ResultServiceResultError : IUnion, IResult<IntPtr, Error>, 
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -14418,7 +14195,7 @@ public partial class ResultServiceStringsError : IUnion, IResult<IntPtr, Error>,
     internal unsafe struct UnmanagedErr
     {
         internal uint _variant;
-        internal Error.Unmanaged _Err;
+        internal Error _Err;
     }
 
     
@@ -14443,7 +14220,7 @@ public partial class ResultServiceStringsError : IUnion, IResult<IntPtr, Error>,
             var _managed = new ResultServiceStringsError();
             _managed._variant = _variant;
             if (_variant == 0) _managed._Ok = _Ok._Ok;
-            if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
+            if (_variant == 1) _managed._Err = _Err._Err;
             return _managed;
         }
     }
@@ -14457,7 +14234,7 @@ public partial class ResultServiceStringsError : IUnion, IResult<IntPtr, Error>,
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -14470,7 +14247,7 @@ public partial class ResultServiceStringsError : IUnion, IResult<IntPtr, Error>,
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -14663,7 +14440,7 @@ public partial class ResultServiceVariousSlicesError : IUnion, IResult<IntPtr, E
     internal unsafe struct UnmanagedErr
     {
         internal uint _variant;
-        internal Error.Unmanaged _Err;
+        internal Error _Err;
     }
 
     
@@ -14688,7 +14465,7 @@ public partial class ResultServiceVariousSlicesError : IUnion, IResult<IntPtr, E
             var _managed = new ResultServiceVariousSlicesError();
             _managed._variant = _variant;
             if (_variant == 0) _managed._Ok = _Ok._Ok;
-            if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
+            if (_variant == 1) _managed._Err = _Err._Err;
             return _managed;
         }
     }
@@ -14702,7 +14479,7 @@ public partial class ResultServiceVariousSlicesError : IUnion, IResult<IntPtr, E
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -14715,7 +14492,7 @@ public partial class ResultServiceVariousSlicesError : IUnion, IResult<IntPtr, E
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -14908,7 +14685,7 @@ public partial class ResultUseStringError : IUnion, IResult<UseString, Error>, I
     internal unsafe struct UnmanagedErr
     {
         internal uint _variant;
-        internal Error.Unmanaged _Err;
+        internal Error _Err;
     }
 
     
@@ -14933,7 +14710,7 @@ public partial class ResultUseStringError : IUnion, IResult<UseString, Error>, I
             var _managed = new ResultUseStringError();
             _managed._variant = _variant;
             if (_variant == 0) _managed._Ok = _Ok._Ok.IntoManaged();
-            if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
+            if (_variant == 1) _managed._Err = _Err._Err;
             return _managed;
         }
     }
@@ -14947,7 +14724,7 @@ public partial class ResultUseStringError : IUnion, IResult<UseString, Error>, I
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok.IntoUnmanaged();
-        if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -14960,7 +14737,7 @@ public partial class ResultUseStringError : IUnion, IResult<UseString, Error>, I
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok.AsUnmanaged();
-        if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -15154,7 +14931,7 @@ public partial class ResultUtf8StringError : IUnion, IResult<Utf8String, Error>,
     internal unsafe struct UnmanagedErr
     {
         internal uint _variant;
-        internal Error.Unmanaged _Err;
+        internal Error _Err;
     }
 
     
@@ -15179,7 +14956,7 @@ public partial class ResultUtf8StringError : IUnion, IResult<Utf8String, Error>,
             var _managed = new ResultUtf8StringError();
             _managed._variant = _variant;
             if (_variant == 0) _managed._Ok = _Ok._Ok.IntoManaged();
-            if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
+            if (_variant == 1) _managed._Err = _Err._Err;
             return _managed;
         }
     }
@@ -15193,7 +14970,7 @@ public partial class ResultUtf8StringError : IUnion, IResult<Utf8String, Error>,
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok.IntoUnmanaged();
-        if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -15206,7 +14983,7 @@ public partial class ResultUtf8StringError : IUnion, IResult<Utf8String, Error>,
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok.AsUnmanaged();
-        if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -15400,7 +15177,7 @@ public partial class ResultVecUtf8StringError : IUnion, IResult<VecUtf8String, E
     internal unsafe struct UnmanagedErr
     {
         internal uint _variant;
-        internal Error.Unmanaged _Err;
+        internal Error _Err;
     }
 
     
@@ -15425,7 +15202,7 @@ public partial class ResultVecUtf8StringError : IUnion, IResult<VecUtf8String, E
             var _managed = new ResultVecUtf8StringError();
             _managed._variant = _variant;
             if (_variant == 0) _managed._Ok = _Ok._Ok.IntoManaged();
-            if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
+            if (_variant == 1) _managed._Err = _Err._Err;
             return _managed;
         }
     }
@@ -15439,7 +15216,7 @@ public partial class ResultVecUtf8StringError : IUnion, IResult<VecUtf8String, E
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok.IntoUnmanaged();
-        if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -15452,7 +15229,7 @@ public partial class ResultVecUtf8StringError : IUnion, IResult<VecUtf8String, E
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok.AsUnmanaged();
-        if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -15646,7 +15423,7 @@ public partial class ResultWireOfHashMapStringStringError : IUnion, IResult<Wire
     internal unsafe struct UnmanagedErr
     {
         internal uint _variant;
-        internal Error.Unmanaged _Err;
+        internal Error _Err;
     }
 
     
@@ -15671,7 +15448,7 @@ public partial class ResultWireOfHashMapStringStringError : IUnion, IResult<Wire
             var _managed = new ResultWireOfHashMapStringStringError();
             _managed._variant = _variant;
             if (_variant == 0) _managed._Ok = _Ok._Ok.IntoManaged();
-            if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
+            if (_variant == 1) _managed._Err = _Err._Err;
             return _managed;
         }
     }
@@ -15685,7 +15462,7 @@ public partial class ResultWireOfHashMapStringStringError : IUnion, IResult<Wire
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok.IntoUnmanaged();
-        if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -15698,7 +15475,7 @@ public partial class ResultWireOfHashMapStringStringError : IUnion, IResult<Wire
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok.AsUnmanaged();
-        if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -15888,7 +15665,7 @@ public partial struct ResultNestedArrayError : IUnion, IResult<NestedArray, Erro
     internal unsafe struct UnmanagedErr
     {
         internal uint _variant;
-        internal Error.Unmanaged _Err;
+        internal Error _Err;
     }
 
     
@@ -15914,7 +15691,7 @@ public partial struct ResultNestedArrayError : IUnion, IResult<NestedArray, Erro
             _managed._variant = _variant;
             _managed._hasValue = true;
             if (_variant == 0) _managed._Ok = _Ok._Ok.ToManaged();
-            if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
+            if (_variant == 1) _managed._Err = _Err._Err;
             return _managed;
         }
     }
@@ -15928,7 +15705,7 @@ public partial struct ResultNestedArrayError : IUnion, IResult<NestedArray, Erro
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok.ToUnmanaged();
-        if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -15941,7 +15718,7 @@ public partial struct ResultNestedArrayError : IUnion, IResult<NestedArray, Erro
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok.AsUnmanaged();
-        if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -16118,7 +15895,7 @@ public partial struct ResultOptionEnumPayloadError : IUnion, IResult<OptionEnumP
     internal unsafe struct UnmanagedErr
     {
         internal uint _variant;
-        internal Error.Unmanaged _Err;
+        internal Error _Err;
     }
 
     
@@ -16144,7 +15921,7 @@ public partial struct ResultOptionEnumPayloadError : IUnion, IResult<OptionEnumP
             _managed._variant = _variant;
             _managed._hasValue = true;
             if (_variant == 0) _managed._Ok = _Ok._Ok.ToManaged();
-            if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
+            if (_variant == 1) _managed._Err = _Err._Err;
             return _managed;
         }
     }
@@ -16158,7 +15935,7 @@ public partial struct ResultOptionEnumPayloadError : IUnion, IResult<OptionEnumP
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok.ToUnmanaged();
-        if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -16171,7 +15948,7 @@ public partial struct ResultOptionEnumPayloadError : IUnion, IResult<OptionEnumP
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok.AsUnmanaged();
-        if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -16348,7 +16125,7 @@ public partial struct ResultUintError : IUnion, IResult<uint, Error>
     internal unsafe struct UnmanagedErr
     {
         internal uint _variant;
-        internal Error.Unmanaged _Err;
+        internal Error _Err;
     }
 
     
@@ -16374,7 +16151,7 @@ public partial struct ResultUintError : IUnion, IResult<uint, Error>
             _managed._variant = _variant;
             _managed._hasValue = true;
             if (_variant == 0) _managed._Ok = _Ok._Ok;
-            if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
+            if (_variant == 1) _managed._Err = _Err._Err;
             return _managed;
         }
     }
@@ -16388,7 +16165,7 @@ public partial struct ResultUintError : IUnion, IResult<uint, Error>
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -16401,7 +16178,7 @@ public partial struct ResultUintError : IUnion, IResult<uint, Error>
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -16578,7 +16355,7 @@ public partial struct ResultUlongError : IUnion, IResult<ulong, Error>
     internal unsafe struct UnmanagedErr
     {
         internal uint _variant;
-        internal Error.Unmanaged _Err;
+        internal Error _Err;
     }
 
     
@@ -16604,7 +16381,7 @@ public partial struct ResultUlongError : IUnion, IResult<ulong, Error>
             _managed._variant = _variant;
             _managed._hasValue = true;
             if (_variant == 0) _managed._Ok = _Ok._Ok;
-            if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
+            if (_variant == 1) _managed._Err = _Err._Err;
             return _managed;
         }
     }
@@ -16618,7 +16395,7 @@ public partial struct ResultUlongError : IUnion, IResult<ulong, Error>
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -16631,7 +16408,7 @@ public partial struct ResultUlongError : IUnion, IResult<ulong, Error>
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -16799,7 +16576,7 @@ public partial struct ResultVoidError : IUnion, IResult<Unit, Error>
     internal unsafe struct UnmanagedErr
     {
         internal uint _variant;
-        internal Error.Unmanaged _Err;
+        internal Error _Err;
     }
 
     
@@ -16821,7 +16598,7 @@ public partial struct ResultVoidError : IUnion, IResult<Unit, Error>
             var _managed = new ResultVoidError();
             _managed._variant = _variant;
             _managed._hasValue = true;
-            if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
+            if (_variant == 1) _managed._Err = _Err._Err;
             return _managed;
         }
     }
@@ -16834,7 +16611,7 @@ public partial struct ResultVoidError : IUnion, IResult<Unit, Error>
     {
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -16846,7 +16623,7 @@ public partial struct ResultVoidError : IUnion, IResult<Unit, Error>
     {
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
-        if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged();
+        if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
 
@@ -16995,123 +16772,39 @@ public partial struct ResultVoidError : IUnion, IResult<Unit, Error>
 
 
 
-public partial struct EnumNegative
+public enum EnumNegative : sbyte
 {
-    sbyte _variant;
+    A = -1,
+    B = 0,
+    C = 1,
 }
 
 
-[NativeMarshalling(typeof(MarshallerMeta))]
-public partial struct EnumNegative
+
+
+public enum EnumRenamed : byte
 {
-
-    [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
-    {
-        [FieldOffset(0)]
-        internal sbyte _variant;
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        [Obsolete("This method is intended for use by generated code only.")]
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        internal EnumNegative ToManaged()
-        {
-            var _managed = new EnumNegative();
-            _managed._variant = _variant;
-            return _managed;
-        }
-    }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    [Obsolete("This method is intended for use by generated code only.")]
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged ToUnmanaged()
-    {
-        var _unmanaged = new Unmanaged();
-        _unmanaged._variant = _variant;
-        return _unmanaged;
-    }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    [Obsolete("This method is intended for use by generated code only.")]
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged AsUnmanaged()
-    {
-        var _unmanaged = new Unmanaged();
-        _unmanaged._variant = _variant;
-        return _unmanaged;
-    }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public Exception ExceptionForVariant()
-    {
-        if (_variant == -1) return new EnumException();
-        if (_variant == 0) return new EnumException();
-        if (_variant == 1) return new EnumException();
-        throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
-    }
-
-    // Ctors
-    public static EnumNegative A => new() { _variant = -1 };
-    public static EnumNegative B => new() { _variant = 0 };
-    public static EnumNegative C => new() { _variant = 1 };
-
-    // Checks
-    public bool IsA => _variant == -1;
-    public bool IsB => _variant == 0;
-    public bool IsC => _variant == 1;
-
-    // Conversions
-    public void AsA() { if (_variant != -1) throw ExceptionForVariant(); }
-    public void AsB() { if (_variant != 0) throw ExceptionForVariant(); }
-    public void AsC() { if (_variant != 1) throw ExceptionForVariant(); }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public override string ToString()
-    {
-        if (_variant == -1) return "A";
-        if (_variant == 0) return "B";
-        if (_variant == 1) return "C";
-        throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
-    }
-
-
-
-    [CustomMarshaller(typeof(EnumNegative), MarshalMode.Default, typeof(Marshaller))]
-    private struct MarshallerMeta { }
-
-    internal ref struct Marshaller
-    {
-        private EnumNegative _managed;
-        private Unmanaged _unmanaged;
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Marshaller(EnumNegative managed) { _managed = managed; }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Marshaller(Unmanaged unmanaged) { _unmanaged = unmanaged; }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void FromManaged(EnumNegative managed) { _managed = managed; }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.ToUnmanaged(); }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public EnumNegative ToManaged() { return _unmanaged.ToManaged(); }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
-    }
-
+    X = 0,
 }
+
+
+
+
+public enum Error : byte
+{
+    Fail = 0,
+}
+
+
+
+
+public enum MyEnum : byte
+{
+    A = 0,
+    B = 1,
+    C = 2,
+}
+
 
 
 
@@ -17502,346 +17195,6 @@ public partial struct EnumPayload : IUnion
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public EnumPayload ToManaged() { return _unmanaged.ToManaged(); }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
-    }
-
-}
-
-
-
-public partial struct EnumRenamed
-{
-    byte _variant;
-}
-
-
-[NativeMarshalling(typeof(MarshallerMeta))]
-public partial struct EnumRenamed
-{
-
-    [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
-    {
-        [FieldOffset(0)]
-        internal byte _variant;
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        [Obsolete("This method is intended for use by generated code only.")]
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        internal EnumRenamed ToManaged()
-        {
-            var _managed = new EnumRenamed();
-            _managed._variant = _variant;
-            return _managed;
-        }
-    }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    [Obsolete("This method is intended for use by generated code only.")]
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged ToUnmanaged()
-    {
-        var _unmanaged = new Unmanaged();
-        _unmanaged._variant = _variant;
-        return _unmanaged;
-    }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    [Obsolete("This method is intended for use by generated code only.")]
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged AsUnmanaged()
-    {
-        var _unmanaged = new Unmanaged();
-        _unmanaged._variant = _variant;
-        return _unmanaged;
-    }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public Exception ExceptionForVariant()
-    {
-        if (_variant == 0) return new EnumException();
-        throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
-    }
-
-    // Ctors
-    public static EnumRenamed X => new() { _variant = 0 };
-
-    // Checks
-    public bool IsX => _variant == 0;
-
-    // Conversions
-    public void AsX() { if (_variant != 0) throw ExceptionForVariant(); }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public override string ToString()
-    {
-        if (_variant == 0) return "X";
-        throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
-    }
-
-
-
-    [CustomMarshaller(typeof(EnumRenamed), MarshalMode.Default, typeof(Marshaller))]
-    private struct MarshallerMeta { }
-
-    internal ref struct Marshaller
-    {
-        private EnumRenamed _managed;
-        private Unmanaged _unmanaged;
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Marshaller(EnumRenamed managed) { _managed = managed; }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Marshaller(Unmanaged unmanaged) { _unmanaged = unmanaged; }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void FromManaged(EnumRenamed managed) { _managed = managed; }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.ToUnmanaged(); }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public EnumRenamed ToManaged() { return _unmanaged.ToManaged(); }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
-    }
-
-}
-
-
-
-public partial struct Error
-{
-    byte _variant;
-}
-
-
-[NativeMarshalling(typeof(MarshallerMeta))]
-public partial struct Error
-{
-
-    [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
-    {
-        [FieldOffset(0)]
-        internal byte _variant;
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        [Obsolete("This method is intended for use by generated code only.")]
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        internal Error ToManaged()
-        {
-            var _managed = new Error();
-            _managed._variant = _variant;
-            return _managed;
-        }
-    }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    [Obsolete("This method is intended for use by generated code only.")]
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged ToUnmanaged()
-    {
-        var _unmanaged = new Unmanaged();
-        _unmanaged._variant = _variant;
-        return _unmanaged;
-    }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    [Obsolete("This method is intended for use by generated code only.")]
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged AsUnmanaged()
-    {
-        var _unmanaged = new Unmanaged();
-        _unmanaged._variant = _variant;
-        return _unmanaged;
-    }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public Exception ExceptionForVariant()
-    {
-        if (_variant == 0) return new EnumException();
-        throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
-    }
-
-    // Ctors
-    public static Error Fail => new() { _variant = 0 };
-
-    // Checks
-    public bool IsFail => _variant == 0;
-
-    // Conversions
-    public void AsFail() { if (_variant != 0) throw ExceptionForVariant(); }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public override string ToString()
-    {
-        if (_variant == 0) return "Fail";
-        throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
-    }
-
-
-
-    [CustomMarshaller(typeof(Error), MarshalMode.Default, typeof(Marshaller))]
-    private struct MarshallerMeta { }
-
-    internal ref struct Marshaller
-    {
-        private Error _managed;
-        private Unmanaged _unmanaged;
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Marshaller(Error managed) { _managed = managed; }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Marshaller(Unmanaged unmanaged) { _unmanaged = unmanaged; }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void FromManaged(Error managed) { _managed = managed; }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.ToUnmanaged(); }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Error ToManaged() { return _unmanaged.ToManaged(); }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
-    }
-
-}
-
-
-
-public partial struct MyEnum
-{
-    byte _variant;
-}
-
-
-[NativeMarshalling(typeof(MarshallerMeta))]
-public partial struct MyEnum
-{
-
-    [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
-    {
-        [FieldOffset(0)]
-        internal byte _variant;
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        [Obsolete("This method is intended for use by generated code only.")]
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        internal MyEnum ToManaged()
-        {
-            var _managed = new MyEnum();
-            _managed._variant = _variant;
-            return _managed;
-        }
-    }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    [Obsolete("This method is intended for use by generated code only.")]
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged ToUnmanaged()
-    {
-        var _unmanaged = new Unmanaged();
-        _unmanaged._variant = _variant;
-        return _unmanaged;
-    }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    [Obsolete("This method is intended for use by generated code only.")]
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged AsUnmanaged()
-    {
-        var _unmanaged = new Unmanaged();
-        _unmanaged._variant = _variant;
-        return _unmanaged;
-    }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public Exception ExceptionForVariant()
-    {
-        if (_variant == 0) return new EnumException();
-        if (_variant == 1) return new EnumException();
-        if (_variant == 2) return new EnumException();
-        throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
-    }
-
-    // Ctors
-    public static MyEnum A => new() { _variant = 0 };
-    public static MyEnum B => new() { _variant = 1 };
-    public static MyEnum C => new() { _variant = 2 };
-
-    // Checks
-    public bool IsA => _variant == 0;
-    public bool IsB => _variant == 1;
-    public bool IsC => _variant == 2;
-
-    // Conversions
-    public void AsA() { if (_variant != 0) throw ExceptionForVariant(); }
-    public void AsB() { if (_variant != 1) throw ExceptionForVariant(); }
-    public void AsC() { if (_variant != 2) throw ExceptionForVariant(); }
-
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public override string ToString()
-    {
-        if (_variant == 0) return "A";
-        if (_variant == 1) return "B";
-        if (_variant == 2) return "C";
-        throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
-    }
-
-
-
-    [CustomMarshaller(typeof(MyEnum), MarshalMode.Default, typeof(Marshaller))]
-    private struct MarshallerMeta { }
-
-    internal ref struct Marshaller
-    {
-        private MyEnum _managed;
-        private Unmanaged _unmanaged;
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Marshaller(MyEnum managed) { _managed = managed; }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Marshaller(Unmanaged unmanaged) { _unmanaged = unmanaged; }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void FromManaged(MyEnum managed) { _managed = managed; }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.ToUnmanaged(); }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public MyEnum ToManaged() { return _unmanaged.ToManaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free() {}
@@ -19732,7 +19085,7 @@ public partial struct NestedArray
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct Unmanaged
     {
-        internal EnumRenamed.Unmanaged field_enum;
+        internal EnumRenamed field_enum;
         internal Vec3f32.Unmanaged field_vec;
         internal Bool field_bool;
         internal int field_int;
@@ -19746,7 +19099,7 @@ public partial struct NestedArray
         internal NestedArray ToManaged()
         {
             var _managed = default(NestedArray);
-            _managed.field_enum = field_enum.ToManaged();
+            _managed.field_enum = field_enum;
             _managed.field_vec = field_vec.ToManaged();
             _managed.field_bool = field_bool;
             _managed.field_int = field_int;
@@ -19776,7 +19129,7 @@ public partial struct NestedArray
     internal Unmanaged ToUnmanaged()
     {
         var _unmanaged = new Unmanaged();
-        _unmanaged.field_enum = field_enum.ToUnmanaged();
+        _unmanaged.field_enum = field_enum;
         _unmanaged.field_vec = field_vec.ToUnmanaged();
         _unmanaged.field_bool = field_bool;
         _unmanaged.field_int = field_int;
@@ -19807,7 +19160,7 @@ public partial struct NestedArray
     internal Unmanaged AsUnmanaged()
     {
         var _unmanaged = new Unmanaged();
-        _unmanaged.field_enum = field_enum.AsUnmanaged();
+        _unmanaged.field_enum = field_enum;
         _unmanaged.field_vec = field_vec.AsUnmanaged();
         _unmanaged.field_bool = field_bool;
         _unmanaged.field_int = field_int;
@@ -20246,7 +19599,7 @@ public partial struct StructRenamed
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct Unmanaged
     {
-        internal EnumRenamed.Unmanaged e;
+        internal EnumRenamed e;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         [Obsolete("This method is intended for use by generated code only.")]
@@ -20254,7 +19607,7 @@ public partial struct StructRenamed
         internal StructRenamed ToManaged()
         {
             var _managed = default(StructRenamed);
-            _managed.e = e.ToManaged();
+            _managed.e = e;
             return _managed;
         }
     }
@@ -20266,7 +19619,7 @@ public partial struct StructRenamed
     internal Unmanaged ToUnmanaged()
     {
         var _unmanaged = new Unmanaged();
-        _unmanaged.e = e.ToUnmanaged();
+        _unmanaged.e = e;
         return _unmanaged;
     }
 
@@ -20277,7 +19630,7 @@ public partial struct StructRenamed
     internal Unmanaged AsUnmanaged()
     {
         var _unmanaged = new Unmanaged();
-        _unmanaged.e = e.AsUnmanaged();
+        _unmanaged.e = e;
         return _unmanaged;
     }
 
@@ -22256,70 +21609,88 @@ public delegate void FnCharArray(CharArray x1);
 
 public partial class SliceEnumDocumented
 {
+    GCHandle _handle;
     IntPtr _data;
     ulong _len;
 }
 
-/// A read-only view into a contiguous region of <c>EnumDocumented</c> elements,
-/// with marshalling support for non-blittable element types.
+
+/// A read-only view into a contiguous region
+/// of <c>EnumDocumented</c> elements.
 ///
-/// Elements are marshalled from their unmanaged representation on each access.
-/// The slice allocates a temporary native copy via <c>Marshal.AllocHGlobal</c>;
-/// call <see cref="Dispose"/> to free it.
+/// Slices borrow data — they do not own it. If created from a managed array via
+/// <see cref="From(EnumDocumented[])"/>, the array is pinned for the slice's
+/// lifetime. Call <see cref="Dispose"/> when done to unpin the array.
+/// If received from Rust, the slice points into Rust memory and is only valid
+/// for the duration of the call.
 /// <remarks>
 /// ⚠️ This type is an owned resource. You must 1) either call `Dispose()` on it,
 /// 2) call another method on it that promises to free it, or 3) 'move' it to Rust
 /// if the type allows it.
 /// </remarks>
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class SliceEnumDocumented : IDisposable
+public partial class SliceEnumDocumented : IEnumerable<EnumDocumented>, IDisposable
 {
     /// The number of elements in this slice.
     public int Count => (int) _len;
 
+    /// Returns a <see cref="ReadOnlySpan{T}"/> over the underlying data without copying.
+    public unsafe ReadOnlySpan<EnumDocumented> ReadOnlySpan
+    {
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        get => new(_data.ToPointer(), (int)_len);
+    }
 
-    /// Gets the element at the given index, marshalling from its unmanaged form.
+    /// Gets the element at the given index.
     public unsafe EnumDocumented this[int i]
     {
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         get
         {
             if (i < 0 || (ulong)i >= _len) throw new IndexOutOfRangeException();
-            if (_data == IntPtr.Zero) { throw new NullReferenceException(); }
-            var size = Marshal.SizeOf<EnumDocumented.Unmanaged>();
-            var ptr = IntPtr.Add(_data, i * size);
-            var unmanaged = Marshal.PtrToStructure<EnumDocumented.Unmanaged>(ptr);
-            return unmanaged.ToManaged();
+            return Unsafe.Read<EnumDocumented>((void*)IntPtr.Add(_data, i * Unsafe.SizeOf<EnumDocumented>()));
         }
-    }
 
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     SliceEnumDocumented() { }
 
-    /// Creates a slice by marshalling each element from a managed array into a native copy.
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public static unsafe SliceEnumDocumented From(EnumDocumented[] managed)
+    /// Creates a slice from a raw pointer and length. The caller must ensure the
+    /// memory remains valid for the lifetime of this slice.
+    public static SliceEnumDocumented From(IntPtr data, ulong len)
     {
         var rval = new SliceEnumDocumented();
-        var size = Marshal.SizeOf<EnumDocumented.Unmanaged>();
-        rval._data = Marshal.AllocHGlobal(size * managed.Length);
-        rval._len = (ulong) managed.Length;
-        for (var i = 0; i < managed.Length; ++i)
-        {
-            var unmanaged = managed[i].AsUnmanaged();
-            var dst = IntPtr.Add(rval._data, i * size);
-            Marshal.StructureToPtr(unmanaged, dst, false);
-        }
+        rval._data = data;
+        rval._len = len;
         return rval;
     }
 
-    /// Frees the native copy. Safe to call multiple times.
+    /// Creates a slice by pinning a managed array. Call <see cref="Dispose"/> to unpin.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static SliceEnumDocumented From(EnumDocumented[] managed)
+    {
+        var rval = new SliceEnumDocumented();
+        rval._handle = GCHandle.Alloc(managed, GCHandleType.Pinned);
+        rval._data = rval._handle.AddrOfPinnedObject();
+        rval._len = (ulong) managed.Length;
+        return rval;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public IEnumerator<EnumDocumented> GetEnumerator()
+    {
+        for (var i = 0; i < Count; ++i) { yield return this[i]; }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+    /// Unpins the underlying managed array (if any) and invalidates this slice.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        if (_data == IntPtr.Zero) return;
-        Marshal.FreeHGlobal(_data);
+        if (_handle is { IsAllocated: true }) { _handle.Free(); }
         _data = IntPtr.Zero;
     }
 
@@ -22353,10 +21724,7 @@ public partial class SliceEnumDocumented : IDisposable
         [EditorBrowsable(EditorBrowsableState.Never)]
         internal SliceEnumDocumented ToManaged()
         {
-            var _managed = new SliceEnumDocumented();
-            _managed._data = _data;
-            _managed._len = _len;
-            return _managed;
+            return SliceEnumDocumented.From(_data, _len);
         }
     }
 }public partial class SliceEnumDocumented
@@ -22392,7 +21760,7 @@ public partial class SliceEnumDocumented : IDisposable
 /// Convenience extension to convert a <c>EnumDocumented[]</c> array to a <see cref="SliceEnumDocumented"/>.
 public static class SliceEnumDocumentedExtensions
 {
-    /// Marshals the array into a <see cref="SliceEnumDocumented"/>. Call <see cref="SliceEnumDocumented.Dispose"/> when done.
+    /// Pins the array and wraps it as a <see cref="SliceEnumDocumented"/>. Call <see cref="SliceEnumDocumented.Dispose"/> when done.
     public static SliceEnumDocumented Slice(this EnumDocumented[] s) { return SliceEnumDocumented.From(s); }
 }
 
