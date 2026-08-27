@@ -721,8 +721,9 @@ public partial class ResultNestedAError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class ResultNestedAError : IResult<NestedA, Error>, IDisposable
+public partial class ResultNestedAError : IUnion, IResult<NestedA, Error>, IDisposable
 {
     public readonly record struct OkCase(NestedA Value);
 
