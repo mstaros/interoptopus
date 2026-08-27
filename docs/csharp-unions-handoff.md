@@ -59,8 +59,9 @@ backend. It works in **two directions**:
 
 **The reverse-interop fixtures are the only thing that compiles the generated C#.** Everything
 else compares generated text against `insta` snapshots, which pass happily on C# that does not
-build. When 3d first landed, three snapshot tests passed and seventeen plugin fixtures failed with
-a hard compiler error. Never conclude "it works" from snapshots.
+build. When 3d first landed, the reference snapshot **passed** — on already-accepted output —
+while fourteen plugin tests failed with a hard compiler error. Never conclude "it works" from
+snapshots.
 
 ### What this work is, and why
 
@@ -243,8 +244,9 @@ variant carry a payload* rather than *does one*. See §8.
 snapshots.** Validation runs the suite anyway; running it yourself holds the plugin DLLs and is
 what caused three `PermissionDenied` validation failures. See § MCP tooling notes, 2026-08-27 for
 the full set of traps. And note which layer catches what: when 3d first landed without case
-constructors, **three snapshot tests passed and seventeen plugin fixtures failed with `CS9385`.**
-Snapshots prove text; only the plugin build proves the generated C# compiles.
+constructors, **`reference_project::interop` passed on an already-accepted snapshot while fourteen
+plugin tests failed with `CS9385`.** Snapshots prove text; only the plugin build proves the
+generated C# compiles.
 
 ### Snapshot workflow
 
@@ -395,9 +397,11 @@ interface list ahead of `IResult` and `IDisposable`.
 **The first attempt at 3d was rolled back, and the reason matters.** `[Union]` on a type with no
 *union creation member* is `CS9385`, and none existed: 3b emitted the case types, 3c emitted
 `Value`/`HasValue`/`TryGetValue`, and nothing emitted the constructors. The plan recorded 3d's
-gate as 3c, which was wrong, and had no item for the constructors at all. Seventeen plugin
-fixtures caught it; all three snapshot tests passed, because snapshots prove text and only the
-plugin build proves compilation.
+gate as 3c, which was wrong, and had no item for the constructors at all. **Fourteen plugin tests
+caught it** — across the twelve plugin fixtures, several of which have both a `define_plugin` and
+a `load_plugin` test. Meanwhile `reference_project::interop`, the snapshot covering every
+generated type, **passed**, because its snapshot had already been accepted. The snapshot went
+green on output that did not compile.
 
 **Preview-only syntax is settled, not an open question.** `LangVersion=preview` is set in
 `Directory.Build.props` and landed with R in `9d664613`, and a .NET 11 preview SDK is already
@@ -659,7 +663,9 @@ the replacement. A pattern beginning with `// …` will silently return zero mat
 but `str_replace` fails with `Cargo package ownership is unknown` until the root is selected, and
 sometimes still fails for a specific file. `RustEditor:search_and_replace` goes through
 editor-core rather than the Cargo-aware path and works when `str_replace` will not; it takes a
-regex and a `file_glob`, and `expected_files` for a strict apply.
+regex and a `file_glob`, and `expected_files` for a strict apply. **But its replacement does not
+honour `\n`**, so a multi-line insert through it produces one long line. For multi-line content
+use `str_replace` with a pure-code pattern, or `FileMcp:write_file` for the whole file.
 
 **Repo-root files cannot be scoped into a FileMcp transaction.** `folders: ["docs", "."]`,
 `folders: [""]` and a `file:`-only transaction are all rejected; passing `file:` alongside
