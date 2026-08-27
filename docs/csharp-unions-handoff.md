@@ -41,7 +41,7 @@ docs change cannot reach.
 
 **Status lives in `docs/csharp-unions.md` § Todo/Remaining. That table is the single source. This
 section names the front and deliberately does not restate it** — the two drifting apart is what
-cost time this morning.
+cost time on 2026-08-26.
 
 **Step 3 is complete except for one unverified claim.** Rust enums now project as C# 15 unions:
 `[Union]`, `IUnion`, nested case types, public single-parameter case constructors, `Value`,
@@ -50,8 +50,11 @@ cost time this morning.
 Open front: **4** (`ToUnmanaged`/`AsUnmanaged` empty guard), no gate, then **4a**, whose case
 constructors now exist. **3e is satisfied but unverified**: nothing is left to emit, but no
 fixture compiles an implicit conversion, so the synthesis claim is untested. Also open and **not
-covered anywhere below**: 4c, 4d's serializer half, 5c–5i, and 6. 4c is a soundness obligation
-rather than a preference.
+covered anywhere below**: 4c, 4d's serializer half, 5c–5i, and 6.
+
+**Running in parallel: the projection pass, step one of three landed.** See §9. That is the
+largest in-flight item and the precondition for option C — projecting unit-only enums as plain C#
+`enum`s, which is still **not done**; every `#[ffi]` enum is still emitted as a struct.
 
 Landing log — a record of what shipped, not a second status table:
 
@@ -65,6 +68,8 @@ Landing log — a record of what shipped, not a second status table:
 | — | `98f7ffd7` | Enum gate consolidated onto `union_names::data_enum` at ten binding sites; `DataEnum::is_union_projected()` replaces five inline predicates |
 | — | `aa2d550d` | **Case constructors** — the union creation members. Unnumbered in the plan, and the actual gate for 3d |
 | 3d | `da741fa9` | `[Union]` and `IUnion` on union-projected enums |
+| — | `02c12b35` | Docs: 3d recorded done, its gate corrected, the `IUnion` deferral reversed, 3e marked satisfied-unverified |
+| — | `1429746b` | **Projection pass, step one** — `is_managed_only` moved from a render-time local in `body.rs` into `model::…::info::projection` |
 
 **`Issues.md` as of `d477f843`.** Open — `2a6da76a`, `4e9a17c3`, `7c8cb22e`, `79be256e`,
 `b4e07f12`, `5d1ae4c7`. Closed — `09b82d44`, `ccb105a2`, `1383b84b`, `31248473`, `c33b9cf5`,
@@ -75,6 +80,23 @@ was recorded as 3c; `[Union]` on a type with no public single-parameter construc
 so the real gate was the case constructors, and no item covered them. And the 3d row deferred
 `IUnion` on the grounds that its namespace is unspecified — that read the proposal's open
 questions as live, when the feature has shipped and `IUnion` resolves from the framework.
+
+**Uncommitted working-tree state you will find.** None of this went through a transaction, because
+`Issues.md` and repo-root files cannot be scoped into a FileMcp one:
+
+- **`Issues.md` — modified, unstaged.** `79be256e` gained a marshalling-mode sub-question and a
+  note that option B landed. Written via `FileMcp:update_issue`, which edits the working tree
+  directly. Review and commit it, or discard it.
+- **`baseline-nextest.txt` — staged, uncommitted.** Carries a placeholder header
+  (`# at <commit>, <date>, <machine>`) that was never filled in. Either fill it or drop the file;
+  a pass count with no command and no commit is the defect the header exists to prevent.
+- **`.gitignore` — still has no `build.txt` entry.** `crates/backend_csharp/benches/dotnet/build.txt`
+  is a build artefact that has already been swept into a commit once and blocked a checkout.
+
+**Still wrong in `Issues.md`, corrected here but not there.** `5d1ae4c7` says the gate is at *ten*
+sites; it was twelve, and about fourteen counting `body.rs`'s own extra re-derivations. It also
+says nothing calls `union_names::data_enum`, which `wire/cs_names.rs` already did with two tests.
+`79be256e`'s site-count paragraph says "not reconciled here" and is now reconciled.
 
 ### The three things worth knowing before you start
 
@@ -487,6 +509,53 @@ above; it fires on essentially every change to a non-root source module and fail
 records it: *"a fresh worktree fails three of sixty-two on the first run and passes on the second."*
 Changing `Directory.Build.props` invalidates every plugin build and reproduces exactly this. Re-run
 before investigating.
+### MCP tooling notes, 2026-08-27
+
+**Do not run the suite before committing.** Validation runs it anyway, and running it yourself
+holds the plugin DLLs. Three failed validations traced to exactly this: `PermissionDenied`
+(Windows error 5) on `prepare_plugin` in `tests/mod.rs:224`, because a local `nextest` run still
+had the assemblies loaded. Each retried clean with **no edits between attempts**, which is what
+makes the diagnosis testable rather than assumed. Use `RustEditor:diagnostics` for a fast compile
+check instead, then commit.
+
+**And do not retry a call that timed out.** The MCP connector gives up at around two minutes while
+the cargo process keeps running. Retrying immediately races the predecessor and produced
+`LINK : fatal error LNK1104: cannot open file … mod-<hash>.exe` — the linker could not write the
+test binary because the first run still held it. Poll for the result instead of re-issuing.
+
+**Snapshot acceptance is iterative, not one-shot.** `insta` stops at the *first* failing snapshot
+within a test, and some tests write several — `reference_plugins::service::define_plugins` writes
+at least `-1` through `-4`. Accept, re-run, repeat until a run comes back clean. Accepting
+manually means stripping the `assertion_line: N` header line that `insta` puts in `.snap.new` and
+that an accepted `.snap` must not have, then renaming over the `.snap`. A regex over
+`assertion_line: \d+\n` across `*.snap.new` handles a whole batch.
+
+**Letting validation find the snapshots is faster than iterating locally.** It runs the full suite
+without fail-fast interference and writes every `.snap.new` in one pass.
+
+**`RustEditor:str_replace` is parser-aware and splits matches into `code`, `comments` and
+`literals` alternatives.** A pattern that *spans* a comment/code boundary matches **nothing** —
+it belongs to no single alternative. Anchor patterns on code only and put any new comment text in
+the replacement. A pattern beginning with `// …` will silently return zero matches.
+
+**`RustEditor` needs `root_select` per session.** A fresh transaction worktree comes back as `$N`,
+but `str_replace` fails with `Cargo package ownership is unknown` until the root is selected, and
+sometimes still fails for a specific file. `RustEditor:search_and_replace` goes through
+editor-core rather than the Cargo-aware path and works when `str_replace` will not; it takes a
+regex and a `file_glob`, and `expected_files` for a strict apply.
+
+**Repo-root files cannot be scoped into a FileMcp transaction.** `folders: ["docs", "."]`,
+`folders: [""]` and a `file:`-only transaction are all rejected; passing `file:` alongside
+`folders: ["docs"]` lets you *write* the root file in the worktree but the commit gate rejects it
+as `outOfScopePaths`. `Issues.md` therefore has to be edited with `FileMcp:update_issue` against
+the real working tree, which leaves it dirty for a human to commit.
+
+**`FileMcp:update_issue` replaces the entire description.** Re-emit the whole body with your one
+change; the dry run's diff is the check that nothing else moved. It caught an accidental deletion
+of two paragraphs on the first attempt.
+
+**The counting is unreliable and it is not you.** `cargo nextest run -p interoptopus_csharp`
+reported **77** locally and **78** under Guarded validation, same worktree, minutes apart. See §1.
 ## 8. Where I was wrong
 
 Recorded because the same traps are still live.
@@ -568,3 +637,85 @@ neither. Use `-t:Rebuild` when measuring warnings. And an unscoped `CSharpEditor
 returns **CSharpMpc** history, not interoptopus, because that server's active root is elsewhere —
 pass a `project` inside the repo you mean.
 
+## 9. The projection pass — step one of three landed
+
+**Why this exists.** The model has no notion of *how a type is projected*. It knows what kind a
+type is (`struct_class`, `managed_conversion`, `disposable`), but not whether it should get union
+machinery, plain-enum treatment, or an `Unmanaged` mirror. That decision is currently emergent —
+it falls out of which output passes happen to fire — which is why you cannot say "emit this enum
+as a plain C# `enum`" without editing four passes that never ask. `Issues.md` `5d1ae4c7` names
+this as a missing "third category" and deliberately declines to design it.
+
+**Step one landed in `1429746b`.** `model::common::types::info::projection` now answers two
+questions that were previously computed inline in `output/…/enums/body.rs` at render time and
+shared with nobody:
+
+- `crosses_ffi(ty) -> Option<bool>` — does the type need an `Unmanaged` mirror and a marshaller.
+  This is the old `is_managed_only`, inverted.
+- `has_wire_only_payload(ty) -> Option<bool>` — is it a `DataEnum` with a `WireOnly` payload.
+
+**They are two values, not one, and conflating them is a real bug.** `crosses_ffi` is false for a
+`WireOnly` payload *and* for a `Result`/`Option` whose `Ok` is a `Service`. But only the former
+also forces the type non-disposable: a wire-only payload is GC-managed, whereas a Service-backed
+`Result` still owns a native resource. Substituting one for the other silently makes
+Service-backed results non-disposable. That was caught during step one, in a step whose entire
+purpose was to change nothing.
+
+**This pass cannot use the write-once idiom the other info passes use.** `struct_class` and
+`disposable` may skip a type they have already answered, because their input `managed_conversion`
+returns `None` while a type is still resolving — a genuine not-ready signal. `projection` reads
+raw `TypeKind`s instead, and a kind is *always* something. There is no not-ready signal, so an
+answer cached early would go stale when a later kind pass reclassifies a payload. It **recomputes
+each round and reports `changed` only on difference**, which converges under the same fixed-point
+contract. The module comment says this; do not "optimise" it into a `contains_key` skip.
+
+**Accessors return `Option<bool>`, like `disposable`, not bare `bool` like `struct_class`.** This
+value decides whether machinery is emitted at all, so collapsing absent into "no" would silently
+drop a type's marshalling.
+
+### Step two — add `shape`, still a no-op
+
+Add a shape field with two values, union and struct, where union is exactly today's
+`DataEnum::is_union_projected()`. Move the five call sites that read that predicate onto the new
+pass. **Snapshots must not move**; if they do, something else was wrong.
+
+Keep shape and `crosses_ffi` **orthogonal**. They are genuinely independent: `DataEnum` in the
+reference project is managed-only *and* union-projected — it gets `[Union]` and no
+`[NativeMarshalling]`. That is exactly why 3d's attribute had to sit outside the `is_managed_only`
+guard, and why a single flat enum of projections would lose the case.
+
+### Step three — add plain-enum, the first step that changes output
+
+This is option C in `Issues.md` `79be256e`: unit-only enums become
+`public enum Color : byte { Red, Green, Blue }` instead of a ~120-line struct. Route them to the
+new shape and the passes that should not fire simply do not match — `body_unmanaged`,
+`body_unmanaged_variant`, `body_to_unmanaged`, `body_as_unmanaged` decline by construction rather
+than by anyone remembering.
+
+Three things `79be256e` lists as open, and one this session added:
+
+- What `Unmanaged` actually contains for a unit-only enum. Not read.
+- How Rust `#[repr]` maps to the C# underlying type. `definition.rs` already passes
+  `discriminant_type.cs_name()`, so the information exists; `EnumNegative` needs a signed type.
+- **Which marshalling mode the bindings run under.** `DisableRuntimeMarshalling` is **not**
+  emitted — `templates/rust/header.cs` is a ten-line comment banner with no assembly attributes.
+  Under the classic marshaller enums are layout-compatible but not universally blittable; enum
+  arrays and pinning are the failing cases. So the deciding question is whether a unit-only enum
+  can reach a slice element or a pinned array.
+- Exhaustiveness is genuinely lost. A `switch` over a plain C# `enum` is never exhaustive, because
+  `(Color)99` compiles. Closed enums would have fixed this and **did not ship in C# 15**. A Roslyn
+  analyzer is the interim substitute for the compile-time half; there is no runtime half to lose,
+  because `Unmanaged::ToManaged` copies the tag blind today and validates nothing.
+
+### Wiring a new model pass — nine sites, two pipelines
+
+Registering `projection` touched: `info/mod.rs`, then a `Config` field, a `Pass` field, a
+`Pass::new(…)` line and a `process(…)` call in **each** of `pipeline/rust/library.rs` and
+`pipeline/dotnet/library.rs`. Threading it into an output pass adds the parameter plus both
+`o.<pass>.process(…)` call sites.
+
+**There are two pipelines and they order these passes differently** — rust runs
+`managed_conversion, disposable, nullable, struct_class`; dotnet runs
+`managed_conversion, struct_class, disposable, nullable`. It is a convergence loop so order should
+not determine the result, but placement is two decisions, not one. **Forgetting the dotnet
+pipeline breaks only the plugin fixtures**, which is the slowest failure to notice.
