@@ -837,38 +837,62 @@ guard, and why a single flat enum of projections would lose the case.
 ### Step three — add plain-enum, the first step that changes output
 
 This is option C in `Issues.md` `79be256e`: unit-only enums become
-`public enum Color : byte { Red, Green, Blue }` instead of a ~120-line struct.
+`public enum Color : byte { Red, Green, Blue }` instead of a ~120-line struct. (`Issues.md` calls
+the whole idea "option C"; the two implementation routes below are deliberately not lettered, so
+they cannot be confused with it.)
 
-**Read this before planning it — an earlier version of this section described the wrong
-mechanism.** It said four unmanaged passes would "decline by construction." That is not how enum
-output is assembled. Verified by reading `all.rs`, 2026-08-27:
+**Read this before planning it — an earlier version of this section described the wrong mechanism
+twice.** It first said four unmanaged passes would "decline by construction." It then offered a
+choice between two routes, one of which cannot work at all. Both corrections come from reading
+`all.rs`, `all.cs`, `definition.rs`, `definition.cs` and `body.rs`, 2026-08-27.
 
 **There are two emitters, not twelve.** `all.rs` renders `templates/common/types/enums/all.cs`
 from exactly two inputs — `enum_definition` from `definition.rs` and `enum_body` from `body.rs`.
 The other ten passes under `enums/` (`body_case_types`, `body_union_members`, `body_ctors`,
 `body_unmanaged`, `body_unmanaged_variant`, `body_to_unmanaged`, `body_as_unmanaged`,
 `body_exception_for_variant`, `body_tostring`, `body_from_call`) are **fragments that `body.rs`
-composes**. Making them decline does not change the declaration shape; it only empties the body.
+composes**, every one of them read with `map_or("", …)` or `unwrap_or(&[])`. Making them decline
+does not change the declaration shape; it only empties the body, and an empty fragment is already
+the ordinary case.
 
-**And a declining `body` deletes the type.** `all.rs` reads:
+**A declining emitter deletes the type — and that is true of both emitters, not just the body.**
+`all.rs` guards each one the same way:
 
 ```rust
+let Some(enum_definition) = enum_ty.get(*type_id) else { continue };
 let Some(body) = enum_body.get(*type_id) else { continue };
 ```
 
-So a `body.rs` that returns nothing for plain-enum types removes them from the generated output
-altogether rather than emitting an `enum`. Whatever else step three does, it must keep a rendered
-value for every type.
+Whatever step three does, it must leave a rendered value present for every type.
+Present-but-empty is fine; absent silently removes the type from the generated output.
 
-**So the work is one of two shapes**, and choosing between them is the first decision:
+**The generated type is two `partial` declarations, which rules out the obvious route.**
+`definition.cs` emits `{{ visibility }} partial {{ struct_or_class }} {{ name }}` and closes its
+own braces around `_variant`, `_hasValue` and the payload fields; `body.cs` emits a second
+`partial` declaration carrying the members; `all.cs` is nothing but `{{ enum_definition }}` and
+`{{ enum_body }}` concatenated, with no braces of its own. **C# `partial` is valid on class,
+struct, interface and record — not on `enum`.** So "branch both emitters, one producing the
+`enum` declaration and the other an empty body" is not a stylistic choice that lost: a C# enum
+cannot be split across two declarations, and making `body.rs` return nothing instead trips the
+guard above and deletes the type.
 
-- Route at `all.rs` — detect the plain-enum projection and render a *different* template beside
-  `all.cs`, with `definition.rs`/`body.rs` untouched for those types; or
-- Branch inside `definition.rs` and `body.rs` so they produce the `enum` declaration and an empty
-  body, with `all.cs` unchanged.
+**Two routes remain. Try the first.**
 
-Either way **`definition.rs`, `body.rs` and `all.cs` are where the code goes.** The fragment
-passes can keep computing whatever they like — unused, they are wasted work but harmless.
+- **`definition.rs` emits the whole `enum`, and `body.rs` yields an empty string.** Both guards
+  pass, `all.cs` renders the enum followed by blank lines, and neither `all.rs` nor `all.cs`
+  changes. Smallest edit, and the only one that leaves the shared renderer alone.
+- **Route at `all.rs`** — detect the plain-enum projection there and render a different template
+  beside `all.cs`, leaving `definition.rs` and `body.rs` untouched for those types. Reach for this
+  only if the first route hits something.
+
+**`definition.rs`'s existing `variants` context cannot supply the members, and this is the part
+most likely to be missed.** It is built with `filter_map` on `v.ty?` — payload-carrying variants
+only. For a unit-only enum that list is **empty**, so `Red = 0, Green = 1, Blue = 2` cannot come
+from it. The plain-enum branch needs its own list carrying `stem` and `tag` for *every* variant.
+
+**`variant.name` in `definition.cs` is not a breach of the stem rule.** `definition.rs` does
+`m.insert("name", v.stem.clone())` — the template key is `name`, the value is the stem. §3's rule
+is intact here; do not "fix" it.
 
 **Carriers can never reach plain-enum, and this is enforced, not incidental.**
 `fallback.rs::payload_variant` sets `can_carry_payload: true` **unconditionally**, with a doc
@@ -882,7 +906,8 @@ Open questions `79be256e` lists, plus one this work added:
 
 - What `Unmanaged` actually contains for a unit-only enum. Not read.
 - How Rust `#[repr]` maps to the C# underlying type. `definition.rs` already passes
-  `discriminant_type.cs_name()`, so the information exists; `EnumNegative` needs a signed type.
+  `data_enum.discriminant_type.cs_name()` into the template context, so the information is
+  threaded to the place that needs it; `EnumNegative` needs a signed type.
 - **Which marshalling mode the bindings run under.** `DisableRuntimeMarshalling` is **not**
   emitted — `templates/rust/header.cs` is a ten-line comment banner with no assembly attributes.
   Under the classic marshaller enums are layout-compatible but not universally blittable; enum
