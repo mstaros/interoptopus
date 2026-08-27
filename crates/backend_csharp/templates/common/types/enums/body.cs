@@ -1,7 +1,10 @@
+{%- if is_union_projected -%}
+[Union]
+{% endif -%}
 {%- if not is_managed_only -%}
 [NativeMarshalling(typeof(MarshallerMeta))]
 {% endif -%}
-{{ visibility }} partial {{ struct_or_class }} {{ name }}{% if is_result or is_disposable %} : {% if is_result %}IResult<{{ result_ok_name }}, {{ result_err_name }}>{% if is_disposable %}, {% endif %}{% endif %}{% if is_disposable %}IDisposable{% endif %}{% endif %}
+{{ visibility }} partial {{ struct_or_class }} {{ name }}{% if is_union_projected or is_result or is_disposable %} : {% if is_union_projected %}IUnion{% if is_result or is_disposable %}, {% endif %}{% endif %}{% if is_result %}IResult<{{ result_ok_name }}, {{ result_err_name }}>{% if is_disposable %}, {% endif %}{% endif %}{% if is_disposable %}IDisposable{% endif %}{% endif %}
 {
 {%- for item in case_types %}
     {{ item | indent }}

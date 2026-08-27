@@ -100,8 +100,9 @@ public partial class ResultCounterError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class ResultCounterError : IResult<IntPtr, Error>, IDisposable
+public partial class ResultCounterError : IUnion, IResult<IntPtr, Error>, IDisposable
 {
     public readonly record struct OkCase(IntPtr Value);
 

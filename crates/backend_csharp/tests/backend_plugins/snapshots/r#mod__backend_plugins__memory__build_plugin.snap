@@ -158,8 +158,9 @@ public partial class ResultFliparooDotnetException
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class ResultFliparooDotnetException : IResult<Fliparoo, DotnetException>, IDisposable
+public partial class ResultFliparooDotnetException : IUnion, IResult<Fliparoo, DotnetException>, IDisposable
 {
     public readonly record struct OkCase(Fliparoo Value);
 
@@ -421,8 +422,9 @@ public partial class ResultHeavyDotnetException
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class ResultHeavyDotnetException : IResult<Heavy, DotnetException>, IDisposable
+public partial class ResultHeavyDotnetException : IUnion, IResult<Heavy, DotnetException>, IDisposable
 {
     public readonly record struct OkCase(Heavy Value);
 

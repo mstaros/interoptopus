@@ -63,8 +63,9 @@ public partial struct ResultUintVoid
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial struct ResultUintVoid : IResult<uint, Unit>
+public partial struct ResultUintVoid : IUnion, IResult<uint, Unit>
 {
     public readonly record struct OkCase(uint Value);
 

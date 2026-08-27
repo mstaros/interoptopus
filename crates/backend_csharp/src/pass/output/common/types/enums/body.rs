@@ -127,6 +127,14 @@ impl Pass {
             context.insert("struct_or_class", struct_or_class);
             context.insert("is_disposable", &is_disposable);
             context.insert("is_managed_only", &is_managed_only);
+
+            // Item 3d. `[Union]` and `IUnion` follow the same eligibility rule as the case
+            // types and members they describe: an enum with no payload-capable variant gets
+            // neither. Deliberately *not* gated on `is_managed_only` — that guard governs the
+            // `Unmanaged` mirror and the marshaller, and a managed-only enum can still be a
+            // union. `DataEnum` in the reference project is exactly that case.
+            let is_union_projected = model::common::types::union_names::data_enum(type_kind).is_some_and(|de| de.is_union_projected());
+            context.insert("is_union_projected", &is_union_projected);
             context.insert("visibility", &visibility);
             context.insert("is_result", &result_interface.is_some());
             context.insert("result_ok_name", result_interface.as_ref().map_or("", |r| r.ok_name.as_str()));

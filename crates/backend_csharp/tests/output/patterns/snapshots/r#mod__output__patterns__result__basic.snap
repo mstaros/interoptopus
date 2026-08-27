@@ -82,8 +82,9 @@ public partial struct ResultUintError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial struct ResultUintError : IResult<uint, Error>
+public partial struct ResultUintError : IUnion, IResult<uint, Error>
 {
     public readonly record struct OkCase(uint Value);
 
@@ -310,8 +311,9 @@ public partial struct ResultVoidError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial struct ResultVoidError : IResult<Unit, Error>
+public partial struct ResultVoidError : IUnion, IResult<Unit, Error>
 {
     public readonly record struct OkCase();
 
