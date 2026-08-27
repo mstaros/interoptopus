@@ -43,7 +43,9 @@ table disagree, the table wins.
 | Templates the passes render | `templates/common/types/enums/*.cs`, `templates/rust/header.cs` |
 | Wire name resolution | `src/pass/output/common/wire/cs_names.rs` |
 | Pass registration, **both** pipelines | `src/pipeline/rust/library.rs`, `src/pipeline/dotnet/library.rs` |
-| Snapshot + plugin fixtures | `tests/{output, reference_project, reference_plugins, backend_plugins}/` |
+| **Test harness** — `prepare_plugin`, `define_plugin!`, `load_plugin!`, `dll_path_for` | `tests/mod.rs` (the file cited as `:108` and `:224` elsewhere in this document) |
+| Test suites | `tests/{output, model, common, reference_project, reference_plugins, backend_plugins}/` |
+| Other test entry points | `tests/{template.rs, extensions.rs, basic.rs}` |
 
 ### What this repository does
 
@@ -103,6 +105,7 @@ has no notion of *how a type is projected*, so reclassifying an enum does not st
 passes emitting the mirror. §9 describes the pass being built to close that.
 
 ---
+
 ## 1. State
 
 **Baseline — and the count is not as firm as this document previously claimed.**
@@ -445,6 +448,8 @@ Unit-only enums keep their struct, `Unmanaged` mirror and marshaller. Projecting
 `enum`s is option C in `79be256e`, still deferred: it needs an unverified blittability claim and
 closed enums, which did not ship in C# 15.
 
+---
+
 ## 6. Open decisions
 
 **Only one thing here is actually undecided.** The two entries that used to sit alongside it were
@@ -668,6 +673,9 @@ of two paragraphs on the first attempt.
 
 **The counting is unreliable and it is not you.** `cargo nextest run -p interoptopus_csharp`
 reported **77** locally and **78** under Guarded validation, same worktree, minutes apart. See §1.
+
+---
+
 ## 8. Where I was wrong
 
 Recorded because the same traps are still live.
@@ -748,6 +756,8 @@ recompiled nothing — `build_diagnostics` returns errors, not warnings, and a n
 neither. Use `-t:Rebuild` when measuring warnings. And an unscoped `CSharpEditor:list_git_commits`
 returns **CSharpMpc** history, not interoptopus, because that server's active root is elsewhere —
 pass a `project` inside the repo you mean.
+
+---
 
 ## 9. The projection pass — step one of three landed
 
