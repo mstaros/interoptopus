@@ -7,6 +7,99 @@ done, what is next, and the things that cost time to discover.
 
 ---
 
+## 0. Start here — what this is, and why
+
+You are almost certainly starting with no context. Read this section before anything else.
+`csharp-unions.md` opens mid-argument, and `CLAUDE.md`'s pass-directory tree is stale — it shows
+`output/` as flat when it is split into `rust/`, `dotnet/` and `common/`.
+
+### Before you touch anything
+
+**Toolchain: a .NET 11 preview SDK is required or nothing runs at all.** Verified on
+`11.0.100-preview.7.26381.103`. `rt/dynamic.rs` pins hostfxr at `11.0.0-preview.1`, deliberately a
+pre-release; leave it. `LangVersion=preview` is set in `Directory.Build.props`.
+
+**The front item is 4** — the empty guard on `ToUnmanaged`/`AsUnmanaged`. It has no gate. **It is
+specified in `csharp-unions.md` § Step 4, not here**; §5 of this document only names it. Read that
+section before starting: the validated switch, the definite-assignment rule and the tag provenance
+are all there.
+
+**Status is `csharp-unions.md` § Todo/Remaining, and only there.** Where this document and that
+table disagree, the table wins.
+
+**File map.** Everything below is under `crates/backend_csharp/`:
+
+| What | Where |
+|---|---|
+| C# `Variant` / `DataEnum` types | `src/lang/types/kind/enums.rs` |
+| Kind assignment | `src/pass/model/common/types/kind/{enum.rs, enum_variants.rs, patterns.rs}` |
+| Synthesised `Result`/`Option` carriers | `src/pass/model/common/types/fallback.rs` |
+| Name allocation, the single naming authority | `src/pass/model/common/types/union_names.rs` |
+| Derived facts about a type | `src/pass/model/common/types/info/{managed_conversion, struct_class, disposable, nullable, projection}.rs` |
+| Enum output passes | `src/pass/output/common/types/enums/*.rs` |
+| Templates the passes render | `templates/common/types/enums/*.cs`, `templates/rust/header.cs` |
+| Wire name resolution | `src/pass/output/common/wire/cs_names.rs` |
+| Pass registration, **both** pipelines | `src/pipeline/rust/library.rs`, `src/pipeline/dotnet/library.rs` |
+| Snapshot + plugin fixtures | `tests/{output, reference_project, reference_plugins, backend_plugins}/` |
+
+### What this repository does
+
+Interoptopus generates bindings so other languages can call a Rust library; this crate is the C#
+backend. It works in **two directions**:
+
+- **Forward interop.** A Rust library annotated with `#[ffi]` gets C# bindings generated. C# calls
+  Rust.
+- **Reverse interop.** `plugin!` declares a .NET *interface* in Rust; the backend emits the C#
+  side, and Rust loads the managed assembly at runtime through `hostfxr`. Rust calls C#.
+
+**The reverse-interop fixtures are the only thing that compiles the generated C#.** Everything
+else compares generated text against `insta` snapshots, which pass happily on C# that does not
+build. When 3d first landed, three snapshot tests passed and seventeen plugin fixtures failed with
+a hard compiler error. Never conclude "it works" from snapshots.
+
+### What this work is, and why
+
+Project a Rust `enum` that carries data as a **C# 15 union** rather than the struct-with-a-
+discriminant it used to be. `Result` and `Option` carriers go through the same machinery — they
+are `DataEnum`s wrapped in a `TypePattern`.
+
+Before, a Rust enum arrived as a struct with `IsCircle` / `AsCircle()` and a runtime throw.
+Nothing checked that a consumer handled every variant:
+
+```csharp
+if (s.IsCircle) return "circle";
+if (s.IsRect)   return "rect";
+throw new InvalidOperationException();   // silently reached when a variant is added
+```
+
+Add a variant, regenerate, and that code still compiles — it just starts throwing. With union
+projection the compiler checks it instead, and a `switch` needs no default arm; add a variant and
+every incomplete switch warns at compile time, at the call site. That is the point of the
+exercise.
+
+**Why hand-rolled `[Union]` and not the `union` keyword.** `public union Shape(Circle, Rect);`
+lowers to a struct with a single boxed `object?` field — no discriminant, no explicit layout, an
+allocation per value. Unusable here, because the generated type must match Rust's layout byte for
+byte: `[StructLayout(LayoutKind.Explicit)]`, `_variant` at `FieldOffset(0)`, a memcpy crossing.
+`[Union]` on a hand-written type is the same feature's other path; the specification says user
+code may store contents any way it likes, and its `IntOrBool` example is our exact shape.
+
+**Why not closed hierarchies.** They give the same exhaustiveness, but `closed` implies
+`abstract`, so every value becomes a heap reference — no layout, no memcpy, `default` is `null`.
+A reasonable fit for a **managed-only** enum that never crosses the boundary (item 5h), not for
+one that does.
+
+### What is emphatically not done
+
+**Unit-only enums are still emitted as structs.** `Color { Red, Green, Blue }` still produces
+~120 lines — struct, discriminant field, `Unmanaged` mirror, marshaller — exactly as before any of
+this work. **No plain C# `enum` is generated anywhere in this codebase.**
+
+That is option C in `Issues.md` `79be256e`, blocked on a design gap rather than effort: the model
+has no notion of *how a type is projected*, so reclassifying an enum does not stop four output
+passes emitting the mirror. §9 describes the pass being built to close that.
+
+---
 ## 1. State
 
 **Baseline — and the count is not as firm as this document previously claimed.**
@@ -228,11 +321,12 @@ independently, and both were defects.
 
 `7c8cb22e` remains open: enum variant names are still never sanitised at the model layer.
 
-### Once that is done
+### The conventions that outlive it
 
 **Templates must not re-sanitize.** `union_names` guarantees uniqueness over the exact strings
-it produces. Any casing or escaping applied downstream breaks that guarantee. `wire` currently
-breaks the same invariant from the other direction, by under-sanitizing off a different source.
+it produces. Any casing or escaping applied downstream breaks that guarantee. The `wire`
+under-sanitizing described above was an instance of the same invariant broken from the other
+direction, and it is fixed — but the rule is what matters, not the instance.
 
 **Names live on the variant, not in a side table.** Several output passes filter variants before
 emitting — `body` keeps only disposable ones, `body_as_unmanaged` only payload-carrying ones — so
@@ -340,16 +434,23 @@ closed enums, which did not ship in C# 15.
 
 ## 6. Open decisions
 
-**Exception split.** `InvalidOperationException` for a default struct union versus
-`InteropException` for a corrupt native tag. Reviewed both ways; current position is to split,
-because a default struct union is a legal C# state while `InteropException` in this codebase means
-"severe error, should never happen". Route it through `ExceptionForVariant()` so there is one
-helper. Not implemented.
+**Only one thing here is actually undecided.** The two entries that used to sit alongside it were
+settled and are recorded where the work is tracked, not here — listing a settled call as open
+invites someone to re-litigate it.
 
-**`ToString()` on empty** returns `<empty>`. Decided, not implemented.
+**Null reaching the marshaller for a class union — undecided.** Today it is a
+`NullReferenceException`; the alternatives are a deliberate `ArgumentNullException` or an
+`InteropException`. This is `Open items #1` in `csharp-unions.md`, it gates item 4b, and two of
+its three positions have never been reproduced. See §1.
 
-**Null reaching the marshaller for a class union** — today's `NullReferenceException`, or a
-deliberate `ArgumentNullException`/`InteropException`? Undecided.
+**Settled, listed here only so you do not go looking:**
+
+- **The exception split** — `InvalidOperationException` for a default struct union versus
+  `InteropException` for a corrupt native tag — is **decided**. `csharp-unions.md` § Step 4 says
+  so, and the Todo table's 4b row reads "decided in Step 4; implementation only." Route it through
+  `ExceptionForVariant()` so there is one helper. Not implemented.
+- **`ToString()` on empty returns `<empty>`.** Decided, not implemented, and **not tracked by any
+  row of the Remaining table** — so it is untracked rather than open. Add a row for it or drop it.
 
 ---
 
