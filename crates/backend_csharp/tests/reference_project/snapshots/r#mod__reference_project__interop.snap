@@ -74,8 +74,9 @@ public partial class OptionUtf8String
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class OptionUtf8String : IDisposable
+public partial class OptionUtf8String : IUnion, IDisposable
 {
     public readonly record struct SomeCase(Utf8String Value);
 
@@ -253,8 +254,9 @@ public partial struct OptionUint
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial struct OptionUint
+public partial struct OptionUint : IUnion
 {
     public readonly record struct SomeCase(uint Value);
 
@@ -420,8 +422,9 @@ public partial struct OptionVec
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial struct OptionVec
+public partial struct OptionVec : IUnion
 {
     public readonly record struct SomeCase(Vec Value);
 
@@ -586,8 +589,9 @@ public partial struct ResultVoidVoid
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial struct ResultVoidVoid : IResult<Unit, Unit>
+public partial struct ResultVoidVoid : IUnion, IResult<Unit, Unit>
 {
     public readonly record struct OkCase();
 
@@ -9218,7 +9222,8 @@ public partial class DataEnum
 }
 
 
-public partial class DataEnum
+[Union]
+public partial class DataEnum : IUnion
 {
     public readonly record struct SCase(string Value);
 
@@ -9325,8 +9330,9 @@ public partial class Layer3String
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class Layer3String : IDisposable
+public partial class Layer3String : IUnion, IDisposable
 {
     public readonly record struct ACase(Layer1String Value);
 
@@ -9774,8 +9780,9 @@ public partial struct EnumExplicitPayload
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial struct EnumExplicitPayload
+public partial struct EnumExplicitPayload : IUnion
 {
     public readonly record struct ACase();
 
@@ -9991,8 +9998,9 @@ public partial class OptionOptionResultOptionUtf8StringError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class OptionOptionResultOptionUtf8StringError : IDisposable
+public partial class OptionOptionResultOptionUtf8StringError : IUnion, IDisposable
 {
     public readonly record struct SomeCase(OptionResultOptionUtf8StringError Value);
 
@@ -10174,8 +10182,9 @@ public partial class OptionResultOptionUtf8StringError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class OptionResultOptionUtf8StringError : IDisposable
+public partial class OptionResultOptionUtf8StringError : IUnion, IDisposable
 {
     public readonly record struct SomeCase(ResultOptionUtf8StringError Value);
 
@@ -10353,8 +10362,9 @@ public partial struct OptionEnumPayload
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial struct OptionEnumPayload
+public partial struct OptionEnumPayload : IUnion
 {
     public readonly record struct SomeCase(EnumPayload Value);
 
@@ -10520,8 +10530,9 @@ public partial struct OptionInner
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial struct OptionInner
+public partial struct OptionInner : IUnion
 {
     public readonly record struct SomeCase(Inner Value);
 
@@ -10692,8 +10703,9 @@ public partial class ResultOptionUtf8StringError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class ResultOptionUtf8StringError : IResult<OptionUtf8String, Error>, IDisposable
+public partial class ResultOptionUtf8StringError : IUnion, IResult<OptionUtf8String, Error>, IDisposable
 {
     public readonly record struct OkCase(OptionUtf8String Value);
 
@@ -10937,8 +10949,9 @@ public partial class ResultServiceAsyncCancelError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class ResultServiceAsyncCancelError : IResult<IntPtr, Error>, IDisposable
+public partial class ResultServiceAsyncCancelError : IUnion, IResult<IntPtr, Error>, IDisposable
 {
     public readonly record struct OkCase(IntPtr Value);
 
@@ -11181,8 +11194,9 @@ public partial class ResultServiceAsyncCtorError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class ResultServiceAsyncCtorError : IResult<IntPtr, Error>, IDisposable
+public partial class ResultServiceAsyncCtorError : IUnion, IResult<IntPtr, Error>, IDisposable
 {
     public readonly record struct OkCase(IntPtr Value);
 
@@ -11425,8 +11439,9 @@ public partial class ResultServiceAsyncPanicError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class ResultServiceAsyncPanicError : IResult<IntPtr, Error>, IDisposable
+public partial class ResultServiceAsyncPanicError : IUnion, IResult<IntPtr, Error>, IDisposable
 {
     public readonly record struct OkCase(IntPtr Value);
 
@@ -11669,8 +11684,9 @@ public partial class ResultServiceAsyncResultError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class ResultServiceAsyncResultError : IResult<IntPtr, Error>, IDisposable
+public partial class ResultServiceAsyncResultError : IUnion, IResult<IntPtr, Error>, IDisposable
 {
     public readonly record struct OkCase(IntPtr Value);
 
@@ -11913,8 +11929,9 @@ public partial class ResultServiceAsyncSleepError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class ResultServiceAsyncSleepError : IResult<IntPtr, Error>, IDisposable
+public partial class ResultServiceAsyncSleepError : IUnion, IResult<IntPtr, Error>, IDisposable
 {
     public readonly record struct OkCase(IntPtr Value);
 
@@ -12157,8 +12174,9 @@ public partial class ResultServiceAsyncStructsError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class ResultServiceAsyncStructsError : IResult<IntPtr, Error>, IDisposable
+public partial class ResultServiceAsyncStructsError : IUnion, IResult<IntPtr, Error>, IDisposable
 {
     public readonly record struct OkCase(IntPtr Value);
 
@@ -12401,8 +12419,9 @@ public partial class ResultServiceAsyncVecStringError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class ResultServiceAsyncVecStringError : IResult<IntPtr, Error>, IDisposable
+public partial class ResultServiceAsyncVecStringError : IUnion, IResult<IntPtr, Error>, IDisposable
 {
     public readonly record struct OkCase(IntPtr Value);
 
@@ -12645,8 +12664,9 @@ public partial class ResultServiceAsyncWireError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class ResultServiceAsyncWireError : IResult<IntPtr, Error>, IDisposable
+public partial class ResultServiceAsyncWireError : IUnion, IResult<IntPtr, Error>, IDisposable
 {
     public readonly record struct OkCase(IntPtr Value);
 
@@ -12889,8 +12909,9 @@ public partial class ResultServiceCallbacksError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class ResultServiceCallbacksError : IResult<IntPtr, Error>, IDisposable
+public partial class ResultServiceCallbacksError : IUnion, IResult<IntPtr, Error>, IDisposable
 {
     public readonly record struct OkCase(IntPtr Value);
 
@@ -13133,8 +13154,9 @@ public partial class ResultServiceDependentError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class ResultServiceDependentError : IResult<IntPtr, Error>, IDisposable
+public partial class ResultServiceDependentError : IUnion, IResult<IntPtr, Error>, IDisposable
 {
     public readonly record struct OkCase(IntPtr Value);
 
@@ -13377,8 +13399,9 @@ public partial class ResultServiceIgnoringMethodsError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class ResultServiceIgnoringMethodsError : IResult<IntPtr, Error>, IDisposable
+public partial class ResultServiceIgnoringMethodsError : IUnion, IResult<IntPtr, Error>, IDisposable
 {
     public readonly record struct OkCase(IntPtr Value);
 
@@ -13621,8 +13644,9 @@ public partial class ResultServiceMainError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class ResultServiceMainError : IResult<IntPtr, Error>, IDisposable
+public partial class ResultServiceMainError : IUnion, IResult<IntPtr, Error>, IDisposable
 {
     public readonly record struct OkCase(IntPtr Value);
 
@@ -13865,8 +13889,9 @@ public partial class ResultServiceMultipleCtorsError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class ResultServiceMultipleCtorsError : IResult<IntPtr, Error>, IDisposable
+public partial class ResultServiceMultipleCtorsError : IUnion, IResult<IntPtr, Error>, IDisposable
 {
     public readonly record struct OkCase(IntPtr Value);
 
@@ -14109,8 +14134,9 @@ public partial class ResultServiceResultError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class ResultServiceResultError : IResult<IntPtr, Error>, IDisposable
+public partial class ResultServiceResultError : IUnion, IResult<IntPtr, Error>, IDisposable
 {
     public readonly record struct OkCase(IntPtr Value);
 
@@ -14353,8 +14379,9 @@ public partial class ResultServiceStringsError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class ResultServiceStringsError : IResult<IntPtr, Error>, IDisposable
+public partial class ResultServiceStringsError : IUnion, IResult<IntPtr, Error>, IDisposable
 {
     public readonly record struct OkCase(IntPtr Value);
 
@@ -14597,8 +14624,9 @@ public partial class ResultServiceVariousSlicesError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class ResultServiceVariousSlicesError : IResult<IntPtr, Error>, IDisposable
+public partial class ResultServiceVariousSlicesError : IUnion, IResult<IntPtr, Error>, IDisposable
 {
     public readonly record struct OkCase(IntPtr Value);
 
@@ -14841,8 +14869,9 @@ public partial class ResultUseStringError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class ResultUseStringError : IResult<UseString, Error>, IDisposable
+public partial class ResultUseStringError : IUnion, IResult<UseString, Error>, IDisposable
 {
     public readonly record struct OkCase(UseString Value);
 
@@ -15086,8 +15115,9 @@ public partial class ResultUtf8StringError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class ResultUtf8StringError : IResult<Utf8String, Error>, IDisposable
+public partial class ResultUtf8StringError : IUnion, IResult<Utf8String, Error>, IDisposable
 {
     public readonly record struct OkCase(Utf8String Value);
 
@@ -15331,8 +15361,9 @@ public partial class ResultVecUtf8StringError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class ResultVecUtf8StringError : IResult<VecUtf8String, Error>, IDisposable
+public partial class ResultVecUtf8StringError : IUnion, IResult<VecUtf8String, Error>, IDisposable
 {
     public readonly record struct OkCase(VecUtf8String Value);
 
@@ -15576,8 +15607,9 @@ public partial class ResultWireOfHashMapStringStringError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class ResultWireOfHashMapStringStringError : IResult<WireOfHashMapStringString, Error>, IDisposable
+public partial class ResultWireOfHashMapStringStringError : IUnion, IResult<WireOfHashMapStringString, Error>, IDisposable
 {
     public readonly record struct OkCase(WireOfHashMapStringString Value);
 
@@ -15817,8 +15849,9 @@ public partial struct ResultNestedArrayError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial struct ResultNestedArrayError : IResult<NestedArray, Error>
+public partial struct ResultNestedArrayError : IUnion, IResult<NestedArray, Error>
 {
     public readonly record struct OkCase(NestedArray Value);
 
@@ -16046,8 +16079,9 @@ public partial struct ResultOptionEnumPayloadError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial struct ResultOptionEnumPayloadError : IResult<OptionEnumPayload, Error>
+public partial struct ResultOptionEnumPayloadError : IUnion, IResult<OptionEnumPayload, Error>
 {
     public readonly record struct OkCase(OptionEnumPayload Value);
 
@@ -16275,8 +16309,9 @@ public partial struct ResultUintError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial struct ResultUintError : IResult<uint, Error>
+public partial struct ResultUintError : IUnion, IResult<uint, Error>
 {
     public readonly record struct OkCase(uint Value);
 
@@ -16504,8 +16539,9 @@ public partial struct ResultUlongError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial struct ResultUlongError : IResult<ulong, Error>
+public partial struct ResultUlongError : IUnion, IResult<ulong, Error>
 {
     public readonly record struct OkCase(ulong Value);
 
@@ -16732,8 +16768,9 @@ public partial struct ResultVoidError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial struct ResultVoidError : IResult<Unit, Error>
+public partial struct ResultVoidError : IUnion, IResult<Unit, Error>
 {
     public readonly record struct OkCase();
 
@@ -17072,8 +17109,9 @@ public partial struct EnumNum
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial struct EnumNum
+public partial struct EnumNum : IUnion
 {
     public readonly record struct ACase(nuint Value);
 
@@ -17269,8 +17307,9 @@ public partial struct EnumPayload
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial struct EnumPayload
+public partial struct EnumPayload : IUnion
 {
     public readonly record struct ACase();
 

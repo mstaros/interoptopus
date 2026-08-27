@@ -158,8 +158,9 @@ public partial class ResultNestedADotnetException
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class ResultNestedADotnetException : IResult<NestedA, DotnetException>, IDisposable
+public partial class ResultNestedADotnetException : IUnion, IResult<NestedA, DotnetException>, IDisposable
 {
     public readonly record struct OkCase(NestedA Value);
 
@@ -417,8 +418,9 @@ public partial struct ResultUintDotnetException
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial struct ResultUintDotnetException : IResult<uint, DotnetException>
+public partial struct ResultUintDotnetException : IUnion, IResult<uint, DotnetException>
 {
     public readonly record struct OkCase(uint Value);
 

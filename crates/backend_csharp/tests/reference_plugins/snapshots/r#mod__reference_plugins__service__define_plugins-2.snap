@@ -934,8 +934,9 @@ public partial class ResultWireOfHashMapStringStringError
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial class ResultWireOfHashMapStringStringError : IResult<WireOfHashMapStringString, Error>, IDisposable
+public partial class ResultWireOfHashMapStringStringError : IUnion, IResult<WireOfHashMapStringString, Error>, IDisposable
 {
     public readonly record struct OkCase(WireOfHashMapStringString Value);
 

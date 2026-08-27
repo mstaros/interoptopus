@@ -814,8 +814,9 @@ public partial struct EnumPayload
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial struct EnumPayload
+public partial struct EnumPayload : IUnion
 {
     public readonly record struct ACase();
 

@@ -930,8 +930,9 @@ public partial struct ResultVec3f32Error
 }
 
 
+[Union]
 [NativeMarshalling(typeof(MarshallerMeta))]
-public partial struct ResultVec3f32Error : IResult<Vec3f32, Error>
+public partial struct ResultVec3f32Error : IUnion, IResult<Vec3f32, Error>
 {
     public readonly record struct OkCase(Vec3f32 Value);
 
