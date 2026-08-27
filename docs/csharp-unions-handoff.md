@@ -904,7 +904,15 @@ A carrier reaching plain-enum would break `IResult` and `body_from_call`; it can
 
 Open questions `79be256e` lists, plus one this work added:
 
-- What `Unmanaged` actually contains for a unit-only enum. Not read.
+- What `Unmanaged` contains for a unit-only enum — **read, 2026-08-27, and it is a green light on
+  layout.** `body_unmanaged.rs` builds its `variants` list with `filter_map` on `v.ty?`, so for a
+  unit-only enum the list is empty and `body_unmanaged.cs` renders nothing but
+  `[FieldOffset(0)] internal {discriminant} _variant;` plus a `ToManaged` that copies the tag and
+  returns. `writes_has_value` is `is_struct && is_union_projected`, so it is false and no
+  `_hasValue` write appears either. **The mirror is layout-identical to the discriminant primitive
+  itself**, which means replacing struct, mirror and marshaller with a plain C# `enum` of the same
+  underlying type changes nothing the native side can observe. What remains unanswered is the
+  marshalling-mode bullet below, which is about blittability, not layout.
 - How Rust `#[repr]` maps to the C# underlying type. `definition.rs` already passes
   `data_enum.discriminant_type.cs_name()` into the template context, so the information is
   threaded to the place that needs it; `EnumNegative` needs a signed type.
