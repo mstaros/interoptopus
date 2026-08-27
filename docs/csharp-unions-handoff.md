@@ -9,20 +9,22 @@ done, what is next, and the things that cost time to discover.
 
 ## 1. State
 
-**Baseline.** `cargo nextest run -p interoptopus_csharp` — **77 passed, 2 skipped, 0 failed**,
-5 binaries, measured 2026-08-26 **in a transaction worktree, not on `master`** — re-measure before
-treating it as master's number. `master` was `d477f843` when this was written and has since moved.
-Whole workspace was **174 passed, 3 skipped** at `318256c7`, not re-measured since; it is now
-higher by the 13 tests this session added to `interoptopus_csharp`.
+**Baseline — and the count is not as firm as this document previously claimed.**
+`cargo nextest run -p interoptopus_csharp` reported **77 passed, 2 skipped** in local runs on
+2026-08-26 and 2026-08-27, but Guarded's validation runs of the *same worktree* reported **78
+tests run**. Three observations, two different totals, no explanation found. Treat 77 as "about
+seventy-seven, depending on how it is invoked" rather than as a number to assert. `master` is
+`da741fa9`. Whole workspace was **174 passed, 3 skipped** at `318256c7`, not re-measured since.
 
-**Record the command, the scope and the commit with the number.** Six counts exist in this repo's
-history and most of them said none of the three. **Resolved 2026-08-26:**
+**Record the command, the scope and the commit with the number.** Seven counts exist in this
+repo's history and most of them said none of the three:
 
 | Count | Command, scope, commit |
 |---|---|
 | 174 passed, 3 skipped, 38 binaries | `cargo nextest run`, whole workspace, at `318256c7` |
 | 64 passed, 2 skipped, 5 binaries | `cargo nextest run -p interoptopus_csharp`, at `50e0788e` |
-| 77 passed, 2 skipped, 5 binaries | same command and scope, in a transaction worktree 2026-08-26; base commit not recorded |
+| 77 passed, 2 skipped, 5 binaries | same command and scope, local runs 2026-08-26/27 |
+| **78 tests run**, 2 skipped | **same command, same worktree, under Guarded validation** — unexplained |
 | 33 (30 passed, 1 failed, 2 ignored) | `cargo test -p interoptopus_csharp`, per `ccb105a2` |
 | 12 unit + 31 integration + doctests | an earlier figure here; command, scope and commit all unrecorded |
 | 3 of **62** failed, fresh worktree | `prepare_plugin`'s doc comment, `tests/mod.rs:108`; command unrecorded, and 62 matches no other count here |
@@ -31,8 +33,9 @@ history and most of them said none of the three. **Resolved 2026-08-26:**
 docs-only after `318256c7`, so the 64 is also `318256c7`'s package count — the package and
 workspace figures were never in conflict, they answered different questions. `cargo test` also
 counts nine doctests nextest does not run. **A bare pass count is not a baseline** — the command,
-the scope and the commit are what make it one. The 62 is still unscoped; fixing it means editing
-`tests/mod.rs`, which a docs change cannot reach.
+the scope and the commit are what make it one, and as the 77/78 pair shows, even those three are
+not always sufficient. The 62 is still unscoped; fixing it means editing `tests/mod.rs`, which a
+docs change cannot reach.
 
 ### Plan state
 
@@ -40,13 +43,17 @@ the scope and the commit are what make it one. The 62 is still unscoped; fixing 
 section names the front and deliberately does not restate it** — the two drifting apart is what
 cost time this morning.
 
-Open front: **3d** (`[Union]` + `IUnion`, gate 3c ✔) and **3e** (implicit conversion, gate 3b ✔).
-**4** (`ToUnmanaged`/`AsUnmanaged` empty guard) has no gate and can go in parallel. Also open and
-**not covered anywhere below**: 4c, 4d's serializer half, 5c–5i, and 6. 4c is a soundness
-obligation rather than a preference, so check it against what 3c already emits before sequencing
-it behind the attribute work.
+**Step 3 is complete except for one unverified claim.** Rust enums now project as C# 15 unions:
+`[Union]`, `IUnion`, nested case types, public single-parameter case constructors, `Value`,
+`HasValue`, `TryGetValue` — with the explicit layout and the memcpy crossing intact.
 
-Landing log for this session — a record of what shipped, not a second status table:
+Open front: **4** (`ToUnmanaged`/`AsUnmanaged` empty guard), no gate, then **4a**, whose case
+constructors now exist. **3e is satisfied but unverified**: nothing is left to emit, but no
+fixture compiles an implicit conversion, so the synthesis claim is untested. Also open and **not
+covered anywhere below**: 4c, 4d's serializer half, 5c–5i, and 6. 4c is a soundness obligation
+rather than a preference.
+
+Landing log — a record of what shipped, not a second status table:
 
 | Item | Commit | What landed |
 |---|---|---|
@@ -55,28 +62,53 @@ Landing log for this session — a record of what shipped, not a second status t
 | 3a | `f630e225` | Private parameterless ctor on class-backed enums; changelog entry |
 | 3c | `bdd13b53` | `HasValue`/`Value`/`TryGetValue`, `_hasValue` writes, `can_carry_payload` |
 | — | `d477f843` | `WarningsAsErrors=CS0169;CS0414` gate in `Directory.Build.props` |
+| — | `98f7ffd7` | Enum gate consolidated onto `union_names::data_enum` at ten binding sites; `DataEnum::is_union_projected()` replaces five inline predicates |
+| — | `aa2d550d` | **Case constructors** — the union creation members. Unnumbered in the plan, and the actual gate for 3d |
+| 3d | `da741fa9` | `[Union]` and `IUnion` on union-projected enums |
 
 **`Issues.md` as of `d477f843`.** Open — `2a6da76a`, `4e9a17c3`, `7c8cb22e`, `79be256e`,
 `b4e07f12`, `5d1ae4c7`. Closed — `09b82d44`, `ccb105a2`, `1383b84b`, `31248473`, `c33b9cf5`,
 `e235bc7d`, `8f4c1e2a`.
 
+**Two corrections from 2026-08-27, both from things that were wrong in this document.** 3d's gate
+was recorded as 3c; `[Union]` on a type with no public single-parameter constructor is `CS9385`,
+so the real gate was the case constructors, and no item covered them. And the 3d row deferred
+`IUnion` on the grounds that its namespace is unspecified — that read the proposal's open
+questions as live, when the feature has shipped and `IUnion` resolves from the framework.
+
 ### The three things worth knowing before you start
 
-**1. `5d1ae4c7` is now an *eleven*-site gate, and I made it worse.** Every enum output pass opens
-with the same inline `match type_kind { DataEnum(e) => e, Result(_, _, e) => e, Option(_, e) => e,
-_ => continue }`. `union_names::data_enum()` already implements exactly this and nothing calls it.
-I added two more passes this session (`body_case_types`, `body_union_members`), each with its own
-copy. If you add a twelfth, consider adopting the helper first — it is a mechanical change and the
-issue has the site list.
+**1. `5d1ae4c7` is consolidated, and the count in the issue is wrong.** Every enum output pass
+used to open with the same inline `match type_kind { DataEnum(e) => e, Result(_, _, e) => e,
+Option(_, e) => e, _ => continue }`. `98f7ffd7` replaced that at **ten binding sites** with
+`model::common::types::union_names::data_enum(type_kind)`, and replaced five inline copies of
+`variants.iter().any(|v| v.can_carry_payload)` with `DataEnum::is_union_projected()`. Two things
+the issue still gets wrong: it says **ten** sites when the true figure was **twelve** at the time
+(ten binding plus `all.rs` and `body.rs` matching for effect), and closer to **fourteen** counting
+the two further re-derivations inside `body.rs` itself — `has_wire_only_payload` and
+`disposable_variants`, the latter returning `&[Variant]` and so untouched by the consolidation.
+It also says nothing calls the helper; `output/common/wire/cs_names.rs` already did, with two
+tests asserting the convention. **`is_managed_only` is still computed inline in `body.rs` at
+render time and shared with nobody**, which is why the four unmanaged passes cannot consult it.
 
-**2. Item 1 still gates 4b and is still unmeasured.** Positions (a) `InvalidOperationException`
-and (c) `?? default` were never reproduced; only (b) was, and it showed the NRE fires *before* any
-marshaller, at `body_as_unmanaged.rs:47` in the enclosing composite. `b4e07f12` records the
-present-tense defect. Reproduce (a) and (c) before choosing, and do not close `b4e07f12` first.
+**2. `Open items #1` still gates 4b and is still unmeasured.** Positions (a)
+`InvalidOperationException` and (c) `?? default` were never reproduced; only (b) was, and it
+showed the NRE fires *before* any marshaller, at `body_as_unmanaged.rs:47` in the enclosing
+composite. `b4e07f12` records the present-tense defect. Reproduce (a) and (c) before choosing, and
+do not close `b4e07f12` first.
 
 **3. `ResultVoidVoid` regained union machinery in 3c, deliberately.** If you see it carrying four
 empty case types and wonder whether that is bloat: it is the eligibility predicate asking *can a
 variant carry a payload* rather than *does one*. See §8.
+
+**4. Do not run the suite before committing, and read the plugin failures rather than the
+snapshots.** Both failed validations on 2026-08-26 and one on 2026-08-27 were `PermissionDenied`
+on `prepare_plugin` — plugin DLLs still locked by a concurrent local test run. One was a linker
+`LNK1104` from retrying a call whose predecessor was still running. Use `diagnostics` for a fast
+compile check and let validation be the only thing holding DLLs. And note which layer catches
+what: when 3d first landed without case constructors, **three snapshot tests passed and seventeen
+plugin fixtures failed with `CS9385`.** Snapshots prove text; only the plugin build proves the
+generated C# compiles.
 
 ### Snapshot workflow
 
@@ -207,35 +239,38 @@ not converge.
 
 ---
 
-## 5. Next: 3d and 3e, then 4
+## 5. Next: 4, then 4a
 
-Step 3's *representation* work is done. What remains in Step 3 is the attribute layer (3d) and the
-implicit conversion (3e); then Step 4's marshalling.
+**3d and 3e are no longer next.** `[Union]` and `IUnion` landed in `da741fa9`; the case
+constructors that 3e's claim rests on landed in `aa2d550d`. What remains of 3e is a fixture that
+compiles an implicit conversion — there is nothing left to emit. **The front is Step 4's
+marshalling**: item 4 (`ToUnmanaged`/`AsUnmanaged` empty guard, no gate), then 4a.
 
-**3d — `[Union]` + `IUnion`.** The generated type already declares an interface list in some
-cases (`IResult<Unit, Unit>`), so this joins rather than replaces. Verified by compilation on
-preview 7: the `[Union]` declaration shape, constructors and `Value` compile under C# 13 *and*
-preview; the implicit conversion (`Shape s = new Shape.CircleCase(1.0)`) is **preview only**,
-failing with CS8652 "unions" on stable. Union pattern matching with no default arm is preview only
-and produces no CS8509, so exhaustiveness works.
+**4a is now unblocked in a way it was not before.** It constructs via case constructors, and those
+exist as of `aa2d550d`. It also deletes the stopgap 3c left behind — `_managed._hasValue = true;`
+immediately after the `_variant` copy in `ToManaged` — because 4a's validated switch establishes
+the flag implicitly. Delete the stopgap rather than keeping both.
+
+The rest of this section is the record of how 3d and 3e were decided, kept because the reasoning
+is load-bearing for Step 4, not because the work is pending.
+
+**3d — `[Union]` and `IUnion`, landed `da741fa9`.** Both are gated on `is_union_projected` and
+placed *outside* the `is_managed_only` guard: that guard governs the `Unmanaged` mirror and the
+marshaller, and a managed-only enum can still be a union — `DataEnum` in the reference project is
+exactly that case, with `[Union]` and no `[NativeMarshalling]`. `IUnion` joins the existing
+interface list ahead of `IResult` and `IDisposable`.
+
+**The first attempt at 3d was rolled back, and the reason matters.** `[Union]` on a type with no
+*union creation member* is `CS9385`, and none existed: 3b emitted the case types, 3c emitted
+`Value`/`HasValue`/`TryGetValue`, and nothing emitted the constructors. The plan recorded 3d's
+gate as 3c, which was wrong, and had no item for the constructors at all. Seventeen plugin
+fixtures caught it; all three snapshot tests passed, because snapshots prove text and only the
+plugin build proves compilation.
 
 **Preview-only syntax is settled, not an open question.** `LangVersion=preview` is set in
 `Directory.Build.props` and landed with R in `9d664613`, and a .NET 11 preview SDK is already
-required to run the tests at all. The CS8652 note above is therefore a fact about *consumers*
-compiling on stable, not a decision this repository still has to take — which is why it is not in
-§6.
-
-**3e — implicit conversion.** Gate 3b, satisfied since `4a19b0e3`, so this is workable now,
-alongside 3d rather than after it. It shrank to a claim rather than an emission: the compiler
-synthesises the conversion from the generated constructor, so 3e reduces to "constructors are
-public and single-parameter" and nothing is emitted for it.
-
-**4 — empty guard on `ToUnmanaged`/`AsUnmanaged`.** No gate. Can start now.
-
-**4a — `ToManaged` via case constructors.** This replaces the whole method body. Note that 3c left
-a deliberate stopgap there: `_managed._hasValue = true;` immediately after the `_variant` copy.
-4a's validated switch establishes the flag implicitly, so delete the stopgap rather than keeping
-both.
+required to run the tests at all. The CS8652 note is therefore a fact about *consumers* compiling
+on stable, not a decision this repository still has to take — which is why it is not in §6.
 
 ### What 3c actually emits, so you can read the output
 
