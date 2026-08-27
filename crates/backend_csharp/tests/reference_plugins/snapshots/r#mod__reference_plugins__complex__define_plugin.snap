@@ -881,6 +881,7 @@ public partial struct EnumPayload : IUnion
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
+        if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default EnumPayload: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 1) _unmanaged._B._B = _B.ToUnmanaged();
@@ -894,6 +895,7 @@ public partial struct EnumPayload : IUnion
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default EnumPayload: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 1) _unmanaged._B._B = _B.AsUnmanaged();

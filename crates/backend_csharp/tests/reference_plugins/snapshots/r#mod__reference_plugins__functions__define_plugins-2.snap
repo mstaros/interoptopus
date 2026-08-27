@@ -546,6 +546,7 @@ public partial struct ResultVoidError : IUnion, IResult<Unit, Error>
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
+        if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default ResultVoidError: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 1) _unmanaged._Err._Err = _Err;
@@ -558,6 +559,7 @@ public partial struct ResultVoidError : IUnion, IResult<Unit, Error>
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default ResultVoidError: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 1) _unmanaged._Err._Err = _Err;
