@@ -1,0 +1,3 @@
+# cargo nextest run -p interoptopus_csharp
+# at <commit>, <date>, <machine or worktree>
+# 77 passed, 2 skipped, 0 failed, 5 binaries
