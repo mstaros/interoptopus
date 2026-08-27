@@ -920,7 +920,21 @@ Open questions `79be256e` lists, plus one this work added:
   emitted — `templates/rust/header.cs` is a ten-line comment banner with no assembly attributes.
   Under the classic marshaller enums are layout-compatible but not universally blittable; enum
   arrays and pinning are the failing cases. So the deciding question is whether a unit-only enum
-  can reach a slice element or a pinned array.
+  can reach a slice element or a pinned array. **Measured by regex over the reference project,
+  2026-08-27: it cannot, today.** Every `Slice`/`SliceMut` element type in the corpus is `u8`,
+  `u32`, `i32`, `ffi::Bool`, `Vec3f32`, `CharArray`, `UseString`, `ffi::String`, `UseCStrPtr`,
+  `UseSliceByteInStruct` or `common::Vec`; every fixed array is `[u8; 16]`, `[u16; 5]` or
+  `[T; 16]`. The four unit-only enums — `EnumDocumented`, `EnumRenamedXYZ`, `EnumNegative`,
+  `EnumExplicitThenImplicit` — appear only by value in signatures and as plain struct fields.
+  **The nearest exercised case is `NestedArray`**, which carries `field_enum: EnumRenamedXYZ` and
+  is passed as `&mut NestedArray` by `nested_array_2`: a by-ref struct containing an enum, which
+  is the pinning question in mild form and is the first thing that would break. So option C
+  cannot break anything the suite currently measures — but **that is a fact about the corpus, not
+  a guarantee**, since a consumer can write `ffi::Slice<Color>` and `Slice<T>` only requires
+  `T: TypeInfo`. **Do not settle the blittability claim from memory** — it is exactly the kind of
+  specification-derived claim that was wrong twice already (3d's gate, `IUnion`'s namespace). Add
+  a reference-project function taking a slice of a unit-only enum and let the plugin build answer
+  it; that is cheap, and the plugin build is the only layer that proves the generated C# compiles.
 - Exhaustiveness is genuinely lost. A `switch` over a plain C# `enum` is never exhaustive, because
   `(Color)99` compiles. Closed enums would have fixed this and **did not ship in C# 15**. A Roslyn
   analyzer is the interim substitute for the compile-time half; there is no runtime half to lose,
