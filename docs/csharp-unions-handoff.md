@@ -923,29 +923,45 @@ for `None`, `Panic` and `Null`. Every synthesised `Result`/`Option` carrier gets
 `payload_variant` for its `Ok`/`Some` position, so `is_union_projected` is always true for them.
 A carrier reaching plain-enum would break `IResult` and `body_from_call`; it cannot.
 
-**A canary now sits ahead of this work — `pattern_ffi_slice_of_unit_enum`, landed in
-`4aad161` — and landing it already answered two things.** First, **slices of enums work today**:
-all fourteen plugin tests passed, so the generated C# for `SliceEnumDocumented` compiles and
-runs. Second, and more useful, **it took the non-blittable slice path**. The emitted type is a
-`class`, not a blittable view; its own doc comment says elements are marshalled from their
-unmanaged representation on each access, and it allocates a native copy through
-`Marshal.AllocHGlobal`. The indexer reads `Marshal.PtrToStructure<EnumDocumented.Unmanaged>` and
-calls `.ToManaged()`; `From()` calls `managed[i].AsUnmanaged()` and `Marshal.StructureToPtr`.
-There are two slice paths — `output::patterns::slice::basic` and `::non_blittable` — and an enum
-element takes the second.
+**A canary now sits ahead of this work — `pattern_ffi_slice_of_unit_enum`, landed in `4aad161`.**
+Landing it established one thing outright: **slices of enums work today.** All fourteen plugin
+tests passed, so the generated C# for `SliceEnumDocumented` compiles and runs. The emitted type
+is a `class` holding `IntPtr _data`, allocating a native copy through `Marshal.AllocHGlobal`;
+its indexer reads `Marshal.PtrToStructure<EnumDocumented.Unmanaged>` and calls `.ToManaged()`,
+and `From()` calls `managed[i].AsUnmanaged()` and `Marshal.StructureToPtr`. Copy per element,
+no pinning.
 
-**That reframes the marshalling-mode question and adds a requirement nobody had recorded.**
-Interoptopus never asks the classic marshaller to blit an enum array; it copies element by
-element through generated members. So the pinning hazard may be moot *as generated* — but the
-members it copies through are `EnumDocumented.Unmanaged`, `AsUnmanaged()` and `ToManaged()`, and
-**none of them will exist once the type is a plain C# `enum`**. Step three must therefore teach
-the slice emitter the plain-enum shape as well, or it breaks every slice of a unit-only enum
-with a compile error. That is a far more concrete failure than "blittability", it is now known
-in advance rather than at the moment of breakage, and it is what the canary will catch.
+**Read `slices.rs` before reasoning about this — the first version of these paragraphs got the
+mechanism backwards.** The split is not blittability and the emitter never tests for it. It is
+the element's **`ManagedConversion`**: `AsIs` renders `rust/pattern/slice/fast.cs`, everything
+else renders `rust/pattern/slice/marshalling.cs`. The module comment says so in as many words —
+only `AsIs` elements can be projected directly over native memory. An enum has an `Unmanaged`
+mirror, so its conversion is not `AsIs`, and that is the whole reason it landed on
+`marshalling.cs`. Nothing about the CLR's notion of blittable enters into it.
 
-One unrelated defect visible in that output, pre-existing and not caused by the canary: the
-non-blittable slice emitter writes `}public partial class Slice…` with no newline between the
-closing brace and the following `partial`. It compiles; it is merely ugly.
+**And the enum is not on a special path.** `SliceVec3f32` is emitted identically — same `class`,
+same `[NativeMarshalling]`, same `AllocHGlobal` and per-element copy — even though `Vec3f32` is
+a plainly blittable struct. `AsIs` is much narrower than blittable. The other side of the split
+is visible in `SliceByte`, the `Slice<u8>` binding, which takes `fast.cs` and holds a
+**`GCHandle`**: it pins the managed array rather than copying it.
+
+**That inverts the conclusion, and makes the canary more valuable than "it will lose members".**
+Once a unit-only enum is emitted as a plain C# `enum` it has no `Unmanaged` mirror, so its
+conversion should become `AsIs` — and the slice flips from `marshalling.cs` to `fast.cs`, onto
+the `GCHandle` **pinning** path. Pinning an enum array under the classic marshaller is precisely
+the hazard §9 has been circling. So the blittability question is **not** moot; step three is the
+moment it becomes live, by a route the earlier text had exactly reversed.
+
+Either way the canary fires, and the two outcomes are worth telling apart when it does. If the
+conversion becomes `AsIs`, the slice silently changes strategy to pinning and any failure is at
+**runtime**. If it does not, the slice stays on `marshalling.cs` and needs
+`EnumDocumented.Unmanaged`, `AsUnmanaged()` and `ToManaged()`, none of which will exist — a
+**compile** error. Check which happened before concluding anything.
+
+One unrelated defect visible in that output, pre-existing and not caused by the canary:
+`marshalling.cs` writes `}public partial class Slice…` with no newline between the closing brace
+and the following `partial`. It affects every marshalling-path slice, not just the new one. It
+compiles; it is merely ugly.
 
 Open questions `79be256e` lists, plus one this work added:
 
