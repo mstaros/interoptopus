@@ -132,22 +132,20 @@ docs change cannot reach.
 
 ### Plan state
 
-**Status lives in `docs/csharp-unions.md` § Todo/Remaining. That table is the single source. This
-section names the front and deliberately does not restate it** — the two drifting apart is what
-cost time on 2026-08-26.
+**Status lives in `docs/csharp-unions.md` § Todo/Remaining. That table is the single source, and
+this section does not restate it.** An earlier version of this paragraph said exactly that and
+then listed the open items anyway; the list drifted within a day, omitting 4b and 5. Go to the
+table.
 
 **Step 3 is complete except for one unverified claim.** Rust enums now project as C# 15 unions:
 `[Union]`, `IUnion`, nested case types, public single-parameter case constructors, `Value`,
-`HasValue`, `TryGetValue` — with the explicit layout and the memcpy crossing intact.
+`HasValue`, `TryGetValue` — with the explicit layout and the memcpy crossing intact. **3e is
+satisfied but unverified**: nothing is left to emit, but no fixture compiles an implicit
+conversion, so the synthesis claim is untested.
 
-Open front: **4** (`ToUnmanaged`/`AsUnmanaged` empty guard), no gate, then **4a**, whose case
-constructors now exist. **3e is satisfied but unverified**: nothing is left to emit, but no
-fixture compiles an implicit conversion, so the synthesis claim is untested. Also open and **not
-covered anywhere below**: 4c, 4d's serializer half, 5c–5i, and 6.
-
-**Running in parallel: the projection pass, step one of three landed.** See §9. That is the
-largest in-flight item and the precondition for option C — projecting unit-only enums as plain C#
-`enum`s, which is still **not done**; every `#[ffi]` enum is still emitted as a struct.
+**The front is item 4**, and §0 says where it is specified. **Running in parallel: the projection
+pass, step one of three landed** — see §9. That is the largest in-flight item and the precondition
+for option C, projecting unit-only enums as plain C# `enum`s, which is still **not done**.
 
 Landing log — a record of what shipped, not a second status table:
 
@@ -158,15 +156,11 @@ Landing log — a record of what shipped, not a second status table:
 | 3a | `f630e225` | Private parameterless ctor on class-backed enums; changelog entry |
 | 3c | `bdd13b53` | `HasValue`/`Value`/`TryGetValue`, `_hasValue` writes, `can_carry_payload` |
 | — | `d477f843` | `WarningsAsErrors=CS0169;CS0414` gate in `Directory.Build.props` |
-| — | `98f7ffd7` | Enum gate consolidated onto `union_names::data_enum` at ten binding sites; `DataEnum::is_union_projected()` replaces five inline predicates |
+| — | `98f7ffd7` | Enum gate consolidated onto `union_names::data_enum`; `DataEnum::is_union_projected()` replaces five inline predicates |
 | — | `aa2d550d` | **Case constructors** — the union creation members. Unnumbered in the plan, and the actual gate for 3d |
 | 3d | `da741fa9` | `[Union]` and `IUnion` on union-projected enums |
 | — | `02c12b35` | Docs: 3d recorded done, its gate corrected, the `IUnion` deferral reversed, 3e marked satisfied-unverified |
 | — | `1429746b` | **Projection pass, step one** — `is_managed_only` moved from a render-time local in `body.rs` into `model::…::info::projection` |
-
-**`Issues.md` as of `d477f843`.** Open — `2a6da76a`, `4e9a17c3`, `7c8cb22e`, `79be256e`,
-`b4e07f12`, `5d1ae4c7`. Closed — `09b82d44`, `ccb105a2`, `1383b84b`, `31248473`, `c33b9cf5`,
-`e235bc7d`, `8f4c1e2a`.
 
 **Two corrections from 2026-08-27, both from things that were wrong in this document.** 3d's gate
 was recorded as 3c; `[Union]` on a type with no public single-parameter constructor is `CS9385`,
@@ -174,37 +168,51 @@ so the real gate was the case constructors, and no item covered them. And the 3d
 `IUnion` on the grounds that its namespace is unspecified — that read the proposal's open
 questions as live, when the feature has shipped and `IUnion` resolves from the framework.
 
-**Uncommitted working-tree state you will find.** None of this went through a transaction, because
+**`Issues.md` is diverged three ways and you must reconcile it before trusting it.** The list
+below is pinned to `d477f843`, several commits behind head; the file is **modified and unstaged**
+in the working tree; and some of its content is corrected here rather than there. Reconcile in
+that order — commit or discard the working-tree change first, then re-read, then fix the content.
+
+Open — `2a6da76a`, `4e9a17c3`, `7c8cb22e`, `79be256e`, `b4e07f12`, `5d1ae4c7`. Closed —
+`09b82d44`, `ccb105a2`, `1383b84b`, `31248473`, `c33b9cf5`, `e235bc7d`, `8f4c1e2a`.
+
+**Uncommitted working-tree state you will find.** None of it went through a transaction, because
 `Issues.md` and repo-root files cannot be scoped into a FileMcp one:
 
 - **`Issues.md` — modified, unstaged.** `79be256e` gained a marshalling-mode sub-question and a
   note that option B landed. Written via `FileMcp:update_issue`, which edits the working tree
-  directly. Review and commit it, or discard it.
+  directly.
 - **`baseline-nextest.txt` — staged, uncommitted.** Carries a placeholder header
-  (`# at <commit>, <date>, <machine>`) that was never filled in. Either fill it or drop the file;
-  a pass count with no command and no commit is the defect the header exists to prevent.
-- **`.gitignore` — still has no `build.txt` entry.** `crates/backend_csharp/benches/dotnet/build.txt`
-  is a build artefact that has already been swept into a commit once and blocked a checkout.
+  (`# at <commit>, <date>, <machine>`) never filled in. Fill it or drop the file; a pass count
+  with no command and no commit is the defect the header exists to prevent.
+- **`.gitignore` — still no `build.txt` entry.**
 
-**Still wrong in `Issues.md`, corrected here but not there.** `5d1ae4c7` says the gate is at *ten*
-sites; it was twelve, and about fourteen counting `body.rs`'s own extra re-derivations. It also
-says nothing calls `union_names::data_enum`, which `wire/cs_names.rs` already did with two tests.
-`79be256e`'s site-count paragraph says "not reconciled here" and is now reconciled.
+**Still wrong in `Issues.md`, corrected here but not there:** `5d1ae4c7`'s site count and its claim
+that nothing calls the helper — see the counting table below — and `79be256e`'s site-count
+paragraph, which says "not reconciled here" and now is.
 
-### The three things worth knowing before you start
+### Four things worth knowing before you start
 
-**1. `5d1ae4c7` is consolidated, and the count in the issue is wrong.** Every enum output pass
-used to open with the same inline `match type_kind { DataEnum(e) => e, Result(_, _, e) => e,
-Option(_, e) => e, _ => continue }`. `98f7ffd7` replaced that at **ten binding sites** with
+**1. `5d1ae4c7` is consolidated, and its own count is wrong.** Every enum output pass used to open
+with the same inline `match type_kind { DataEnum(e) => e, Result(_, _, e) => e, Option(_, e) => e,
+_ => continue }`. `98f7ffd7` replaced that with
 `model::common::types::union_names::data_enum(type_kind)`, and replaced five inline copies of
-`variants.iter().any(|v| v.can_carry_payload)` with `DataEnum::is_union_projected()`. Two things
-the issue still gets wrong: it says **ten** sites when the true figure was **twelve** at the time
-(ten binding plus `all.rs` and `body.rs` matching for effect), and closer to **fourteen** counting
-the two further re-derivations inside `body.rs` itself — `has_wire_only_payload` and
-`disposable_variants`, the latter returning `&[Variant]` and so untouched by the consolidation.
-It also says nothing calls the helper; `output/common/wire/cs_names.rs` already did, with two
-tests asserting the convention. **`is_managed_only` is still computed inline in `body.rs` at
-render time and shared with nobody**, which is why the four unmanaged passes cannot consult it.
+`variants.iter().any(|v| v.can_carry_payload)` with `DataEnum::is_union_projected()`.
+
+The counting, once, so it is not restated anywhere else in this file:
+
+| Figure | Meaning |
+|---|---|
+| **10** | sites that *bind* the payload and were rewritten by `98f7ffd7` |
+| **12** | those ten plus `all.rs` and `body.rs`, which match for effect and discard the binding — left alone deliberately |
+| **~14** | those twelve plus two further re-derivations *inside* `body.rs` — `has_wire_only_payload` and `disposable_variants`, the latter returning `&[Variant]` and so untouched by a literal replacement |
+
+`5d1ae4c7` says **ten** and means the twelve; it also says nothing calls the helper, when
+`output/common/wire/cs_names.rs` already did, with two tests asserting the convention. Both
+corrections are here and not in the issue.
+
+**`is_managed_only` has since moved into the model** — `1429746b`, see §9 — so the statement in
+`5d1ae4c7` that it is computed inline in `body.rs` is also now stale.
 
 **2. `Open items #1` still gates 4b and is still unmeasured.** Positions (a)
 `InvalidOperationException` and (c) `?? default` were never reproduced; only (b) was, and it
@@ -217,13 +225,11 @@ empty case types and wonder whether that is bloat: it is the eligibility predica
 variant carry a payload* rather than *does one*. See §8.
 
 **4. Do not run the suite before committing, and read the plugin failures rather than the
-snapshots.** Both failed validations on 2026-08-26 and one on 2026-08-27 were `PermissionDenied`
-on `prepare_plugin` — plugin DLLs still locked by a concurrent local test run. One was a linker
-`LNK1104` from retrying a call whose predecessor was still running. Use `diagnostics` for a fast
-compile check and let validation be the only thing holding DLLs. And note which layer catches
-what: when 3d first landed without case constructors, **three snapshot tests passed and seventeen
-plugin fixtures failed with `CS9385`.** Snapshots prove text; only the plugin build proves the
-generated C# compiles.
+snapshots.** Validation runs the suite anyway; running it yourself holds the plugin DLLs and is
+what caused three `PermissionDenied` validation failures. See § MCP tooling notes, 2026-08-27 for
+the full set of traps. And note which layer catches what: when 3d first landed without case
+constructors, **three snapshot tests passed and seventeen plugin fixtures failed with `CS9385`.**
+Snapshots prove text; only the plugin build proves the generated C# compiles.
 
 ### Snapshot workflow
 
@@ -231,24 +237,24 @@ Accept **per step**, not deferred. The accept must run in the *transaction workt
 checkout — `ccb105a2`'s "real checkout only" rule applied to LFS stubs, and LFS is gone since
 `1383b84b`.
 
-```powershell
-cd <worktree>
-$env:INSTA_UPDATE='always'; $env:TRYBUILD='overwrite'
-cargo test --workspace --all-features --no-fail-fast
-Remove-Item Env:INSTA_UPDATE, Env:TRYBUILD
-Get-ChildItem -Recurse -Filter *.snap.new | Remove-Item
-```
+**The incantation lives in §7**, under Environment and workflow, along with why `--no-fail-fast`
+matters. It is not repeated here.
+
+**Acceptance is iterative.** `insta` stops at the *first* failing snapshot within a test and some
+tests write four; see § MCP tooling notes, 2026-08-27.
 
 **Delete stray build logs before committing.** A `dotnet build > build.txt` left in the worktree
 was picked up by a commit and blocked the checkout with *"Untracked working tree file … would be
 overwritten by merge"*. The commit itself had already validated; only the checkout failed.
+`.gitignore` still has no entry for it.
 
 ---
 
 ## 2. Scope, and what this is not
 
-**Read `docs/csharp-unions.md` § "Two layers, two rules" before writing any code.** It is the
-second section of that file and it is the thing most likely to be misread.
+**Read `docs/csharp-unions.md` § "Two layers, two rules" before writing any code.** It is that
+file's first `##` heading, immediately after the untitled preamble, and it is the thing most
+likely to be misread.
 
 The short version: this work governs the **generated layer** only.
 
@@ -262,12 +268,8 @@ scalar choice. It does not cover **mechanical** eligibility, and that distinctio
 machinery.** No case types, no `Value`, no `HasValue`, no `TryGetValue`. Whether any variant can
 carry a payload is not domain knowledge — it is `VariantKind::Tuple` versus `Unit`, visible in the
 inventory. Excluded enums keep their current representation: struct, `Unmanaged` mirror and
-marshaller all stay, and this rule only declines to *add* union machinery on top. `Issues.md`
-`79be256e` records the rule, the measured cost and the population; projecting excluded enums as
-plain C# `enum`s instead is option C there and is **deferred**.
-
-The predicate that implements it is `variants.iter().any(|v| v.can_carry_payload)` — *can*, not
-*does*. See §5 and §8; getting that backwards was this session's most expensive error.
+marshaller all stay, and this rule only declines to *add* union machinery on top. The predicate,
+and why it asks *can* rather than *does*, are in §5.
 
 That is not a mandate for the consumer API. A consumer decides per type: payload or state
 alternatives → union, scalar choice → `enum`, bit combinations → `[Flags]`, product data →
@@ -280,7 +282,7 @@ than propagating case types outward.
 
 Note the direction of that dependency: interoptopus decides what it emits from the C#
 specification and the Rust inventory. A consumer may motivate a shape by showing it occurs in
-practice, but never constrains the projection. See `csharp-unions.md` §0.
+practice, but never constrains the projection. `csharp-unions.md`'s preamble states this.
 
 Do not add a **domain** eligibility gate to interoptopus to try to enforce the consumer-layer
 rule. It cannot know enough to apply it. The mechanical gate above is a different thing and is
@@ -577,7 +579,8 @@ then poll `get_commit_status`.
 Two quirks in `replace_markdown_section`: pass the heading as a **leaf**, not a full path, and put
 the `##` heading inside `content` — the `title` parameter deletes the old heading without writing
 a new one, orphaning the section under its predecessor. Both tools take a dry run first, which
-returns the hash to pass back as `expectedTransformedHash`.
+returns the hash to pass back as `expectedTransformedHash`. **The hash is bound to the exact text
+you dry-ran**; change a word and you must dry-run again rather than reusing or guessing a hash.
 
 **Root aliases are per server, and the Rust editor cannot reach a FileMcp worktree at all** — the
 call fails outright. `$N` in one server is not `$N` in the other. For a change mixing code and
@@ -592,24 +595,20 @@ cmd /c "dotnet build -t:Rebuild -v:n > build.txt 2>&1"
 Select-String -Path build.txt -Pattern 'warning [A-Z]+\d+' | ForEach-Object { $_.Matches.Value } | Group-Object | Sort-Object Count -Descending
 ```
 
-**Delete `build.txt` before committing** — a stray one was picked up by a commit and blocked the
-checkout with *"Untracked working tree file … would be overwritten by merge"*.
-
-**`CSharpEditor:list_git_commits` without a `project` searches CSharpMpc**, not interoptopus,
-because that server's active root is elsewhere. Pass a project path inside the repo you mean.
+Delete `build.txt` afterwards — see § Snapshot workflow for what happens if you do not.
 
 **`search_and_replace` with a bare `file_glob` matches every file of that name.** `body_unmanaged.rs`
 and `mod.rs` each exist under both `enums/` and `composites/`; a batch aimed at one silently edited
 the other. Anchor on text unique to the intended file, and read the dry run's file list before
 applying.
 
-**`dokono test selection fallback: affected_source_identity_invalid` is benign** — see the entry
-above; it fires on essentially every change to a non-root source module and fails open.
-
 **A first run in a fresh worktree can fail the concurrency test.** `prepare_plugin`'s doc comment
-records it: *"a fresh worktree fails three of sixty-two on the first run and passes on the second."*
-Changing `Directory.Build.props` invalidates every plugin build and reproduces exactly this. Re-run
-before investigating.
+at `tests/mod.rs:108` records it — *"a fresh worktree fails three of sixty-two on the first run and
+passes on the second."* Changing `Directory.Build.props` invalidates every plugin build and
+reproduces exactly this. Re-run before investigating. (The runtime failure site is different:
+`tests/mod.rs:224`, where `prepare_plugin` is called and where the `PermissionDenied` panics in the
+2026-08-27 notes surface.)
+
 ### MCP tooling notes, 2026-08-27
 
 **Do not run the suite before committing.** Validation runs it anyway, and running it yourself
