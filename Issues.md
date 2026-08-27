@@ -961,6 +961,10 @@ is the wrong predicate to extend, since it means *never crosses FFI* and a plain
 crosses FFI precisely because it is blittable. See `5d1ae4c7` for the third-category question that
 follows.
 
+**Site count is unreconciled.** This issue and `5d1ae4c7` both say ten; `docs/csharp-unions-handoff.md`
+§3 says eleven and records that two more copies were added on 2026-08-26. If that is right, both
+issue counts are stale and the next pass added makes it twelve. Not reconciled here.
+
 ### Open, and deliberately not guessed at
 
 - ~~**What `managed_conversion` returns for a unit-only `DataEnum` today.**~~ **Traced —
@@ -1003,11 +1007,11 @@ follows.
 
 ### Three options
 
-**A. Status quo.** Uniform union projection over every `DataEnum`. No break. Keeps ~120 lines per unit-only enum and adds case types, `Value`, `HasValue`, `TryGetValue` on top.
+**A. Status quo.** Uniform union projection over every `DataEnum`. No break. Keeps ~120 lines per unit-only enum and adds case types, `Value`, `HasValue`, `TryGetValue` on top. **Superseded — B landed, see below.**
 
-**B. Skip union machinery for unit-only enums, keep the struct.** Costs nothing and breaks nothing — the case types are not yet emitted, so declining to emit them is not a removal. Does not reclaim the existing 120 lines. Available now, independent of any language feature. Also removes the CS0169 `_hasValue` warnings honestly rather than by consuming a field with no meaning for a payload-free type.
+**B. Skip union machinery for unit-only enums, keep the struct. — LANDED 2026-08-26, see below.** Costs nothing and breaks nothing — the case types are not yet emitted, so declining to emit them is not a removal. Does not reclaim the existing 120 lines. Available now, independent of any language feature. Also removes the CS0169 `_hasValue` warnings honestly rather than by consuming a field with no meaning for a payload-free type.
 
-**C. Plain `enum` plus extension block.** Reclaims the whole 120 lines and the marshaller. Breaking change to the generated surface, comparable to item 3a's private constructor which the plan already accepts unconditionally. Consumer-facing members are preservable per the table above.
+**C. Plain `enum` plus extension block.** Reclaims the whole 120 lines and the marshaller. Breaking change to the generated surface, comparable to item 3a's private constructor which the plan already accepts unconditionally. Consumer-facing members are preservable per the table above. **The only option still open.**
 
 ### The trigger
 
@@ -1031,7 +1035,13 @@ Two mechanical limits on closed enums that survive whenever they arrive:
   item 4a — it *mandates* it: the only legal path from a runtime discriminant to a closed enum is a
   switch with constant arms and a throwing default, which is exactly 4a's validated switch.
 
-Option B is available immediately and is on the path to C rather than away from it.
+A Roslyn analyzer is the interim substitute for the exhaustiveness half — it can flag a
+non-exhaustive switch over a plain `enum`, which is what closed enums would give. It cannot
+substitute for the runtime half, but per the correction above there is no runtime check today
+to lose. Where such an analyzer would live — shipped alongside the generated bindings, or in the
+consumer repository — is undecided and materially changes C's size.
+
+Option B was available immediately and is on the path to C rather than away from it.
 
 ### Two rules, not one — they rest on different claims
 
@@ -1041,7 +1051,7 @@ is self-justifying and needs nothing measured.
 It does **not** reach C. The struct's `Unmanaged` mirror and marshaller are not bloat in the same
 sense — they exist so the value can cross FFI. Removing them requires a separate claim: that a
 plain C# `enum` is blittable and crosses without translation, needing no mirror *because* it is
-blittable. That claim is probably true and is **not verified**. Two things are open:
+blittable. That claim is probably true and is **not verified**. Three things are open:
 
 - What `Unmanaged` actually contains for a unit-only enum. If it is only the discriminant field,
   the claim holds trivially. Not read.
@@ -1049,16 +1059,52 @@ blittable. That claim is probably true and is **not verified**. Two things are o
   `#[repr(u8)]` enum must be emitted as `: byte` or the widths disagree. `definition.rs` already
   passes `discriminant_type.cs_name()`, so the information exists, but the mapping is unchecked.
   `EnumNegative` additionally requires a signed underlying type.
+- **Which marshalling mode the generated bindings run under.** A C# enum is layout-compatible
+  with its backing integer, but the classic marshaller does not universally classify enums as
+  blittable — enum arrays and pinning are the cases that fail (`dotnet/runtime#48907`). With
+  runtime marshalling disabled, every C# unmanaged type including enums is blittable and the
+  caveat is moot. **`DisableRuntimeMarshalling` is not emitted:** `templates/rust/header.cs` is a
+  ten-line comment banner carrying library, hash, namespace and builder, and no assembly
+  attributes. So the deciding question is whether a unit-only enum can reach a slice element or
+  a pinned array — inside a sequential or explicit struct passed by value it is unaffected
+  either way. Not checked.
 
 So B is safe on the rule alone. C depends on the above, and separately on closed enums, which
-**did not ship in C# 15** — see the trigger section below.
+**did not ship in C# 15** — see the trigger section above.
 
-Recommendation: **B on the anti-bloat rule, now. C once the blittability claim is verified**, with
-closed enums governing only the exhaustiveness half of C, not the emission half. Recorded rather
-than executed — this issue exists so the survey is not repeated.
+Recommendation as originally recorded: **B on the anti-bloat rule, now. C once the blittability
+claim is verified**, with closed enums governing only the exhaustiveness half of C, not the
+emission half. Recorded rather than executed — this issue exists so the survey is not repeated.
 
 See also `5d1ae4c7`: this issue's original "single lever" mechanism is disproved, and any version
 of B or C needs the ten-site processing gate addressed first.
+
+### B landed 2026-08-26 — this issue was not updated at the time
+
+**The eligibility rule is in force.** It landed in `4a19b0e3` (nested case types, new pass
+`body_case_types.rs`) and `bdd13b53` (`Value` / `HasValue` / `TryGetValue`), both scoped per enum
+by `variants.iter().any(|v| v.can_carry_payload)`. A `DataEnum` with no payload-**capable**
+variant now receives no union machinery at all: no case types, no `Value`, no `HasValue`, no
+`TryGetValue`. So this issue's recommendation of "B, now" describes shipped behaviour, not
+pending work, and the survey above should be read as the record of why rather than as a proposal.
+
+The predicate is the model-layer field `Variant::can_carry_payload`, read at five sites, not a
+local re-derivation. *Can* carry, not *does*: `fallback.rs::resolve_payload` erases a `()` payload
+to `None`, so `Result<(), ()>` reads as entirely payloadless while `Result<u32, Error>` does not —
+the same shape decided by a type argument. Guard test
+`enum_union_members::eligibility_asks_can_carry_not_does_carry` is the only fixture separating the
+two predicates; reverting it passes the whole rest of the suite.
+
+**Not verified: B's CS0169 claim.** B was also expected to retire the `_hasValue` warnings
+honestly rather than by consuming a meaningless field. That follows automatically *if* `_hasValue`
+is emitted only for union-projected types, and does not if it is emitted for every struct-backed
+enum. `definition.cs` decides it and has not been read. `d477f843` separately added
+`WarningsAsErrors=CS0169;CS0414`, so a regression here fails the build rather than warning.
+
+**Only C remains open**, on the three claims in the section above.
+
+`docs/csharp-unions.md` § Todo/Remaining is the status of record; this note exists because it and
+this issue disagreed for a day.
 
 ### Related — folding mixed enums, DROPPED
 
