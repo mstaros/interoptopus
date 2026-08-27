@@ -834,8 +834,21 @@ drop a type's marshalling.
 ### Step two — add `shape`, still a no-op
 
 Add a shape field with two values, union and struct, where union is exactly today's
-`DataEnum::is_union_projected()`. Move the five call sites that read that predicate onto the new
+`DataEnum::is_union_projected()`. Move the call sites that read that predicate onto the new
 pass. **Snapshots must not move**; if they do, something else was wrong.
+
+**There are seven call sites, not five — counted by regex, 2026-08-27.** An earlier version of
+this line said five, which is the figure in `DataEnum::is_union_projected`'s own doc comment,
+and that one describes the *pre-consolidation* state rather than today's callers. The seven live
+in six files: `definition.rs:55`, `body.rs:125`, `body_case_types.rs:57`,
+`body_union_members.rs:57`, `body_unmanaged.rs:62`, and `body_ctors.rs` at **both** 66 and 76.
+
+**Three of those seven are not the same question and must not be collapsed.**
+`body_ctors.rs:66` and `body_unmanaged.rs:62` read
+`struct_class.is_struct(*type_id) && data_enum.is_union_projected()` — that is `writes_has_value`,
+which asks whether the type is *struct-backed* **and** union-projected. Only the second half moves
+onto the shape pass; the first half stays with `struct_class`. `body_ctors.rs:76` is a separate,
+plain read in the same function, which is why that file contributes two.
 
 Keep shape and `crosses_ffi` **orthogonal**. They are genuinely independent: `DataEnum` in the
 reference project is managed-only *and* union-projected — it gets `[Union]` and no
