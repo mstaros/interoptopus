@@ -1,5 +1,6 @@
 use crate::types::arrays::CharArray;
 use crate::types::basic::Vec3f32;
+use crate::types::enums::EnumDocumented;
 use crate::types::string::UseString;
 use interoptopus::pattern::slice::{Slice, SliceMut};
 use interoptopus::{callback, ffi};
@@ -107,4 +108,24 @@ pub fn pattern_ffi_slice_of_structs_callback(callback: CallbackSliceUseSliceByte
     let bytes = [1, 2, 3];
     let values = [UseSliceByteInStruct { bytes: ffi::Slice::from_slice(&bytes) }];
     callback.call(ffi::Slice::from_slice(&values));
+}
+
+/// Canary for option C, placed ahead of the change it guards. See
+/// `docs/csharp-unions-handoff.md` section 9, step three.
+///
+/// This is the only slice in the reference project whose element is a **unit-only** enum.
+/// Today `EnumDocumented` is emitted as a struct with a discriminant field, so this proves
+/// nothing about blittability. When step three of the projection pass emits unit-only enums
+/// as plain C# `enum`s, this fixture's element type flips and the plugin build answers, in
+/// the only layer that compiles generated C#, whether the classic marshaller accepts it.
+/// `DisableRuntimeMarshalling` is not emitted, so that question is live.
+#[ffi]
+pub fn pattern_ffi_slice_of_unit_enum(slice: Slice<EnumDocumented>) -> u32 {
+    let mut count = 0;
+    for variant in slice.as_slice() {
+        if matches!(variant, EnumDocumented::B) {
+            count += 1;
+        }
+    }
+    count
 }
