@@ -18,6 +18,11 @@
 //! Scoping is the same per-enum eligibility rule as 3b, and it now also governs the *field*: a
 //! unit-only enum has no union machinery, so it needs no empty-state flag. Six of the nineteen
 //! CS0169 were exactly that case.
+//!
+//! **Since step three that population is not a struct at all.** A `DataEnum` with no
+//! payload-capable variant *and* a discriminant C# accepts as an enum base is emitted as a plain
+//! C# `enum`, which cannot carry a flag or union members by construction. The assertions below
+//! therefore check the stronger fact rather than the absence of members on a struct.
 
 use interoptopus::lang::meta::FileEmission;
 use interoptopus::wire::Wire;
@@ -33,7 +38,7 @@ pub enum Meter {
     Count(u32),
 }
 
-/// Unit-only: receives no union machinery at all, and therefore no `_hasValue`.
+/// Unit-only: no variant can carry a payload, so it is emitted as a plain C# `enum`.
 #[ffi]
 pub enum Flag {
     Off,
@@ -107,13 +112,17 @@ fn generated_common() -> String {
 }
 
 /// Guards the premise. Every assertion below is about *which* form a type gets, so all three
-/// fixtures must reach the output and keep their struct/class backing, or the assertions pass
-/// for the wrong reason.
+/// fixtures must reach the output in the form the assertions assume, or they pass for the wrong
+/// reason.
+///
+/// `Flag`'s expected form changed with step three: it was struct-backed, and is now a plain C#
+/// `enum`. That is the assertion, not an incidental detail — if it regressed to a struct the
+/// plain-enum test below would still pass vacuously on the absence of union members.
 #[test]
 fn the_fixtures_have_the_backing_the_assertions_assume() {
     let cs = generated_interop();
     assert!(cs.contains("struct Meter"), "Meter must stay struct-backed");
-    assert!(cs.contains("struct Flag"), "Flag must stay struct-backed");
+    assert!(cs.contains("enum Flag : "), "Flag must be emitted as a plain C# enum");
     assert!(cs.contains("class Label"), "Label must stay class-backed");
 }
 
@@ -172,6 +181,9 @@ fn the_flag_is_written_where_a_well_formed_value_is_constructed() {
 ///
 /// **This is the only fixture that separates the two predicates.** Every other type is classified
 /// identically either way, so reverting to `ty.is_some()` would pass the rest of the suite.
+///
+/// Step three raised the stakes: a type misclassified as unit-only is no longer merely stripped
+/// of its members, it is emitted as a plain C# `enum` and loses its payload entirely.
 #[test]
 fn eligibility_asks_can_carry_not_does_carry() {
     let cs = generated_common();
@@ -195,15 +207,30 @@ fn eligibility_asks_can_carry_not_does_carry() {
     );
 }
 
-/// The eligibility rule now governs the field, not only the members. This is what cleared six
-/// of the nineteen CS0169: nothing would ever have read their flag.
+/// A unit-only enum is emitted as a plain C# `enum`, not a struct.
+///
+/// Both halves of the rule are required. No variant can carry a payload — which is what makes it
+/// ineligible for union projection — *and* its discriminant is a type C# accepts as an enum base.
+/// A unit-only enum failing the second half keeps the struct, which is the one exclusion that
+/// stops `Projection` collapsing to a boolean.
+///
+/// This supersedes the older assertion that such a type merely lacked `_hasValue` and union
+/// members. It cannot have either now: a C# `enum` has no fields and no methods. The absence
+/// checks are kept because they would still catch a regression to the struct form emitting
+/// machinery nothing reads — six of the nineteen CS0169 in `Issues.md` `8f4c1e2a` were exactly
+/// that.
 #[test]
-fn a_unit_only_enum_gets_neither_the_flag_nor_the_members() {
+fn a_unit_only_enum_becomes_a_plain_csharp_enum() {
     let cs = generated_interop();
 
-    let flag = cs.split("struct Flag").nth(1).expect("Flag is emitted");
-    let flag = flag.split("public partial").next().expect("Flag body is bounded");
+    assert!(cs.contains("enum Flag : "), "a unit-only enum with an integral discriminant is emitted as a plain C# enum");
+    assert!(!cs.contains("struct Flag"), "and therefore not as a struct carrying a discriminant field");
 
-    assert!(!flag.contains("_hasValue"), "unit-only enum must not declare an empty-state flag: {flag}");
+    let flag = cs.split("enum Flag : ").nth(1).expect("Flag is emitted");
+    let flag = flag.split('}').next().expect("Flag body is bounded");
+
+    assert!(flag.contains("Off = 0,"), "its variants become enum members carrying their discriminants: {flag}");
+    assert!(flag.contains("On = 1,"), "its variants become enum members carrying their discriminants: {flag}");
+    assert!(!flag.contains("_hasValue"), "a C# enum has no empty-state flag to declare: {flag}");
     assert!(!cs.contains("OffCase"), "unit-only enum must receive no union machinery");
 }

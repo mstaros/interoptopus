@@ -36,6 +36,11 @@ pub enum Projection {
     /// A C# 15 custom union: `[Union]`, `IUnion`, nested case types, case constructors.
     Union,
     /// A struct (or class) carrying a discriminant field and per-variant payload fields.
+    ///
+    /// Reached by a unit-only enum whose discriminant type C# will not accept as an `enum` base
+    /// — `float`, `bool`, `nint` and so on. No payload to justify a union, no legal underlying
+    /// type to become a plain enum, so it keeps the struct. This is the exclusion that earns the
+    /// third value; without it `Projection` would collapse to a bool.
     Discriminant,
     /// A plain C# `enum`. **Declared, never constructed** — step three of the projection pass
     /// is what starts producing it. Present now so that step is a routing change rather than an
@@ -112,9 +117,17 @@ impl Pass {
             // to `ty.is_some()` passes the whole suite except one fixture; see the module
             // history in `docs/csharp-unions-handoff.md` §8.
             //
-            // Step three routes not-union to `PlainEnum`. `Discriminant` is now unreachable, and that is expected rather than an oversight: not-union is exactly "no variant can carry a payload", which is exactly the unit-only population, which is exactly the plain-enum population. It is retained only until something is shown to force a unit-only enum to stay a struct. If nothing does, delete it.
+            // The plain-enum rule has two halves and both are required: no variant can carry a
+            // payload, *and* the discriminant is a type C# accepts as an enum base. A unit-only
+            // enum failing the second half stays `Discriminant`.
             if let Some(data_enum) = model::common::types::union_names::data_enum(kind) {
-                let projection = if data_enum.is_union_projected() { Projection::Union } else { Projection::PlainEnum };
+                let projection = if data_enum.is_union_projected() {
+                    Projection::Union
+                } else if data_enum.discriminant_type.is_csharp_enum_underlying() {
+                    Projection::PlainEnum
+                } else {
+                    Projection::Discriminant
+                };
 
                 if self.projection.get(type_id) != Some(&projection) {
                     self.projection.insert(*type_id, projection);
