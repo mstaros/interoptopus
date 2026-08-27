@@ -10,8 +10,11 @@ done, what is next, and the things that cost time to discover.
 ## 0. Start here — what this is, and why
 
 You are almost certainly starting with no context. Read this section before anything else.
-`csharp-unions.md` opens mid-argument, and `CLAUDE.md`'s pass-directory tree is stale — it shows
-`output/` as flat when it is split into `rust/`, `dotnet/` and `common/`.
+`csharp-unions.md` opens mid-argument, and **`CLAUDE.md`'s pass-directory tree is stale
+throughout** — it predates this work. Both `model/` and `output/` are shown flat when each is
+split into `rust/`, `dotnet/` and `common/`; several listed files do not exist; and several that
+do are missing. Treat the whole tree as unreliable and list the directory instead. The map below
+was built by listing, 2026-08-27.
 
 ### Before you touch anything
 
@@ -130,6 +133,14 @@ the scope and the commit are what make it one, and as the 77/78 pair shows, even
 not always sufficient. The 62 is still unscoped; fixing it means editing `tests/mod.rs`, which a
 docs change cannot reach.
 
+**On the 77/78 discrepancy: deliberately not filed, and here is the reasoning so you can
+overturn it.** No wrong behaviour was ever observed — both runs pass, and the extra test is a
+count difference in nextest's own reporting, not a test that fails in one and not the other. It
+was seen three times on 2026-08-26/27, always as local-77 versus validation-78. **Do not use
+either number as a regression signal**; compare pass/fail, not totals. If you ever see a *failure*
+that appears under one runner and not the other, that is a different thing and worth filing — this
+is not that.
+
 ### Plan state
 
 **Status lives in `docs/csharp-unions.md` § Todo/Remaining. That table is the single source, and
@@ -216,9 +227,10 @@ corrections are here and not in the issue.
 
 **2. `Open items #1` still gates 4b and is still unmeasured.** Positions (a)
 `InvalidOperationException` and (c) `?? default` were never reproduced; only (b) was, and it
-showed the NRE fires *before* any marshaller, at `body_as_unmanaged.rs:47` in the enclosing
-composite. `b4e07f12` records the present-tense defect. Reproduce (a) and (c) before choosing, and
-do not close `b4e07f12` first.
+showed the NRE fires *before* any marshaller, at
+`output/common/types/composites/body_as_unmanaged.rs:47` — the **composites** one; an identically
+named file exists under `enums/`. `b4e07f12` records the present-tense defect. Reproduce (a) and
+(c) before choosing, and do not close `b4e07f12` first.
 
 **3. `ResultVoidVoid` regained union machinery in 3c, deliberately.** If you see it carrying four
 empty case types and wonder whether that is bloat: it is the eligibility predicate asking *can a
@@ -246,7 +258,6 @@ tests write four; see § MCP tooling notes, 2026-08-27.
 **Delete stray build logs before committing.** A `dotnet build > build.txt` left in the worktree
 was picked up by a commit and blocked the checkout with *"Untracked working tree file … would be
 overwritten by merge"*. The commit itself had already validated; only the checkout failed.
-`.gitignore` still has no entry for it.
 
 ---
 
@@ -505,17 +516,16 @@ through it rather than through `load_plugin!`.
 `define_plugin!` generated the interop sources, `ensure_plugin_built` compiled them — so a
 loader reaching a plugin first compiled against whatever happened to be on disk. On a fresh
 checkout the `Interop*.cs` files are gitignored and therefore absent, so the build failed with
-`CS0246` rather than producing a stale DLL. Measured: a fresh worktree failed three of
-sixty-two on the first run and passed on the second. `dll_path_for` is now
-`dll_path_for::<P>`, and every path to a staged DLL generates first, so arrival order no longer
-matters. Two things to keep in mind if you touch it: the snapshot assertion stays in
-`define_plugin!` (moving it into the shared helper would make every loader assert a snapshot it
-did not ask for), and writes go through `Multibuf::write_buffers_to_if_changed`, not
-`write_buffers_to`. The latter rewrites unconditionally, which bumps mtime, which forces a
-rebuild, which makes the built DLL newer than the staged one and re-fires the copy that
-`stage_is_current` exists to avoid. The content check also has to live in `Multibuf` rather
-than in the harness, because the per-buffer `Overwrite` policy is private and a loop over
-`iter()` would silently clobber `Overwrite::Never` files.
+`CS0246` rather than producing a stale DLL — see § MCP tooling notes, 2026-08-26 for the measured
+first-run failure rate. `dll_path_for` is now `dll_path_for::<P>`, and every path to a staged DLL
+generates first, so arrival order no longer matters. Two things to keep in mind if you touch it:
+the snapshot assertion stays in `define_plugin!` (moving it into the shared helper would make
+every loader assert a snapshot it did not ask for), and writes go through
+`Multibuf::write_buffers_to_if_changed`, not `write_buffers_to`. The latter rewrites
+unconditionally, which bumps mtime, which forces a rebuild, which makes the built DLL newer than
+the staged one and re-fires the copy that `stage_is_current` exists to avoid. The content check
+also has to live in `Multibuf` rather than in the harness, because the per-buffer `Overwrite`
+policy is private and a loop over `iter()` would silently clobber `Overwrite::Never` files.
 
 **Plugin fixtures must not take third-party `PackageReference`s.** `_plugins/` staging copies the plugin DLL and not its dependencies, so a fixture with one passes only on a checkout where an earlier run left the dependency behind — a false green on any clean clone. The `wire` fixture had `Newtonsoft.Json` and passed for exactly that reason; it is now on `System.Text.Json`, which is in the BCL. `Newtonsoft.Json` is gone from the repository.
 
@@ -539,17 +549,18 @@ the error maps to this code. The real limitation of the fallback is **over**-sel
 under-selection; `source_name_fallback_can_overselect_same_named_tests_within_one_binary` asserts
 precisely that. Nothing to fix; the only loss is the speed benefit of narrowing.
 
-**MCP tool quirks worth knowing.** `Rust editor:str_replace` is parser-aware and will not match a
-pattern spanning categories — a pattern containing a string literal or a `//` comment silently
-returns zero matches. Use `search_and_replace` (regex) for those, but note its replacement does not
-honour `\n`, so multi-line inserts need `str_replace` with a pure-code pattern, or `write_file`.
-`FileMcp:write_file` HTML-escapes XML content — `<Project>` became `&lt;Project&gt;` and had to be
-repaired. `add_markdown_section` returns "No approval received" with no prompt shown;
-`replace_markdown_section` works on the same file, but drops a trailing `---` separator unless you
-include it in the replacement, and its `expectedTransformedHash` is bound to the exact content you
-dry-ran — edit the text and you must dry-run again. Root aliases are **per server**: FileMcp's
-`$N` and the Rust editor's `$N` are different registries, so a transaction worktree alias from one
-cannot be resolved by the other.
+**MCP tool quirks worth knowing.** `FileMcp:write_file` HTML-escapes XML content — `<Project>`
+became `&lt;Project&gt;` and had to be repaired. `replace_markdown_section` drops a trailing `---`
+separator unless you include it in the replacement. Root aliases are per server: FileMcp's `$N`
+and the Rust editor's `$N` are different registries, so a transaction worktree alias from one
+cannot be resolved by the other. For `str_replace`'s parser-awareness and the hash guard, see
+§ MCP tooling notes, 2026-08-27 and 2026-08-26 respectively — both are stated once, there.
+
+**Path names are not consistent between code and templates, and not even within templates.**
+Code uses plural throughout: `output/common/types/{enums, composites, delegates}/`. Templates use
+`templates/common/types/{enums, composite, delegate}/` — **`enums` plural, `composite` and
+`delegate` singular, in the same directory**. Verified by listing, 2026-08-27. Do not infer one
+from the other; list the directory.
 
 **PowerShell**: `2>&1` on a native command turns stderr into `ErrorRecord` objects, so `cargo`'s
 ordinary progress output renders in red with `NativeCommandError` and a `+ CategoryInfo` block —
@@ -574,7 +585,8 @@ Escaped quotes inside a double-quoted string terminate it early and scatter the 
 transaction cannot accidentally carry a code edit. Commit is async: `commit_transaction` queues,
 then poll `get_commit_status`.
 
-**The older note that `add_markdown_section` returns "No approval received" is stale.** It works.
+**`add_markdown_section` works.** An older note here claimed it returns "No approval received";
+that was wrong and the claim has been deleted rather than left to be read first.
 
 Two quirks in `replace_markdown_section`: pass the heading as a **leaf**, not a full path, and put
 the `##` heading inside `content` — the `title` parameter deletes the old heading without writing
