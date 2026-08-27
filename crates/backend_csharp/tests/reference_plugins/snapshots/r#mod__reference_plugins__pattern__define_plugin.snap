@@ -1081,6 +1081,12 @@ public partial struct ResultVec3f32Error : IResult<Vec3f32, Error>
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
 
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultVec3f32Error(OkCase value) { _variant = 0; _Ok = value.Value; _hasValue = true; }
+    public ResultVec3f32Error(ErrCase value) { _variant = 1; _Err = value.Value; _hasValue = true; }
+    public ResultVec3f32Error(PanicCase value) { _variant = 2; _hasValue = true; }
+    public ResultVec3f32Error(NullCase value) { _variant = 3; _hasValue = true; }
+
 
     
     // Pass-through helpers: plugin C# methods return the full Result themselves.

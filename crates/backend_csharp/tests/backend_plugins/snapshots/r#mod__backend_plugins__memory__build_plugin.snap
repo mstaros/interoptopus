@@ -316,6 +316,12 @@ public partial class ResultFliparooDotnetException : IResult<Fliparoo, DotnetExc
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
 
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultFliparooDotnetException(OkCase value) { _variant = 0; _Ok = value.Value; }
+    public ResultFliparooDotnetException(ErrCase value) { _variant = 1; _Err = value.Value; }
+    public ResultFliparooDotnetException(PanicCase value) { _variant = 2; }
+    public ResultFliparooDotnetException(NullCase value) { _variant = 3; }
+
 
     
     // Pass-through helpers: plugin C# methods return the full Result themselves.
@@ -572,6 +578,12 @@ public partial class ResultHeavyDotnetException : IResult<Heavy, DotnetException
     public DotnetException AsErr() { if (_variant != 1) { throw ExceptionForVariant(); } else { return _Err; } }
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
+
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultHeavyDotnetException(OkCase value) { _variant = 0; _Ok = value.Value; }
+    public ResultHeavyDotnetException(ErrCase value) { _variant = 1; _Err = value.Value; }
+    public ResultHeavyDotnetException(PanicCase value) { _variant = 2; }
+    public ResultHeavyDotnetException(NullCase value) { _variant = 3; }
 
 
     

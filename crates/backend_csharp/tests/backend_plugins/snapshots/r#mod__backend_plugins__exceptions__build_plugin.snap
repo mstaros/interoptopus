@@ -316,6 +316,12 @@ public partial class ResultNestedADotnetException : IResult<NestedA, DotnetExcep
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
 
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultNestedADotnetException(OkCase value) { _variant = 0; _Ok = value.Value; }
+    public ResultNestedADotnetException(ErrCase value) { _variant = 1; _Err = value.Value; }
+    public ResultNestedADotnetException(PanicCase value) { _variant = 2; }
+    public ResultNestedADotnetException(NullCase value) { _variant = 3; }
+
 
     
     // Pass-through helpers: plugin C# methods return the full Result themselves.
@@ -561,6 +567,12 @@ public partial struct ResultUintDotnetException : IResult<uint, DotnetException>
     public DotnetException AsErr() { if (_variant != 1) { throw ExceptionForVariant(); } else { return _Err; } }
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
+
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultUintDotnetException(OkCase value) { _variant = 0; _Ok = value.Value; _hasValue = true; }
+    public ResultUintDotnetException(ErrCase value) { _variant = 1; _Err = value.Value; _hasValue = true; }
+    public ResultUintDotnetException(PanicCase value) { _variant = 2; _hasValue = true; }
+    public ResultUintDotnetException(NullCase value) { _variant = 3; _hasValue = true; }
 
 
     

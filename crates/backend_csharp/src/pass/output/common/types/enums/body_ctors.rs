@@ -53,6 +53,7 @@ impl Pass {
                     m.insert("id", Value::from(v.tag as i64));
                     m.insert("has_payload", Value::from(has_payload));
                     m.insert("type", Value::normal_string(&type_name));
+                    m.insert("case_type", Value::normal_string(&v.case_type));
                     m.insert("docs", Value::normal_string(&format_docs(&v.docs.lines)));
                     m
                 })
@@ -66,6 +67,14 @@ impl Pass {
 
             let mut context = Context::new();
             context.insert("writes_has_value", &writes_has_value);
+
+            // Case constructors are the union *creation members*: the compiler establishes the
+            // case types from public single-parameter constructors, so without them `[Union]`
+            // is CS9385 "a union type must have at least one union creation member". They are
+            // gated on projection alone, not on `writes_has_value`, because a class-backed
+            // union needs them just as much and simply has no flag to set.
+            let is_union_projected = data_enum.is_union_projected();
+            context.insert("is_union_projected", &is_union_projected);
             context.insert("name", name);
             context.insert("variants", &variants);
 

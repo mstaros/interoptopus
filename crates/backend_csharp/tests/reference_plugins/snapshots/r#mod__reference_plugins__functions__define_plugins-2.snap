@@ -634,6 +634,12 @@ public partial struct ResultVoidError : IResult<Unit, Error>
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
 
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultVoidError(OkCase value) { _variant = 0; _hasValue = true; }
+    public ResultVoidError(ErrCase value) { _variant = 1; _Err = value.Value; _hasValue = true; }
+    public ResultVoidError(PanicCase value) { _variant = 2; _hasValue = true; }
+    public ResultVoidError(NullCase value) { _variant = 3; _hasValue = true; }
+
 
     
     // Pass-through helpers: plugin C# methods return the full Result themselves.

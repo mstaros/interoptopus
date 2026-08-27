@@ -951,6 +951,11 @@ public partial struct EnumPayload
     public Vec3f32 AsB() { if (_variant != 1) { throw ExceptionForVariant(); } else { return _B; } }
     public uint AsC() { if (_variant != 2) { throw ExceptionForVariant(); } else { return _C; } }
 
+    // Case constructors — the union creation members the compiler reads case types from.
+    public EnumPayload(ACase value) { _variant = 0; _hasValue = true; }
+    public EnumPayload(BCase value) { _variant = 1; _B = value.Value; _hasValue = true; }
+    public EnumPayload(CCase value) { _variant = 2; _C = value.Value; _hasValue = true; }
+
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public override string ToString()

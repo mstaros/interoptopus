@@ -233,6 +233,12 @@ public partial struct ResultUintError : IResult<uint, Error>
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
 
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultUintError(OkCase value) { _variant = 0; _Ok = value.Value; _hasValue = true; }
+    public ResultUintError(ErrCase value) { _variant = 1; _Err = value.Value; _hasValue = true; }
+    public ResultUintError(PanicCase value) { _variant = 2; _hasValue = true; }
+    public ResultUintError(NullCase value) { _variant = 3; _hasValue = true; }
+
 
     // FromCall
     public static ResultUintError FromCall(Func<uint> func)
@@ -440,6 +446,12 @@ public partial struct ResultVoidError : IResult<Unit, Error>
     public Error AsErr() { if (_variant != 1) { throw ExceptionForVariant(); } else { return _Err; } }
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
+
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultVoidError(OkCase value) { _variant = 0; _hasValue = true; }
+    public ResultVoidError(ErrCase value) { _variant = 1; _Err = value.Value; _hasValue = true; }
+    public ResultVoidError(PanicCase value) { _variant = 2; _hasValue = true; }
+    public ResultVoidError(NullCase value) { _variant = 3; _hasValue = true; }
 
 
     // FromCall

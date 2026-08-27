@@ -23,3 +23,14 @@ public {{ v.type }} As{{ v.name }}() { if (_variant != {{ v.id }}) { throw Excep
 public void As{{ v.name }}() { if (_variant != {{ v.id }}) throw ExceptionForVariant(); }
 {%- endif %}
 {%- endfor %}
+{%- if is_union_projected %}
+
+// Case constructors — the union creation members the compiler reads case types from.
+{%- for v in variants %}
+{%- if v.has_payload %}
+public {{ name }}({{ v.case_type }} value) { _variant = {{ v.id }}; _{{ v.name }} = value.Value;{% if writes_has_value %} _hasValue = true;{% endif %} }
+{%- else %}
+public {{ name }}({{ v.case_type }} value) { _variant = {{ v.id }};{% if writes_has_value %} _hasValue = true;{% endif %} }
+{%- endif %}
+{%- endfor %}
+{%- endif %}

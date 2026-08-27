@@ -190,6 +190,10 @@ public partial class OptionUtf8String : IDisposable
     public Utf8String AsSome() { if (_variant != 0) { throw ExceptionForVariant(); } else { return _Some; } }
     public void AsNone() { if (_variant != 1) throw ExceptionForVariant(); }
 
+    // Case constructors — the union creation members the compiler reads case types from.
+    public OptionUtf8String(SomeCase value) { _variant = 0; _Some = value.Value; }
+    public OptionUtf8String(NoneCase value) { _variant = 1; }
+
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public override string ToString()
@@ -358,6 +362,10 @@ public partial struct OptionUint
     public uint AsSome() { if (_variant != 0) { throw ExceptionForVariant(); } else { return _Some; } }
     public void AsNone() { if (_variant != 1) throw ExceptionForVariant(); }
 
+    // Case constructors — the union creation members the compiler reads case types from.
+    public OptionUint(SomeCase value) { _variant = 0; _Some = value.Value; _hasValue = true; }
+    public OptionUint(NoneCase value) { _variant = 1; _hasValue = true; }
+
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public override string ToString()
@@ -520,6 +528,10 @@ public partial struct OptionVec
     // Conversions
     public Vec AsSome() { if (_variant != 0) { throw ExceptionForVariant(); } else { return _Some; } }
     public void AsNone() { if (_variant != 1) throw ExceptionForVariant(); }
+
+    // Case constructors — the union creation members the compiler reads case types from.
+    public OptionVec(SomeCase value) { _variant = 0; _Some = value.Value; _hasValue = true; }
+    public OptionVec(NoneCase value) { _variant = 1; _hasValue = true; }
 
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -696,6 +708,12 @@ public partial struct ResultVoidVoid : IResult<Unit, Unit>
     public void AsErr() { if (_variant != 1) throw ExceptionForVariant(); }
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
+
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultVoidVoid(OkCase value) { _variant = 0; _hasValue = true; }
+    public ResultVoidVoid(ErrCase value) { _variant = 1; _hasValue = true; }
+    public ResultVoidVoid(PanicCase value) { _variant = 2; _hasValue = true; }
+    public ResultVoidVoid(NullCase value) { _variant = 3; _hasValue = true; }
 
 
     // FromCall
@@ -9274,6 +9292,11 @@ public partial class DataEnum
     public List<byte> AsV() { if (_variant != 1) { throw ExceptionForVariant(); } else { return _V; } }
     public Dictionary<string, MyEnum> AsH() { if (_variant != 2) { throw ExceptionForVariant(); } else { return _H; } }
 
+    // Case constructors — the union creation members the compiler reads case types from.
+    public DataEnum(SCase value) { _variant = 0; _S = value.Value; }
+    public DataEnum(VCase value) { _variant = 1; _V = value.Value; }
+    public DataEnum(HCase value) { _variant = 2; _H = value.Value; }
+
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public override string ToString()
@@ -9431,6 +9454,10 @@ public partial class Layer3String : IDisposable
     // Conversions
     public Layer1String AsA() { if (_variant != 0) { throw ExceptionForVariant(); } else { return _A; } }
     public Layer2String AsB() { if (_variant != 1) { throw ExceptionForVariant(); } else { return _B; } }
+
+    // Case constructors — the union creation members the compiler reads case types from.
+    public Layer3String(ACase value) { _variant = 0; _A = value.Value; }
+    public Layer3String(BCase value) { _variant = 1; _B = value.Value; }
 
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -9898,6 +9925,12 @@ public partial struct EnumExplicitPayload
     public Vec3f32 AsC() { if (_variant != 12) { throw ExceptionForVariant(); } else { return _C; } }
     public void AsD() { if (_variant != 20) throw ExceptionForVariant(); }
 
+    // Case constructors — the union creation members the compiler reads case types from.
+    public EnumExplicitPayload(ACase value) { _variant = 10; _hasValue = true; }
+    public EnumExplicitPayload(BCase value) { _variant = 11; _B = value.Value; _hasValue = true; }
+    public EnumExplicitPayload(CCase value) { _variant = 12; _C = value.Value; _hasValue = true; }
+    public EnumExplicitPayload(DCase value) { _variant = 20; _hasValue = true; }
+
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public override string ToString()
@@ -10073,6 +10106,10 @@ public partial class OptionOptionResultOptionUtf8StringError : IDisposable
     // Conversions
     public OptionResultOptionUtf8StringError AsSome() { if (_variant != 0) { throw ExceptionForVariant(); } else { return _Some; } }
     public void AsNone() { if (_variant != 1) throw ExceptionForVariant(); }
+
+    // Case constructors — the union creation members the compiler reads case types from.
+    public OptionOptionResultOptionUtf8StringError(SomeCase value) { _variant = 0; _Some = value.Value; }
+    public OptionOptionResultOptionUtf8StringError(NoneCase value) { _variant = 1; }
 
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -10253,6 +10290,10 @@ public partial class OptionResultOptionUtf8StringError : IDisposable
     public ResultOptionUtf8StringError AsSome() { if (_variant != 0) { throw ExceptionForVariant(); } else { return _Some; } }
     public void AsNone() { if (_variant != 1) throw ExceptionForVariant(); }
 
+    // Case constructors — the union creation members the compiler reads case types from.
+    public OptionResultOptionUtf8StringError(SomeCase value) { _variant = 0; _Some = value.Value; }
+    public OptionResultOptionUtf8StringError(NoneCase value) { _variant = 1; }
+
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public override string ToString()
@@ -10421,6 +10462,10 @@ public partial struct OptionEnumPayload
     public EnumPayload AsSome() { if (_variant != 0) { throw ExceptionForVariant(); } else { return _Some; } }
     public void AsNone() { if (_variant != 1) throw ExceptionForVariant(); }
 
+    // Case constructors — the union creation members the compiler reads case types from.
+    public OptionEnumPayload(SomeCase value) { _variant = 0; _Some = value.Value; _hasValue = true; }
+    public OptionEnumPayload(NoneCase value) { _variant = 1; _hasValue = true; }
+
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public override string ToString()
@@ -10583,6 +10628,10 @@ public partial struct OptionInner
     // Conversions
     public Inner AsSome() { if (_variant != 0) { throw ExceptionForVariant(); } else { return _Some; } }
     public void AsNone() { if (_variant != 1) throw ExceptionForVariant(); }
+
+    // Case constructors — the union creation members the compiler reads case types from.
+    public OptionInner(SomeCase value) { _variant = 0; _Some = value.Value; _hasValue = true; }
+    public OptionInner(NoneCase value) { _variant = 1; _hasValue = true; }
 
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -10800,6 +10849,12 @@ public partial class ResultOptionUtf8StringError : IResult<OptionUtf8String, Err
     public Error AsErr() { if (_variant != 1) { throw ExceptionForVariant(); } else { return _Err; } }
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
+
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultOptionUtf8StringError(OkCase value) { _variant = 0; _Ok = value.Value; }
+    public ResultOptionUtf8StringError(ErrCase value) { _variant = 1; _Err = value.Value; }
+    public ResultOptionUtf8StringError(PanicCase value) { _variant = 2; }
+    public ResultOptionUtf8StringError(NullCase value) { _variant = 3; }
 
 
     // FromCall
@@ -11040,6 +11095,12 @@ public partial class ResultServiceAsyncCancelError : IResult<IntPtr, Error>, IDi
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
 
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultServiceAsyncCancelError(OkCase value) { _variant = 0; _Ok = value.Value; }
+    public ResultServiceAsyncCancelError(ErrCase value) { _variant = 1; _Err = value.Value; }
+    public ResultServiceAsyncCancelError(PanicCase value) { _variant = 2; }
+    public ResultServiceAsyncCancelError(NullCase value) { _variant = 3; }
+
 
     // FromCall
     public static ResultServiceAsyncCancelError FromCall(Func<IntPtr> func)
@@ -11277,6 +11338,12 @@ public partial class ResultServiceAsyncCtorError : IResult<IntPtr, Error>, IDisp
     public Error AsErr() { if (_variant != 1) { throw ExceptionForVariant(); } else { return _Err; } }
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
+
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultServiceAsyncCtorError(OkCase value) { _variant = 0; _Ok = value.Value; }
+    public ResultServiceAsyncCtorError(ErrCase value) { _variant = 1; _Err = value.Value; }
+    public ResultServiceAsyncCtorError(PanicCase value) { _variant = 2; }
+    public ResultServiceAsyncCtorError(NullCase value) { _variant = 3; }
 
 
     // FromCall
@@ -11516,6 +11583,12 @@ public partial class ResultServiceAsyncPanicError : IResult<IntPtr, Error>, IDis
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
 
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultServiceAsyncPanicError(OkCase value) { _variant = 0; _Ok = value.Value; }
+    public ResultServiceAsyncPanicError(ErrCase value) { _variant = 1; _Err = value.Value; }
+    public ResultServiceAsyncPanicError(PanicCase value) { _variant = 2; }
+    public ResultServiceAsyncPanicError(NullCase value) { _variant = 3; }
+
 
     // FromCall
     public static ResultServiceAsyncPanicError FromCall(Func<IntPtr> func)
@@ -11753,6 +11826,12 @@ public partial class ResultServiceAsyncResultError : IResult<IntPtr, Error>, IDi
     public Error AsErr() { if (_variant != 1) { throw ExceptionForVariant(); } else { return _Err; } }
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
+
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultServiceAsyncResultError(OkCase value) { _variant = 0; _Ok = value.Value; }
+    public ResultServiceAsyncResultError(ErrCase value) { _variant = 1; _Err = value.Value; }
+    public ResultServiceAsyncResultError(PanicCase value) { _variant = 2; }
+    public ResultServiceAsyncResultError(NullCase value) { _variant = 3; }
 
 
     // FromCall
@@ -11992,6 +12071,12 @@ public partial class ResultServiceAsyncSleepError : IResult<IntPtr, Error>, IDis
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
 
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultServiceAsyncSleepError(OkCase value) { _variant = 0; _Ok = value.Value; }
+    public ResultServiceAsyncSleepError(ErrCase value) { _variant = 1; _Err = value.Value; }
+    public ResultServiceAsyncSleepError(PanicCase value) { _variant = 2; }
+    public ResultServiceAsyncSleepError(NullCase value) { _variant = 3; }
+
 
     // FromCall
     public static ResultServiceAsyncSleepError FromCall(Func<IntPtr> func)
@@ -12229,6 +12314,12 @@ public partial class ResultServiceAsyncStructsError : IResult<IntPtr, Error>, ID
     public Error AsErr() { if (_variant != 1) { throw ExceptionForVariant(); } else { return _Err; } }
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
+
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultServiceAsyncStructsError(OkCase value) { _variant = 0; _Ok = value.Value; }
+    public ResultServiceAsyncStructsError(ErrCase value) { _variant = 1; _Err = value.Value; }
+    public ResultServiceAsyncStructsError(PanicCase value) { _variant = 2; }
+    public ResultServiceAsyncStructsError(NullCase value) { _variant = 3; }
 
 
     // FromCall
@@ -12468,6 +12559,12 @@ public partial class ResultServiceAsyncVecStringError : IResult<IntPtr, Error>, 
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
 
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultServiceAsyncVecStringError(OkCase value) { _variant = 0; _Ok = value.Value; }
+    public ResultServiceAsyncVecStringError(ErrCase value) { _variant = 1; _Err = value.Value; }
+    public ResultServiceAsyncVecStringError(PanicCase value) { _variant = 2; }
+    public ResultServiceAsyncVecStringError(NullCase value) { _variant = 3; }
+
 
     // FromCall
     public static ResultServiceAsyncVecStringError FromCall(Func<IntPtr> func)
@@ -12705,6 +12802,12 @@ public partial class ResultServiceAsyncWireError : IResult<IntPtr, Error>, IDisp
     public Error AsErr() { if (_variant != 1) { throw ExceptionForVariant(); } else { return _Err; } }
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
+
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultServiceAsyncWireError(OkCase value) { _variant = 0; _Ok = value.Value; }
+    public ResultServiceAsyncWireError(ErrCase value) { _variant = 1; _Err = value.Value; }
+    public ResultServiceAsyncWireError(PanicCase value) { _variant = 2; }
+    public ResultServiceAsyncWireError(NullCase value) { _variant = 3; }
 
 
     // FromCall
@@ -12944,6 +13047,12 @@ public partial class ResultServiceCallbacksError : IResult<IntPtr, Error>, IDisp
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
 
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultServiceCallbacksError(OkCase value) { _variant = 0; _Ok = value.Value; }
+    public ResultServiceCallbacksError(ErrCase value) { _variant = 1; _Err = value.Value; }
+    public ResultServiceCallbacksError(PanicCase value) { _variant = 2; }
+    public ResultServiceCallbacksError(NullCase value) { _variant = 3; }
+
 
     // FromCall
     public static ResultServiceCallbacksError FromCall(Func<IntPtr> func)
@@ -13181,6 +13290,12 @@ public partial class ResultServiceDependentError : IResult<IntPtr, Error>, IDisp
     public Error AsErr() { if (_variant != 1) { throw ExceptionForVariant(); } else { return _Err; } }
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
+
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultServiceDependentError(OkCase value) { _variant = 0; _Ok = value.Value; }
+    public ResultServiceDependentError(ErrCase value) { _variant = 1; _Err = value.Value; }
+    public ResultServiceDependentError(PanicCase value) { _variant = 2; }
+    public ResultServiceDependentError(NullCase value) { _variant = 3; }
 
 
     // FromCall
@@ -13420,6 +13535,12 @@ public partial class ResultServiceIgnoringMethodsError : IResult<IntPtr, Error>,
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
 
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultServiceIgnoringMethodsError(OkCase value) { _variant = 0; _Ok = value.Value; }
+    public ResultServiceIgnoringMethodsError(ErrCase value) { _variant = 1; _Err = value.Value; }
+    public ResultServiceIgnoringMethodsError(PanicCase value) { _variant = 2; }
+    public ResultServiceIgnoringMethodsError(NullCase value) { _variant = 3; }
+
 
     // FromCall
     public static ResultServiceIgnoringMethodsError FromCall(Func<IntPtr> func)
@@ -13657,6 +13778,12 @@ public partial class ResultServiceMainError : IResult<IntPtr, Error>, IDisposabl
     public Error AsErr() { if (_variant != 1) { throw ExceptionForVariant(); } else { return _Err; } }
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
+
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultServiceMainError(OkCase value) { _variant = 0; _Ok = value.Value; }
+    public ResultServiceMainError(ErrCase value) { _variant = 1; _Err = value.Value; }
+    public ResultServiceMainError(PanicCase value) { _variant = 2; }
+    public ResultServiceMainError(NullCase value) { _variant = 3; }
 
 
     // FromCall
@@ -13896,6 +14023,12 @@ public partial class ResultServiceMultipleCtorsError : IResult<IntPtr, Error>, I
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
 
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultServiceMultipleCtorsError(OkCase value) { _variant = 0; _Ok = value.Value; }
+    public ResultServiceMultipleCtorsError(ErrCase value) { _variant = 1; _Err = value.Value; }
+    public ResultServiceMultipleCtorsError(PanicCase value) { _variant = 2; }
+    public ResultServiceMultipleCtorsError(NullCase value) { _variant = 3; }
+
 
     // FromCall
     public static ResultServiceMultipleCtorsError FromCall(Func<IntPtr> func)
@@ -14133,6 +14266,12 @@ public partial class ResultServiceResultError : IResult<IntPtr, Error>, IDisposa
     public Error AsErr() { if (_variant != 1) { throw ExceptionForVariant(); } else { return _Err; } }
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
+
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultServiceResultError(OkCase value) { _variant = 0; _Ok = value.Value; }
+    public ResultServiceResultError(ErrCase value) { _variant = 1; _Err = value.Value; }
+    public ResultServiceResultError(PanicCase value) { _variant = 2; }
+    public ResultServiceResultError(NullCase value) { _variant = 3; }
 
 
     // FromCall
@@ -14372,6 +14511,12 @@ public partial class ResultServiceStringsError : IResult<IntPtr, Error>, IDispos
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
 
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultServiceStringsError(OkCase value) { _variant = 0; _Ok = value.Value; }
+    public ResultServiceStringsError(ErrCase value) { _variant = 1; _Err = value.Value; }
+    public ResultServiceStringsError(PanicCase value) { _variant = 2; }
+    public ResultServiceStringsError(NullCase value) { _variant = 3; }
+
 
     // FromCall
     public static ResultServiceStringsError FromCall(Func<IntPtr> func)
@@ -14610,6 +14755,12 @@ public partial class ResultServiceVariousSlicesError : IResult<IntPtr, Error>, I
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
 
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultServiceVariousSlicesError(OkCase value) { _variant = 0; _Ok = value.Value; }
+    public ResultServiceVariousSlicesError(ErrCase value) { _variant = 1; _Err = value.Value; }
+    public ResultServiceVariousSlicesError(PanicCase value) { _variant = 2; }
+    public ResultServiceVariousSlicesError(NullCase value) { _variant = 3; }
+
 
     // FromCall
     public static ResultServiceVariousSlicesError FromCall(Func<IntPtr> func)
@@ -14847,6 +14998,12 @@ public partial class ResultUseStringError : IResult<UseString, Error>, IDisposab
     public Error AsErr() { if (_variant != 1) { throw ExceptionForVariant(); } else { return _Err; } }
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
+
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultUseStringError(OkCase value) { _variant = 0; _Ok = value.Value; }
+    public ResultUseStringError(ErrCase value) { _variant = 1; _Err = value.Value; }
+    public ResultUseStringError(PanicCase value) { _variant = 2; }
+    public ResultUseStringError(NullCase value) { _variant = 3; }
 
 
     // FromCall
@@ -15087,6 +15244,12 @@ public partial class ResultUtf8StringError : IResult<Utf8String, Error>, IDispos
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
 
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultUtf8StringError(OkCase value) { _variant = 0; _Ok = value.Value; }
+    public ResultUtf8StringError(ErrCase value) { _variant = 1; _Err = value.Value; }
+    public ResultUtf8StringError(PanicCase value) { _variant = 2; }
+    public ResultUtf8StringError(NullCase value) { _variant = 3; }
+
 
     // FromCall
     public static ResultUtf8StringError FromCall(Func<Utf8String> func)
@@ -15325,6 +15488,12 @@ public partial class ResultVecUtf8StringError : IResult<VecUtf8String, Error>, I
     public Error AsErr() { if (_variant != 1) { throw ExceptionForVariant(); } else { return _Err; } }
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
+
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultVecUtf8StringError(OkCase value) { _variant = 0; _Ok = value.Value; }
+    public ResultVecUtf8StringError(ErrCase value) { _variant = 1; _Err = value.Value; }
+    public ResultVecUtf8StringError(PanicCase value) { _variant = 2; }
+    public ResultVecUtf8StringError(NullCase value) { _variant = 3; }
 
 
     // FromCall
@@ -15565,6 +15734,12 @@ public partial class ResultWireOfHashMapStringStringError : IResult<WireOfHashMa
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
 
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultWireOfHashMapStringStringError(OkCase value) { _variant = 0; _Ok = value.Value; }
+    public ResultWireOfHashMapStringStringError(ErrCase value) { _variant = 1; _Err = value.Value; }
+    public ResultWireOfHashMapStringStringError(PanicCase value) { _variant = 2; }
+    public ResultWireOfHashMapStringStringError(NullCase value) { _variant = 3; }
+
 
     // FromCall
     public static ResultWireOfHashMapStringStringError FromCall(Func<WireOfHashMapStringString> func)
@@ -15793,6 +15968,12 @@ public partial struct ResultNestedArrayError : IResult<NestedArray, Error>
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
 
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultNestedArrayError(OkCase value) { _variant = 0; _Ok = value.Value; _hasValue = true; }
+    public ResultNestedArrayError(ErrCase value) { _variant = 1; _Err = value.Value; _hasValue = true; }
+    public ResultNestedArrayError(PanicCase value) { _variant = 2; _hasValue = true; }
+    public ResultNestedArrayError(NullCase value) { _variant = 3; _hasValue = true; }
+
 
     // FromCall
     public static ResultNestedArrayError FromCall(Func<NestedArray> func)
@@ -16015,6 +16196,12 @@ public partial struct ResultOptionEnumPayloadError : IResult<OptionEnumPayload, 
     public Error AsErr() { if (_variant != 1) { throw ExceptionForVariant(); } else { return _Err; } }
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
+
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultOptionEnumPayloadError(OkCase value) { _variant = 0; _Ok = value.Value; _hasValue = true; }
+    public ResultOptionEnumPayloadError(ErrCase value) { _variant = 1; _Err = value.Value; _hasValue = true; }
+    public ResultOptionEnumPayloadError(PanicCase value) { _variant = 2; _hasValue = true; }
+    public ResultOptionEnumPayloadError(NullCase value) { _variant = 3; _hasValue = true; }
 
 
     // FromCall
@@ -16239,6 +16426,12 @@ public partial struct ResultUintError : IResult<uint, Error>
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
 
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultUintError(OkCase value) { _variant = 0; _Ok = value.Value; _hasValue = true; }
+    public ResultUintError(ErrCase value) { _variant = 1; _Err = value.Value; _hasValue = true; }
+    public ResultUintError(PanicCase value) { _variant = 2; _hasValue = true; }
+    public ResultUintError(NullCase value) { _variant = 3; _hasValue = true; }
+
 
     // FromCall
     public static ResultUintError FromCall(Func<uint> func)
@@ -16462,6 +16655,12 @@ public partial struct ResultUlongError : IResult<ulong, Error>
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
 
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultUlongError(OkCase value) { _variant = 0; _Ok = value.Value; _hasValue = true; }
+    public ResultUlongError(ErrCase value) { _variant = 1; _Err = value.Value; _hasValue = true; }
+    public ResultUlongError(PanicCase value) { _variant = 2; _hasValue = true; }
+    public ResultUlongError(NullCase value) { _variant = 3; _hasValue = true; }
+
 
     // FromCall
     public static ResultUlongError FromCall(Func<ulong> func)
@@ -16669,6 +16868,12 @@ public partial struct ResultVoidError : IResult<Unit, Error>
     public Error AsErr() { if (_variant != 1) { throw ExceptionForVariant(); } else { return _Err; } }
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
+
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultVoidError(OkCase value) { _variant = 0; _hasValue = true; }
+    public ResultVoidError(ErrCase value) { _variant = 1; _Err = value.Value; _hasValue = true; }
+    public ResultVoidError(PanicCase value) { _variant = 2; _hasValue = true; }
+    public ResultVoidError(NullCase value) { _variant = 3; _hasValue = true; }
 
 
     // FromCall
@@ -17004,6 +17209,11 @@ public partial struct EnumNum
     public void AsB() { if (_variant != 1) throw ExceptionForVariant(); }
     public nint AsC() { if (_variant != 2) { throw ExceptionForVariant(); } else { return _C; } }
 
+    // Case constructors — the union creation members the compiler reads case types from.
+    public EnumNum(ACase value) { _variant = 0; _A = value.Value; _hasValue = true; }
+    public EnumNum(BCase value) { _variant = 1; _hasValue = true; }
+    public EnumNum(CCase value) { _variant = 2; _C = value.Value; _hasValue = true; }
+
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public override string ToString()
@@ -17195,6 +17405,11 @@ public partial struct EnumPayload
     public void AsA() { if (_variant != 0) throw ExceptionForVariant(); }
     public Vec3f32 AsB() { if (_variant != 1) { throw ExceptionForVariant(); } else { return _B; } }
     public uint AsC() { if (_variant != 2) { throw ExceptionForVariant(); } else { return _C; } }
+
+    // Case constructors — the union creation members the compiler reads case types from.
+    public EnumPayload(ACase value) { _variant = 0; _hasValue = true; }
+    public EnumPayload(BCase value) { _variant = 1; _B = value.Value; _hasValue = true; }
+    public EnumPayload(CCase value) { _variant = 2; _C = value.Value; _hasValue = true; }
 
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]

@@ -258,6 +258,12 @@ public partial class ResultCounterError : IResult<IntPtr, Error>, IDisposable
     public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
 
+    // Case constructors — the union creation members the compiler reads case types from.
+    public ResultCounterError(OkCase value) { _variant = 0; _Ok = value.Value; }
+    public ResultCounterError(ErrCase value) { _variant = 1; _Err = value.Value; }
+    public ResultCounterError(PanicCase value) { _variant = 2; }
+    public ResultCounterError(NullCase value) { _variant = 3; }
+
 
     // FromCall
     public static ResultCounterError FromCall(Func<IntPtr> func)
