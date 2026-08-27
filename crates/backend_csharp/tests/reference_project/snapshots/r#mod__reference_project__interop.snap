@@ -299,6 +299,7 @@ public partial struct OptionUint : IUnion
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
+        if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default OptionUint: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Some._Some = _Some;
@@ -311,6 +312,7 @@ public partial struct OptionUint : IUnion
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default OptionUint: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Some._Some = _Some;
@@ -467,6 +469,7 @@ public partial struct OptionVec : IUnion
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
+        if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default OptionVec: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Some._Some = _Some.ToUnmanaged();
@@ -479,6 +482,7 @@ public partial struct OptionVec : IUnion
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default OptionVec: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Some._Some = _Some.AsUnmanaged();
@@ -626,6 +630,7 @@ public partial struct ResultVoidVoid : IUnion, IResult<Unit, Unit>
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
+        if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default ResultVoidVoid: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         return _unmanaged;
@@ -637,6 +642,7 @@ public partial struct ResultVoidVoid : IUnion, IResult<Unit, Unit>
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default ResultVoidVoid: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         return _unmanaged;
@@ -9633,6 +9639,7 @@ public partial struct EnumExplicitPayload : IUnion
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
+        if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default EnumExplicitPayload: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 11) _unmanaged._B._B = _B;
@@ -9646,6 +9653,7 @@ public partial struct EnumExplicitPayload : IUnion
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default EnumExplicitPayload: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 11) _unmanaged._B._B = _B;
@@ -10199,6 +10207,7 @@ public partial struct OptionEnumPayload : IUnion
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
+        if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default OptionEnumPayload: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Some._Some = _Some.ToUnmanaged();
@@ -10211,6 +10220,7 @@ public partial struct OptionEnumPayload : IUnion
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default OptionEnumPayload: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Some._Some = _Some.AsUnmanaged();
@@ -10367,6 +10377,7 @@ public partial struct OptionInner : IUnion
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
+        if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default OptionInner: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Some._Some = _Some.ToUnmanaged();
@@ -10379,6 +10390,7 @@ public partial struct OptionInner : IUnion
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default OptionInner: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Some._Some = _Some.AsUnmanaged();
@@ -15702,6 +15714,7 @@ public partial struct ResultNestedArrayError : IUnion, IResult<NestedArray, Erro
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
+        if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default ResultNestedArrayError: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok.ToUnmanaged();
@@ -15715,6 +15728,7 @@ public partial struct ResultNestedArrayError : IUnion, IResult<NestedArray, Erro
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default ResultNestedArrayError: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok.AsUnmanaged();
@@ -15932,6 +15946,7 @@ public partial struct ResultOptionEnumPayloadError : IUnion, IResult<OptionEnumP
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
+        if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default ResultOptionEnumPayloadError: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok.ToUnmanaged();
@@ -15945,6 +15960,7 @@ public partial struct ResultOptionEnumPayloadError : IUnion, IResult<OptionEnumP
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default ResultOptionEnumPayloadError: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok.AsUnmanaged();
@@ -16162,6 +16178,7 @@ public partial struct ResultUintError : IUnion, IResult<uint, Error>
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
+        if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default ResultUintError: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
@@ -16175,6 +16192,7 @@ public partial struct ResultUintError : IUnion, IResult<uint, Error>
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default ResultUintError: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
@@ -16392,6 +16410,7 @@ public partial struct ResultUlongError : IUnion, IResult<ulong, Error>
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
+        if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default ResultUlongError: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
@@ -16405,6 +16424,7 @@ public partial struct ResultUlongError : IUnion, IResult<ulong, Error>
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default ResultUlongError: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
@@ -16609,6 +16629,7 @@ public partial struct ResultVoidError : IUnion, IResult<Unit, Error>
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
+        if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default ResultVoidError: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 1) _unmanaged._Err._Err = _Err;
@@ -16621,6 +16642,7 @@ public partial struct ResultVoidError : IUnion, IResult<Unit, Error>
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default ResultVoidError: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 1) _unmanaged._Err._Err = _Err;
@@ -16876,6 +16898,7 @@ public partial struct EnumNum : IUnion
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
+        if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default EnumNum: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._A._A = _A;
@@ -16889,6 +16912,7 @@ public partial struct EnumNum : IUnion
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default EnumNum: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 0) _unmanaged._A._A = _A;
@@ -17074,6 +17098,7 @@ public partial struct EnumPayload : IUnion
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
+        if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default EnumPayload: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 1) _unmanaged._B._B = _B.ToUnmanaged();
@@ -17087,6 +17112,7 @@ public partial struct EnumPayload : IUnion
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default EnumPayload: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
         if (_variant == 1) _unmanaged._B._B = _B.AsUnmanaged();
