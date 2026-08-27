@@ -897,6 +897,34 @@ struct, interface and record — not on `enum`.** So "branch both emitters, one 
 cannot be split across two declarations, and making `body.rs` return nothing instead trips the
 guard above and deletes the type.
 
+**Before any of that: step three is not primarily an emission change, and the routes below are
+downstream of the decision that actually matters.** `managed_conversion.rs` classifies every
+`DataEnum` as *at least* `To` — its comment says so in as many words, "Enums: at least To; Into
+if any variant data is Into" — and never `AsIs`. That one classification is what produces all
+three of the downstream breakages found on 2026-08-27, which are not three problems:
+
+- **Composites.** `NestedArray`'s generated `Unmanaged` calls `field_enum.ToUnmanaged()`, while
+  `field_bool` and `field_int` beside it are copied straight across. The difference is nothing
+  but `ManagedConversion`.
+- **Slices.** `slices.rs` sends `AsIs` elements to `fast.cs` and everything else to
+  `marshalling.cs`. Same classification, same reason.
+- **The mirror itself.** A type with a non-`AsIs` conversion is what an `Unmanaged` nested struct
+  and a marshaller exist to serve.
+
+**So the lever is making a plain-enum-projected `DataEnum` `AsIs`,** and the emission change
+follows from it rather than the other way round. Get that right and composites copy the field
+like a `bool`, slices move to the pinning path, and `unmanaged_names` stops manufacturing
+`X.Unmanaged` — all without touching those emitters. Get it wrong and no amount of work in
+`definition.rs` will help.
+
+**Settle the pass dependency first.** `managed_conversion` would have to consult `projection`,
+which nothing upstream of it does today: `projection` reads raw `TypeKind`s and is currently
+independent, while `struct_class` and `disposable` read `managed_conversion`. Two options, and
+they are not equivalent — thread `projection` into `managed_conversion` and let the convergence
+loop settle the cycle, or re-derive `!is_union_projected()` inside `managed_conversion` and
+accept a second copy of the predicate. The second is exactly the duplication step two just
+removed, so prefer the first, but check that the loop converges rather than assuming it.
+
 **Two routes remain. Try the first.**
 
 - **`definition.rs` emits the whole `enum`, and `body.rs` yields an empty string.** Both guards
