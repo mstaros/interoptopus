@@ -22,13 +22,29 @@ was built by listing, 2026-08-27.
 `11.0.100-preview.7.26381.103`. `rt/dynamic.rs` pins hostfxr at `11.0.0-preview.1`, deliberately a
 pre-release; leave it. `LangVersion=preview` is set in `Directory.Build.props`.
 
-**The front item is 4** — the empty guard on `ToUnmanaged`/`AsUnmanaged`. It has no gate. **It is
-specified in `csharp-unions.md` § Step 4, not here**; §5 of this document only names it. Read that
-section before starting: the validated switch, the definite-assignment rule and the tag provenance
-are all there.
+**There are two tracks, and the plan's front is not the objective. Read this before picking one.**
+
+| | Track A — the plan's front | Track B — the objective |
+|---|---|---|
+| What | Item 4, then 4a: reject the empty struct state in `ToUnmanaged`/`AsUnmanaged`, then rebuild `ToManaged` on the case constructors | The projection pass, steps two and three: give the model a notion of *how a type is projected*, then route unit-only enums to a plain C# `enum` |
+| Why it is listed first | It is the next unstarted row of `csharp-unions.md` § Todo/Remaining | It is what the repository owner asked for and it has **not happened** |
+| Where specified | `csharp-unions.md` § Step 4 \(**not** §5 of this document, which only names it\) | §9 of this document |
+| Gate | none | step one landed in `1429746b` |
+
+**If you do only one thing, do Track B.** Every `#[ffi]` enum is still emitted as a ~120-line
+struct; `Color { Red, Green, Blue }` produces a discriminant field, an `Unmanaged` mirror and a
+marshaller, exactly as before any of this work began. Union projection for payload-carrying enums
+is finished and is the part that shows up in the landing log. **Plain enums are the part that was
+asked for and is missing**, and a reader who takes "the front item is 4" at face value will plan a
+week of marshalling work without noticing. That sentence used to be all this section said; it is
+recorded here because it actually misled a fresh reader.
+
+Track A is not wrong and is not blocked — it is the correct next row if you are working the plan
+in order. It just is not the thing anyone is waiting for.
 
 **Status is `csharp-unions.md` § Todo/Remaining, and only there.** Where this document and that
-table disagree, the table wins.
+table disagree, the table wins. Note that the table orders by dependency, not by priority, which
+is the whole reason for the two-track note above.
 
 **File map.** Everything below is under `crates/backend_csharp/`:
 
@@ -38,7 +54,7 @@ table disagree, the table wins.
 | Kind assignment | `src/pass/model/common/types/kind/{enum.rs, enum_variants.rs, patterns.rs}` |
 | Synthesised `Result`/`Option` carriers | `src/pass/model/common/types/fallback.rs` |
 | Name allocation, the single naming authority | `src/pass/model/common/types/union_names.rs` |
-| Derived facts about a type | `src/pass/model/common/types/info/{managed_conversion, struct_class, disposable, nullable, projection}.rs` |
+| Derived facts about a type, **including `projection`** | `src/pass/model/common/types/info/{managed_conversion, struct_class, disposable, nullable, projection}.rs` |
 | Enum output passes | `src/pass/output/common/types/enums/*.rs` |
 | Templates the passes render | `templates/common/types/enums/*.cs`, `templates/rust/header.cs` |
 | Wire name resolution | `src/pass/output/common/wire/cs_names.rs` |
