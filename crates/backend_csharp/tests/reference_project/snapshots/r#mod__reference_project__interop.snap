@@ -1,6 +1,5 @@
 ---
 source: crates/backend_csharp/tests/reference_project/mod.rs
-assertion_line: 27
 expression: multibuf
 ---
 === Interop.Common.cs ===
@@ -10223,8 +10222,8 @@ public partial class Layer3String : IUnion, IDisposable
     {
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
-        if (_variant == 0) _unmanaged._A._A = _A.IntoUnmanaged();
-        if (_variant == 1) _unmanaged._B._B = _B.IntoUnmanaged();
+        if (_variant == 0) _unmanaged._A._A = _A?.IntoUnmanaged() ?? throw new InvalidOperationException("Cannot marshal Layer3String.A: its payload is null and corresponds to no Rust variant. Construct it through a case constructor or factory.");
+        if (_variant == 1) _unmanaged._B._B = _B?.IntoUnmanaged() ?? throw new InvalidOperationException("Cannot marshal Layer3String.B: its payload is null and corresponds to no Rust variant. Construct it through a case constructor or factory.");
         return _unmanaged;
     }
 
@@ -10236,8 +10235,8 @@ public partial class Layer3String : IUnion, IDisposable
     {
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
-        if (_variant == 0) _unmanaged._A._A = _A.AsUnmanaged();
-        if (_variant == 1) _unmanaged._B._B = _B.AsUnmanaged();
+        if (_variant == 0) _unmanaged._A._A = _A?.AsUnmanaged() ?? throw new InvalidOperationException("Cannot marshal Layer3String.A: its payload is null and corresponds to no Rust variant. Construct it through a case constructor or factory.");
+        if (_variant == 1) _unmanaged._B._B = _B?.AsUnmanaged() ?? throw new InvalidOperationException("Cannot marshal Layer3String.B: its payload is null and corresponds to no Rust variant. Construct it through a case constructor or factory.");
         return _unmanaged;
     }
 
@@ -16005,7 +16004,7 @@ public partial class ResultUseStringError : IUnion, IResult<UseString, Error>, I
     {
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
-        if (_variant == 0) _unmanaged._Ok._Ok = _Ok.IntoUnmanaged();
+        if (_variant == 0) _unmanaged._Ok._Ok = _Ok?.IntoUnmanaged() ?? throw new InvalidOperationException("Cannot marshal ResultUseStringError.Ok: its payload is null and corresponds to no Rust variant. Construct it through a case constructor or factory.");
         if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
@@ -16018,7 +16017,7 @@ public partial class ResultUseStringError : IUnion, IResult<UseString, Error>, I
     {
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
-        if (_variant == 0) _unmanaged._Ok._Ok = _Ok.AsUnmanaged();
+        if (_variant == 0) _unmanaged._Ok._Ok = _Ok?.AsUnmanaged() ?? throw new InvalidOperationException("Cannot marshal ResultUseStringError.Ok: its payload is null and corresponds to no Rust variant. Construct it through a case constructor or factory.");
         if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
@@ -19047,7 +19046,7 @@ public partial class Layer2String : IDisposable
     internal Unmanaged IntoUnmanaged()
     {
         var _unmanaged = new Unmanaged();
-        _unmanaged.layer_1 = layer_1.IntoUnmanaged();
+        _unmanaged.layer_1 = layer_1?.IntoUnmanaged() ?? throw new InvalidOperationException("Cannot marshal Layer2String.layer_1: it is null and corresponds to no Rust variant. Construct it through a case constructor or factory.");
         _unmanaged.vec = vec.ToUnmanaged();
         _unmanaged.the_enum = the_enum.ToUnmanaged();
         _unmanaged.strings = strings.IntoUnmanaged();
@@ -19061,7 +19060,7 @@ public partial class Layer2String : IDisposable
     internal Unmanaged AsUnmanaged()
     {
         var _unmanaged = new Unmanaged();
-        _unmanaged.layer_1 = layer_1.AsUnmanaged();
+        _unmanaged.layer_1 = layer_1?.AsUnmanaged() ?? throw new InvalidOperationException("Cannot marshal Layer2String.layer_1: it is null and corresponds to no Rust variant. Construct it through a case constructor or factory.");
         _unmanaged.vec = vec.AsUnmanaged();
         _unmanaged.the_enum = the_enum.AsUnmanaged();
         _unmanaged.strings = strings.AsUnmanaged();
@@ -24486,6 +24485,13 @@ public partial class SliceUseString : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static unsafe SliceUseString From(UseString[] managed)
     {
+        for (var i = 0; i < managed.Length; ++i)
+        {
+            if (managed[i] is null)
+            {
+                throw new InvalidOperationException("Cannot marshal SliceUseString element at index " + i + ": UseString is null and corresponds to no Rust variant. Construct it through a case constructor or factory.");
+            }
+        }
         var rval = new SliceUseString();
         var size = Marshal.SizeOf<UseString.Unmanaged>();
         rval._data = Marshal.AllocHGlobal(size * managed.Length);
