@@ -659,9 +659,14 @@ the pass is `union_names`, it owns naming only, and there is no gate — see Dec
 Items 0–1c, R (the .NET 11 retarget — `LangVersion=preview`, `rt/dynamic.rs`, plugin DLLs;
 `9d664613`, in the Done table above), 1d, **3a, 3b, 3c, 3d, 3f, 4, 4a and 4c** are done, and
 **3e is satisfied but unverified** (see its row). **The open front is 4b** (the exception split).
-Open items #1 is no longer measurement-blocked: all three positions, including an actual
-collection element, are measured. The remaining work is the contract choice and guards at each
-generated boundary.
+
+**Open items #1 is closed**, not merely unblocked. All positions were measured — including an
+actual collection element — the contract was decided (`InvalidOperationException`), and guards
+are emitted at every generated boundary: composite fields (`a79ec28`), nested union payloads
+(`b9b93a2`), and the marshaller for an argument (`4a8d3bc`). `Test.Union.NullMarshalOut.cs`
+executes all of it. So 4b inherits a settled question rather than an open one — whatever it
+decides for the *variant* exception must sit alongside `InvalidOperationException` for the *null
+and empty* cases, which items 4, 4c and #1 have already fixed.
 
 **The test items are almost all closed now.** `3e`, `5d`, `5e`, `5f`, `5h` and `5i` are done, and
 the guards they cover are executed rather than asserted as text. `5g` is the only one of that
@@ -783,7 +788,41 @@ Multi-field and named variant support. Retiring `IsOk` / `AsOk`.
 
 ## Open items
 
-1. **Null at marshal-out for a class-backed union.**
+1. ~~Null at marshal-out for a class-backed union.~~ **Closed — decided, implemented in all three positions, and executed.**
+
+   **Landed:** position (b), a class-backed union as a composite field, in `a79ec28`; position
+   (c), a null union as another union's case payload, in `b9b93a2`; position (a), the union
+   passed as an argument, in `4a8d3bc`. All three throw `InvalidOperationException` naming the
+   type. `Tests/Test.Union.NullMarshalOut.cs` asserts all three plus a control, and has completed
+   its transition from recording observed behaviour to asserting the decided contract.
+
+   **One classification, three emission sites.** `nullable.rs` widened from a boolean to
+   `NullPolicy { NotNullable, SubstituteDefault, Throw }`; the composite passes, `enums::
+   guard_null_payload` and the generated `Marshaller`/`InMarshaller` all read it. Position (a)
+   deliberately reuses `NullPolicy::Throw` rather than re-deriving "class-backed union" from
+   `struct_class` + `projection`, because that derivation is where this went wrong once already.
+
+   **Two hazards worth carrying, both found by the C# suite rather than by reading:**
+
+   - `struct_class::is_class` is `!is_struct` over `unwrap_or(false)`, so an **unresolved** type
+     reports `is_class == true` — a wrong answer, not a not-ready signal. Trusting it emitted
+     `?.` on a struct-backed union, which is `CS0023`. Fixed by adding
+     `struct_class::is_resolved` as a positive readiness signal and gating on it.
+   - The two pipelines order `nullable` differently against `struct_class`/`projection` — `rust`
+     runs it before, `dotnet` after. `nullable` is write-once, so without a not-ready guard the
+     rust pipeline caches a wrong answer on round one and never revisits.
+
+   **`Issues.md` `b4e07f12` is unblocked**, with its condition satisfied rather than waived:
+   class-backed unions are now excluded from the `?? default` path **explicitly**, via
+   `NullPolicy::Throw`, so delegating `nullable.rs` to `struct_class::is_class` for other
+   reference types no longer risks answering this item by accident.
+
+   **Deliberately not done:** `composite/body.cs`'s marshaller has the same shape, so a null
+   class-backed *composite* argument still NREs. That is `b4e07f12`'s territory, and that ticket
+   separately questions whether `?? default` is right even for the types it already covers — so
+   widening there is a decision, not a mechanical extension of this one.
+
+   The original analysis follows, kept because the reasoning outlives the decision.
 
    **Direction.** Marshal-out only — `ToUnmanaged()` / `AsUnmanaged()`, and the same call emitted
    on an enclosing composite's field. `Unmanaged.ToManaged()` constructs from native bytes and can
