@@ -518,6 +518,23 @@ public partial struct Array
 
     [CustomMarshaller(typeof(Array), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
+    [CustomMarshaller(typeof(Array), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
+    internal struct InMarshallerMeta { }
+
+    internal ref struct InMarshaller
+    {
+        private Array _managed;
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public void FromManaged(Array managed) { _managed = managed; }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public void Free() {}
+    }
+
     internal ref struct Marshaller
     {
         private Array _managed;
@@ -676,6 +693,23 @@ public partial struct NestedArray
 
     [CustomMarshaller(typeof(NestedArray), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
+    [CustomMarshaller(typeof(NestedArray), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
+    internal struct InMarshallerMeta { }
+
+    internal ref struct InMarshaller
+    {
+        private NestedArray _managed;
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public void FromManaged(NestedArray managed) { _managed = managed; }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public void Free() {}
+    }
+
     internal ref struct Marshaller
     {
         private NestedArray _managed;
@@ -774,6 +808,23 @@ public partial struct Vec3f32
 
     [CustomMarshaller(typeof(Vec3f32), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
+    [CustomMarshaller(typeof(Vec3f32), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
+    internal struct InMarshallerMeta { }
+
+    internal ref struct InMarshaller
+    {
+        private Vec3f32 _managed;
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public void FromManaged(Vec3f32 managed) { _managed = managed; }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public void Free() {}
+    }
+
     internal ref struct Marshaller
     {
         private Vec3f32 _managed;
@@ -982,6 +1033,23 @@ public partial struct EnumPayload : IUnion
 
     [CustomMarshaller(typeof(EnumPayload), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
+
+    [CustomMarshaller(typeof(EnumPayload), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
+    internal struct InMarshallerMeta { }
+
+    internal ref struct InMarshaller
+    {
+        private EnumPayload _managed;
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public void FromManaged(EnumPayload managed) { _managed = managed; }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public void Free() {}
+    }
 
     internal ref struct Marshaller
     {

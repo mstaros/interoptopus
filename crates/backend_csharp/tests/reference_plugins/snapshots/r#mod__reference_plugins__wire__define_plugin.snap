@@ -387,6 +387,23 @@ internal partial struct WireBuffer
 
     [CustomMarshaller(typeof(WireBuffer), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
+    [CustomMarshaller(typeof(WireBuffer), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
+    internal struct InMarshallerMeta { }
+
+    internal ref struct InMarshaller
+    {
+        private WireBuffer _managed;
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public void FromManaged(WireBuffer managed) { _managed = managed; }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public void Free() {}
+    }
+
     internal ref struct Marshaller
     {
         private WireBuffer _managed;
@@ -549,6 +566,23 @@ public partial class WireOfHashMapStringString : IDisposable
         }
     }
 
+    [CustomMarshaller(typeof(WireOfHashMapStringString), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
+    internal struct InMarshallerMeta { }
+
+    internal ref struct InMarshaller
+    {
+        private WireOfHashMapStringString _managed;
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public void FromManaged(WireOfHashMapStringString managed) { _managed = managed; }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public void Free() {}
+    }
+
     internal ref struct Marshaller
     {
         private WireOfHashMapStringString _managed;
@@ -683,6 +717,23 @@ public partial class WireOfString : IDisposable
         {
             return new WireOfString { Buffer = Buffer };
         }
+    }
+
+    [CustomMarshaller(typeof(WireOfString), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
+    internal struct InMarshallerMeta { }
+
+    internal ref struct InMarshaller
+    {
+        private WireOfString _managed;
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public void FromManaged(WireOfString managed) { _managed = managed; }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public void Free() {}
     }
 
     internal ref struct Marshaller
