@@ -28,6 +28,7 @@ impl Pass {
         managed: &output::common::conversion::unmanaged_conversion::Pass,
         struct_class: &model::common::types::info::struct_class::Pass,
         projection: &model::common::types::info::projection::Pass,
+        nullable: &model::common::types::info::nullable::Pass,
         mode: crate::pass::OperationMode,
     ) -> OutputResult {
         let templates = output_master.templates();
@@ -44,7 +45,8 @@ impl Pass {
                 .iter()
                 .filter_map(|v| {
                     let variant_ty = super::resolve_service_variant(v.ty?, types, mode);
-                    let to_unmanaged = managed.to_unmanaged_suffix(variant_ty).to_string();
+                    let suffix = managed.to_unmanaged_suffix(variant_ty);
+                    let to_unmanaged = super::guard_null_payload(suffix, nullable, variant_ty, name, &v.stem);
 
                     let mut m = HashMap::new();
                     m.insert("name", v.stem.clone());
