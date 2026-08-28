@@ -32,7 +32,7 @@ fn interop() -> Result<(), Box<dyn std::error::Error>> {
 /// `step_count: 1`, selects nothing, and passes a gate it never executed. Measured 2026-08-28 on
 /// `c78c689`, which added a test to `Test.Core.Enums.cs` and never compiled it. A `.cs` *template*
 /// bypasses the generator's tests the same way (`9e3383f`, reverted in `a4e39ad`). Touch a Rust
-/// file in the same commit, and check the summary reports two steps rather than one. That is why unrelated-looking Rust edits accompany C# test commits here; `84eff37e` (item 5e) is one.
+/// file in the same commit, and check the summary reports two steps rather than one. That is why unrelated-looking Rust edits accompany C# test commits here; `84eff37e` (item 5e) is one, as is the commit adding items 5h and 5i.
 #[test]
 fn csharp_suite() -> Result<(), Box<dyn std::error::Error>> {
     // Generate first. The bindings are gitignored, so a fresh worktree has none, and test order

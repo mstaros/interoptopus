@@ -134,4 +134,68 @@ public partial class TestPatternUnion
         Assert.True(none.HasValue);
         Assert.NotNull(none.Value);
     }
+
+    /// Item 5i: a default struct-backed union does not read as its variant-zero case.
+    ///
+    /// This is the behaviour item 4c changed, and until now nothing executed it. `IsOk` read
+    /// `_variant == 0` and `AsOk()` tested only the variant, so a default reported `HasValue`
+    /// false and `IsOk` true at the same time, and `AsOk()` returned a payload read out of
+    /// uninitialised memory — a fabricated value reaching a consumer, not merely a wrong flag.
+    ///
+    /// The exception *type* is deliberately not pinned. `ExceptionForVariant()` still ignores
+    /// `_hasValue` and hands back variant zero's `EnumException`; correcting that is item 4b.
+    /// Asserting the type here would force churn when 4b lands, and the contract 4c established
+    /// is "throws rather than returning a value", which is what this asserts.
+    [Fact]
+    public void a_default_struct_union_does_not_read_as_its_variant_zero_case()
+    {
+        var result = new ResultUintError();
+
+        Assert.False(result.IsOk, "a default union holds no value, so no case is active");
+        Assert.ThrowsAny<Exception>(() => result.AsOk());
+    }
+
+    /// The `Option` half of 4c's soundness obligation: `default(OptionX)` is not `NoneCase`.
+    ///
+    /// Asserted through `HasValue`/`Value` rather than `IsNone`, so it does not depend on which
+    /// variant happens to be tag zero — the distinction 4c exists to preserve.
+    [Fact]
+    public void a_default_option_is_empty_rather_than_none()
+    {
+        var option = new OptionUint();
+
+        Assert.False(option.HasValue);
+        Assert.Null(option.Value);
+    }
+
+    /// Item 5h: a union that never crosses the FFI boundary still gets the whole union surface.
+    ///
+    /// `DataEnum` is managed-only. It carries `[Union]` and implements `IUnion`, but has no
+    /// `[NativeMarshalling]` attribute and no nested `Unmanaged` mirror, because there is nothing
+    /// to marshal it to. That combination is the case item 3d had to get right: `[Union]` sits
+    /// *outside* the `is_managed_only` guard, since that guard governs the mirror and the
+    /// marshaller rather than the projection. An earlier reading put it inside, which would have
+    /// silently dropped the union surface from exactly this type.
+    ///
+    /// The absent `Unmanaged` is the load-bearing assertion. Without it this is just another union
+    /// test; with it, it is the only check that projection and crossing are independent.
+    [Fact]
+    public void a_managed_only_union_is_still_projected_as_a_union()
+    {
+        var type = typeof(DataEnum);
+
+        Assert.Contains(typeof(IUnion), type.GetInterfaces());
+        Assert.Null(
+            type.GetNestedType("Unmanaged", BindingFlags.Public | BindingFlags.NonPublic),
+            "DataEnum is managed-only, so it should have no unmanaged mirror; if one appeared, the "
+                + "union projection and the FFI crossing have been coupled again");
+
+        var s = DataEnum.S("hello");
+
+        Assert.True(s.IsS);
+        Assert.True(s.HasValue);
+        Assert.Equal(new DataEnum.SCase("hello"), s.Value);
+        Assert.True(s.TryGetValue(out DataEnum.SCase sCase));
+        Assert.Equal("hello", sCase.Value);
+    }
 }
