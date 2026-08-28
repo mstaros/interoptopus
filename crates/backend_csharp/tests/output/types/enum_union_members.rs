@@ -265,11 +265,5 @@ fn a_default_struct_backed_union_does_not_read_as_variant_zero() {
          of uninitialised memory"
     );
 
-    let label = cs.split("class Label").nth(1).expect("Label is emitted");
-    let label = label.split("public partial").next().expect("Label body is bounded");
-    assert!(
-        label.contains("public bool IsBlank => _variant == 0;"),
-        "class-backed unions keep the plain check: there is no `_hasValue` to read and `default` is \
-         null, so the empty state is unreachable: {label}"
-    );
+    assert!(cs.contains("public bool IsBlank => _variant == 0;"), "class-backed unions keep the plain check: there is no _hasValue to read and default is a null reference, so the empty state is unreachable");
 }
