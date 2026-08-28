@@ -78,7 +78,7 @@
         public void FromManaged({{ name }} managed) { _managed = managed; }
 
         {{ _fns_decorators_all | indent(width = 8) }}
-        public Unmanaged ToUnmanaged() { return {{ marshaller_managed_receiver }}.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { {% if rejects_null %}if (_managed is null) throw new InvalidOperationException("Cannot marshal a null {{ name }}: it corresponds to no Rust variant. Construct it through a case constructor or factory."); {% endif %}return _managed.AsUnmanaged(); }
 
         {{ _fns_decorators_all | indent(width = 8) }}
         public void Free() {}
@@ -102,7 +102,7 @@
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         {{ _fns_decorators_all | indent(width = 8) }}
-        public Unmanaged ToUnmanaged() { return {{ marshaller_managed_receiver }}.{{ marshaller_to_unmanaged }}(); }
+        public Unmanaged ToUnmanaged() { {% if rejects_null %}if (_managed is null) throw new InvalidOperationException("Cannot marshal a null {{ name }}: it corresponds to no Rust variant. Construct it through a case constructor or factory."); {% endif %}return _managed.{{ marshaller_to_unmanaged }}(); }
 
         {{ _fns_decorators_all | indent(width = 8) }}
         public {{ name }} ToManaged() { return _unmanaged.{{ marshaller_to_managed }}(); }

@@ -658,10 +658,12 @@ the pass is `union_names`, it owns naming only, and there is no gate — see Dec
 
 Items 0–1c, R (the .NET 11 retarget — `LangVersion=preview`, `rt/dynamic.rs`, plugin DLLs;
 `9d664613`, in the Done table above), 1d, **3a, 3b, 3c, 3d, 3f, 4, 4a, 4b and 4c** are done, and
-**3e is satisfied but unverified** (see its row). **Open items #1 is closed:** all three positions
-were measured, and every generated boundary now rejects a null class-backed union with the decided
-`InvalidOperationException` contract before native entry. This unblocks 4d and the remaining Step 5
-work.
+**3e is satisfied but unverified** (see its row). **Open items #1 is closed**, not merely
+unblocked. Earlier commits supplied the composite-field (`a79ec28`), nested-payload (`b9b93a2`)
+and direct-marshaller (`4a8d3bc`) guards. This transaction completes the actual collection
+position, the borrowed marshaller path and the empty-struct accessor classification. Every
+generated boundary now uses the decided `InvalidOperationException` contract before native entry.
+This unblocks 4d and the remaining Step 5 work.
 
 **The test items are almost all closed now.** `3e`, `5d`, `5e`, `5f`, `5h` and `5i` are done, and
 the guards they cover are executed rather than asserted as text. `5g` is the only one of that
@@ -784,7 +786,42 @@ Multi-field and named variant support. Retiring `IsOk` / `AsOk`.
 
 ## Open items
 
-1. **Closed — null at marshal-out for a class-backed union.**
+1. ~~Null at marshal-out for a class-backed union.~~ **Closed — decided, implemented at every
+   measured boundary, and executed.**
+
+   **Landed in stages.** The composite-field guard landed in `a79ec28`, nested union payloads in
+   `b9b93a2`, and the direct marshaller in `4a8d3bc`. This transaction adds the actual collection
+   position — a null element in `Slice<Option<String>>` — plus the borrowed `InMarshaller` path
+   and the related empty-struct `ExceptionForVariant()` classification. The nested payload remains
+   valuable coverage, but it is not position (c).
+
+   **One classification, four emission sites.** `nullable.rs` widened from a boolean to
+   `NullPolicy { NotNullable, SubstituteDefault, Throw }`; the composite passes,
+   `enums::guard_null_payload`, generated `Marshaller` / `InMarshaller`, and non-blittable slice
+   preflight all read it. The slice rejects before `Marshal.AllocHGlobal`. Generic cleanup when a
+   different element conversion throws after allocation remains separate follow-up work.
+
+   **Two hazards worth carrying, both found by the C# suite rather than by reading:**
+
+   - `struct_class::is_class` is `!is_struct` over `unwrap_or(false)`, so an **unresolved** type
+     reports `is_class == true` — a wrong answer, not a not-ready signal. Trusting it emitted
+     `?.` on a struct-backed union, which is `CS0023`. Fixed by adding
+     `struct_class::is_resolved` as a positive readiness signal and gating on it.
+   - The two pipelines order `nullable` differently against `struct_class` / `projection` —
+     `rust` runs it before, `dotnet` after. `nullable` is write-once, so without a not-ready guard
+     the rust pipeline caches a wrong answer on round one and never revisits.
+
+   **`Issues.md` `b4e07f12` is unblocked**, with its condition satisfied rather than waived:
+   class-backed unions are now excluded from the `?? default` path **explicitly**, via
+   `NullPolicy::Throw`, so delegating `nullable.rs` to `struct_class::is_class` for other
+   reference types no longer risks answering this item by accident.
+
+   **Deliberately not done:** `composite/body.cs`'s marshaller has the same shape, so a null
+   class-backed *composite* argument still NREs. That is `b4e07f12`'s territory, and that ticket
+   separately questions whether `?? default` is right even for the types it already covers — so
+   widening there is a decision, not a mechanical extension of this one.
+
+   The original analysis follows, kept because the reasoning outlives the decision.
 
    **Direction.** Marshal-out only — `ToUnmanaged()` / `AsUnmanaged()`, and the same call emitted
    on an enclosing composite's field. `Unmanaged.ToManaged()` constructs from native bytes and can

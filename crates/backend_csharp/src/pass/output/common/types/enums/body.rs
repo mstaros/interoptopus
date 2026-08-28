@@ -28,6 +28,7 @@ impl Pass {
         struct_class: &model::common::types::info::struct_class::Pass,
         disposable: &model::common::types::info::disposable::Pass,
         projection: &model::common::types::info::projection::Pass,
+        nullable: &model::common::types::info::nullable::Pass,
         enum_body_case_types: &output::common::types::enums::body_case_types::Pass,
         enum_body_union_members: &output::common::types::enums::body_union_members::Pass,
         enum_body_unmanaged_variant: &output::common::types::enums::body_unmanaged_variant::Pass,
@@ -112,11 +113,19 @@ impl Pass {
                 Vec::new()
             };
 
+            // Position (a) of `docs/csharp-unions.md` Open items 1: the union arrives here by
+            // argument, and the marshaller dereferences it. `NullPolicy::Throw` is exactly "this
+            // is a class-backed union", already computed and already carrying its own not-ready
+            // handling, so it is reused rather than re-derived from `struct_class` +
+            // `projection`.
+            let rejects_null = nullable.null_policy(*type_id) == Some(model::common::types::info::nullable::NullPolicy::Throw);
+
             let marshaller_to_unmanaged = managed.to_unmanaged_name(*type_id);
             let marshaller_to_managed = managed.to_managed_name(*type_id);
             let result_interface = result_interface(type_kind, types, mode);
 
             let mut context = Context::new();
+            context.insert("rejects_null", &rejects_null);
             context.insert("name", name);
             context.insert("struct_or_class", struct_or_class);
             context.insert("is_disposable", &is_disposable);
@@ -128,15 +137,7 @@ impl Pass {
             // `Unmanaged` mirror and the marshaller, and a managed-only enum can still be a
             // union. `DataEnum` in the reference project is exactly that case.
             let is_union_projected = projection.is_union(ty);
-            let marshaller_managed_receiver = if struct_class.is_class(ty) && is_union_projected {
-                format!(
-                    "(_managed ?? throw new InvalidOperationException(\"Cannot marshal {name}: it is null and corresponds to no Rust variant. Construct it through a case constructor or factory.\"))"
-                )
-            } else {
-                "_managed".to_string()
-            };
             context.insert("is_union_projected", &is_union_projected);
-            context.insert("marshaller_managed_receiver", &marshaller_managed_receiver);
             context.insert("visibility", &visibility);
             context.insert("is_result", &result_interface.is_some());
             context.insert("result_ok_name", result_interface.as_ref().map_or("", |r| r.ok_name.as_str()));

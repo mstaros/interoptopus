@@ -2,7 +2,6 @@
 
 use crate::lang::TypeId;
 use crate::lang::types::kind::{TypeKind, TypePattern};
-use crate::pass::model::common::types::info::nullable::NullPolicy;
 use crate::pass::{OutputResult, PassInfo, model, output};
 use interoptopus_backends::template::Context;
 use std::collections::HashMap;
@@ -27,9 +26,9 @@ impl Pass {
         output_master: &output::common::master::Pass,
         types: &model::common::types::all::Pass,
         managed: &output::common::conversion::unmanaged_conversion::Pass,
-        nullable: &model::common::types::info::nullable::Pass,
         struct_class: &model::common::types::info::struct_class::Pass,
         projection: &model::common::types::info::projection::Pass,
+        nullable: &model::common::types::info::nullable::Pass,
         mode: crate::pass::OperationMode,
     ) -> OutputResult {
         let templates = output_master.templates();
@@ -47,14 +46,7 @@ impl Pass {
                 .filter_map(|v| {
                     let variant_ty = super::resolve_service_variant(v.ty?, types, mode);
                     let suffix = managed.to_unmanaged_suffix(variant_ty);
-                    let to_unmanaged = if nullable.null_policy(variant_ty) == Some(NullPolicy::Throw) {
-                        format!(
-                            "?{suffix} ?? throw new InvalidOperationException(\"Cannot marshal {name}.{}: it is null and corresponds to no Rust variant. Construct it through a case constructor or factory.\")",
-                            v.stem
-                        )
-                    } else {
-                        suffix.to_string()
-                    };
+                    let to_unmanaged = super::guard_null_payload(suffix, nullable, variant_ty, name, &v.stem);
 
                     let mut m = HashMap::new();
                     m.insert("name", v.stem.clone());
