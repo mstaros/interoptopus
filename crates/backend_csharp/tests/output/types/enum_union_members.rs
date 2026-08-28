@@ -267,35 +267,3 @@ fn a_default_struct_backed_union_does_not_read_as_variant_zero() {
 
     assert!(cs.contains("public bool IsBlank => _variant == 0;"), "class-backed unions keep the plain check: there is no _hasValue to read and default is a null reference, so the empty state is unreachable");
 }
-
-
-/// Diagnostic, not an assertion — delete once the question below is answered.
-///
-/// A validation run on 2026-08-28 failed a snapshot whose `Source:` named a **different**
-/// worktree, with every line reported as an addition — `insta` looking for snapshots under a
-/// tree that was not the one under test, finding none, and treating the whole file as new.
-///
-/// Three explanations were proposed and all three were wrong: a stale embedded template, load
-/// contention between concurrent runs, and an sccache key collision. The last was checked
-/// against sccache's own source and refuted — `rust.rs` hashes every `CARGO_*` variable except
-/// four, and separately hashes the compile cwd with the comment "this will wind up in the rlib".
-///
-/// `insta` resolves snapshots from `CARGO_MANIFEST_DIR`, baked in at compile time, **unless**
-/// `INSTA_WORKSPACE_ROOT` overrides it at runtime. These four lines discriminate the remaining
-/// possibilities without another hypothesis:
-///
-/// - compile-time value names a foreign tree → the wrong path was baked in; look at the compiler
-/// - compile-time value is correct but `INSTA_WORKSPACE_ROOT` is set elsewhere → the validation
-///   runner is overriding it, nothing was ever miscompiled, and that is the likeliest answer
-/// - both correct → the failure came from somewhere else entirely and the search widens
-#[test]
-fn diagnostic_where_does_this_binary_think_it_lives() {
-    eprintln!("manifest_dir (compile-time) = {}", env!("CARGO_MANIFEST_DIR"));
-    eprintln!("manifest_dir (runtime)      = {:?}", std::env::var("CARGO_MANIFEST_DIR"));
-    eprintln!("cwd                         = {:?}", std::env::current_dir());
-    eprintln!("INSTA_WORKSPACE_ROOT        = {:?}", std::env::var("INSTA_WORKSPACE_ROOT"));
-
-    // Fail deliberately: nextest only surfaces stdout/stderr for failing tests, and the whole
-    // point is to read the values above.
-    panic!("diagnostic test — see the four lines above, then delete this test");
-}
