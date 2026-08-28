@@ -67,12 +67,7 @@ fn csharp_suite() -> Result<(), Box<dyn std::error::Error>> {
          the native library and every P/Invoke would throw DllNotFoundException",
         copied.display()
     );
-    assert!(
-        crate::is_no_older_than(&copied, &staged)?,
-        "{} predates {}, so the suite loaded a stale native library",
-        copied.display(),
-        staged.display()
-    );
+    assert!(crate::is_no_older_than(&copied, &staged)?, "{} predates {}, so the suite loaded a stale native library", copied.display(), staged.display());
     assert!(
         crate::is_no_older_than(&bindings_assembly, &interop_cs)?,
         "{} predates {}, so the suite ran against bindings compiled from older sources",
