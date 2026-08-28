@@ -55,4 +55,15 @@ impl Pass {
     pub fn is_class(&self, ty: TypeId) -> bool {
         !self.is_struct(ty)
     }
+
+    /// Whether this pass has actually answered for `ty`.
+    ///
+    /// `is_struct` is `unwrap_or(false)` and `is_class` is its negation, so an **unanswered**
+    /// type reports `is_class == true` — a wrong answer rather than a not-ready signal. A
+    /// write-once consumer that trusts the negation will cache that for good. Callers that run
+    /// before this pass in either pipeline must gate on this first.
+    #[must_use]
+    pub fn is_resolved(&self, ty: TypeId) -> bool {
+        self.is_struct.contains_key(&ty)
+    }
 }

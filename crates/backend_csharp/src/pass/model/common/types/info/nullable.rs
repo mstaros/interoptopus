@@ -82,7 +82,7 @@ impl Pass {
                 TypeKind::DataEnum(_) | TypeKind::TypePattern(TypePattern::Result(_, _, _) | TypePattern::Option(_, _))
             );
 
-            if is_enum_kind && projection.projection(*type_id).is_none() {
+            if is_enum_kind && (projection.projection(*type_id).is_none() || !struct_class.is_resolved(*type_id)) {
                 continue;
             }
 
