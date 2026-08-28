@@ -26,6 +26,13 @@ fn interop() -> Result<(), Box<dyn std::error::Error>> {
 ///
 /// Fails rather than skips when `dotnet` is absent. A guard that quietly stops running is the
 /// failure this test exists to end, not one to reproduce.
+///
+/// **Editing only `Tests/*.cs` will not run this test.** Guarded's impact analyser does not model
+/// a `.cs` file as an input to a Rust test, so a commit touching only C# sources validates with
+/// `step_count: 1`, selects nothing, and passes a gate it never executed. Measured 2026-08-28 on
+/// `c78c689`, which added a test to `Test.Core.Enums.cs` and never compiled it. A `.cs` *template*
+/// bypasses the generator's tests the same way (`9e3383f`, reverted in `a4e39ad`). Touch a Rust
+/// file in the same commit, and check the summary reports two steps rather than one.
 #[test]
 fn csharp_suite() -> Result<(), Box<dyn std::error::Error>> {
     // Generate first. The bindings are gitignored, so a fresh worktree has none, and test order
