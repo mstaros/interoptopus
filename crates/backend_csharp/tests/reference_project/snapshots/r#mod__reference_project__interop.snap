@@ -10685,7 +10685,7 @@ public partial class OptionOptionResultOptionUtf8StringError : IUnion, IDisposab
     {
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
-        if (_variant == 0) _unmanaged._Some._Some = _Some.IntoUnmanaged();
+        if (_variant == 0) _unmanaged._Some._Some = _Some?.IntoUnmanaged() ?? throw new InvalidOperationException("Cannot marshal OptionOptionResultOptionUtf8StringError.Some: its payload is null and corresponds to no Rust variant. Construct it through a case constructor or factory.");
         return _unmanaged;
     }
 
@@ -10697,7 +10697,7 @@ public partial class OptionOptionResultOptionUtf8StringError : IUnion, IDisposab
     {
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
-        if (_variant == 0) _unmanaged._Some._Some = _Some.AsUnmanaged();
+        if (_variant == 0) _unmanaged._Some._Some = _Some?.AsUnmanaged() ?? throw new InvalidOperationException("Cannot marshal OptionOptionResultOptionUtf8StringError.Some: its payload is null and corresponds to no Rust variant. Construct it through a case constructor or factory.");
         return _unmanaged;
     }
 
@@ -10888,7 +10888,7 @@ public partial class OptionResultOptionUtf8StringError : IUnion, IDisposable
     {
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
-        if (_variant == 0) _unmanaged._Some._Some = _Some.IntoUnmanaged();
+        if (_variant == 0) _unmanaged._Some._Some = _Some?.IntoUnmanaged() ?? throw new InvalidOperationException("Cannot marshal OptionResultOptionUtf8StringError.Some: its payload is null and corresponds to no Rust variant. Construct it through a case constructor or factory.");
         return _unmanaged;
     }
 
@@ -10900,7 +10900,7 @@ public partial class OptionResultOptionUtf8StringError : IUnion, IDisposable
     {
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
-        if (_variant == 0) _unmanaged._Some._Some = _Some.AsUnmanaged();
+        if (_variant == 0) _unmanaged._Some._Some = _Some?.AsUnmanaged() ?? throw new InvalidOperationException("Cannot marshal OptionResultOptionUtf8StringError.Some: its payload is null and corresponds to no Rust variant. Construct it through a case constructor or factory.");
         return _unmanaged;
     }
 
@@ -11485,7 +11485,7 @@ public partial class ResultOptionUtf8StringError : IUnion, IResult<OptionUtf8Str
     {
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
-        if (_variant == 0) _unmanaged._Ok._Ok = _Ok.IntoUnmanaged();
+        if (_variant == 0) _unmanaged._Ok._Ok = _Ok?.IntoUnmanaged() ?? throw new InvalidOperationException("Cannot marshal ResultOptionUtf8StringError.Ok: its payload is null and corresponds to no Rust variant. Construct it through a case constructor or factory.");
         if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
@@ -11498,7 +11498,7 @@ public partial class ResultOptionUtf8StringError : IUnion, IResult<OptionUtf8Str
     {
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
-        if (_variant == 0) _unmanaged._Ok._Ok = _Ok.AsUnmanaged();
+        if (_variant == 0) _unmanaged._Ok._Ok = _Ok?.AsUnmanaged() ?? throw new InvalidOperationException("Cannot marshal ResultOptionUtf8StringError.Ok: its payload is null and corresponds to no Rust variant. Construct it through a case constructor or factory.");
         if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
