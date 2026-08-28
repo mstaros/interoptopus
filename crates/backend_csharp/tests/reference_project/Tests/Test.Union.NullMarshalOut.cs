@@ -12,21 +12,20 @@ using Interop = My.Company.Interop;
 /// - **(b)** a class-backed union stored as a field of a composite
 /// - **(c)** a null union nested inside another union's case
 ///
-/// **These began as a measurement and are becoming a contract, one position at a time.** They
-/// were written in `c70efeb` asserting whatever was *observed* — `NullReferenceException`
-/// everywhere, thrown before any marshaller, because `nullable.rs` classified only class
-/// delegates as nullable and a class-backed union therefore got a bare `.AsUnmanaged()`.
+/// **These began as a measurement and are now a contract.** They were written in `c70efeb`
+/// asserting whatever was *observed* — `NullReferenceException` everywhere, thrown before any
+/// marshaller, because `nullable.rs` classified only class delegates as nullable and a
+/// class-backed union therefore got a bare `.AsUnmanaged()`.
 ///
 /// Open items 1 then decided: `InvalidOperationException`. `?? default` was disqualified rather
 /// than merely rejected — it yields a zeroed `Unmanaged`, discriminant 0, a fabricated variant
 /// crossing FFI, which is exactly what item 3a's private constructor exists to prevent.
 /// `ArgumentNullException` lost because (b) and (c) are a field and a nested payload, not
-/// arguments, so there is no parameter to name.
+/// arguments, so there is no parameter to name and the description worsens as nesting deepens.
 ///
-/// Position (c) now asserts the decided contract. Position (a) still asserts the observed
-/// `NullReferenceException` because it goes through the marshaller's `FromManaged`/`ToUnmanaged`,
-/// which has not been converted yet. **A failure there is expected work, not a regression** —
-/// update it when the marshaller path lands.
+/// All three positions now assert the decided contract, emitted from three places: the
+/// composite field conversion (`a79ec28`), `enums::guard_null_payload` for a nested payload
+/// (`b9b93a2`), and the marshaller itself for an argument.
 public class TestNullAtMarshalOut
 {
     /// Position (a): a class-backed union passed by value as an argument.
@@ -35,27 +34,28 @@ public class TestNullAtMarshalOut
     /// its managed conversion is `Into` and `struct_class` emits it as a class. `null` is
     /// therefore a legal C# value for this parameter, and nothing in the signature rejects it.
     ///
-    /// Still observed rather than decided: the marshaller path is unconverted.
+    /// The guard lives in the generated `Marshaller.ToUnmanaged()`, which is where the
+    /// dereference happened.
     [Fact]
     public void a_null_class_backed_union_argument()
     {
         var ex = Record.Exception(() => Interop.enums_4(null!));
 
         Assert.NotNull(ex);
-        Assert.IsType<NullReferenceException>(ex);
+        Assert.IsType<InvalidOperationException>(ex);
+        Assert.Contains("Layer3String", ex!.Message);
     }
 
     /// Position (a), nested three deep. Included because the outer type's conversion recurses,
     /// and the item's concern is *where* the dereference happens rather than whether it happens.
-    ///
-    /// Still observed rather than decided, for the same reason as above.
     [Fact]
     public void a_null_deeply_nested_union_argument()
     {
         var ex = Record.Exception(() => Interop.pattern_ffi_option_3(null!));
 
         Assert.NotNull(ex);
-        Assert.IsType<NullReferenceException>(ex);
+        Assert.IsType<InvalidOperationException>(ex);
+        Assert.Contains("OptionOptionResultOptionUtf8StringError", ex!.Message);
     }
 
     /// Position (c): a well-formed union whose case payload is itself a null class-backed union.
@@ -65,8 +65,6 @@ public class TestNullAtMarshalOut
     /// inner one is. The corpus offers this in a better form than a collection would — there is
     /// no slice of unions to use — and the three-deep nesting is stronger anyway, since the null
     /// traverses two conversions before the dereference.
-    ///
-    /// **Decided contract.** The guard is emitted by `enums::guard_null_payload`.
     [Fact]
     public void a_union_carrying_a_null_class_backed_payload()
     {
