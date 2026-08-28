@@ -361,7 +361,7 @@ fn run_with_timeout(command: &mut std::process::Command, timeout: Duration) -> R
 /// unconditional rewrite bumps mtime even when the bytes are identical. The second matters more
 /// here, because `reference_project::csharp_suite` compares timestamps to prove the assembly was
 /// built from the current sources, and churn would make that comparison vacuous.
-fn prepare_reference_bindings() -> Result<impl std::fmt::Display, Box<dyn Error>> {
+fn prepare_reference_bindings() -> Result<interoptopus_backends::output::Multibuf, Box<dyn Error>> {
     use interoptopus::lang::meta::FileEmission;
     use interoptopus_csharp::RustLibrary;
     use interoptopus_csharp::config::{DllImportSearchPath, HeaderConfig, SearchPathConfig};
