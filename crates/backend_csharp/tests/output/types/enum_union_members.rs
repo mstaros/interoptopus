@@ -230,3 +230,46 @@ fn a_unit_only_enum_becomes_a_plain_csharp_enum() {
     assert!(!flag.contains("_hasValue"), "a C# enum has no empty-state flag to declare: {flag}");
     assert!(!cs.contains("OffCase"), "unit-only enum must receive no union machinery");
 }
+
+
+/// Item 4c: a default struct-backed union must not read as its variant-zero case.
+///
+/// `Ok` is tag 0 and `default` is all-zero, so with tag preservation the discriminant cannot
+/// distinguish "empty" from "variant zero". 3c made the C# 15 surface handle that — `HasValue`
+/// reads `_hasValue` and `Value` returns null when it is false — but the older accessor surface
+/// did not, so one value simultaneously reported `HasValue == false` and `IsOk == true`, and
+/// `AsOk()` returned a **fabricated zero** out of uninitialised memory rather than throwing. A
+/// wrong value reaching a consumer, not merely a wrong flag.
+///
+/// Scoped by `writes_has_value`, so class-backed unions are untouched: they have no `_hasValue`
+/// and their `default` is a null reference, which cannot reach these members at all.
+///
+/// `ExceptionForVariant()` is deliberately retained rather than a new exception type — which one
+/// an empty value should throw is item 4b, and it is gated.
+///
+/// **This test is also why the change is testable.** The template-only version (`9e3383f`,
+/// reverted in `a4e39ad`) caused Guarded to select no tests and pass a gate it never executed: a
+/// `.cs` template is an input to the generator, but the impact analyser does not model it as one.
+#[test]
+fn a_default_struct_backed_union_does_not_read_as_variant_zero() {
+    let cs = generated_interop();
+
+    assert!(
+        cs.contains("public bool IsNothing => _hasValue && _variant == 0;"),
+        "a struct-backed check must consult the empty-state flag, or `default(Meter).IsNothing` is \
+         true while `default(Meter).HasValue` is false"
+    );
+    assert!(
+        cs.contains("public uint AsCount() { if (!_hasValue || _variant != 1)"),
+        "a struct-backed accessor must reject the empty state before returning a payload read out \
+         of uninitialised memory"
+    );
+
+    let label = cs.split("class Label").nth(1).expect("Label is emitted");
+    let label = label.split("public partial").next().expect("Label body is bounded");
+    assert!(
+        label.contains("public bool IsBlank => _variant == 0;"),
+        "class-backed unions keep the plain check: there is no `_hasValue` to read and `default` is \
+         null, so the empty state is unreachable: {label}"
+    );
+}
