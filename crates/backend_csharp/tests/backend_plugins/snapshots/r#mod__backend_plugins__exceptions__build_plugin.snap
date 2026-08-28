@@ -113,6 +113,23 @@ public partial struct DotnetException
 
     [CustomMarshaller(typeof(DotnetException), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
+    [CustomMarshaller(typeof(DotnetException), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
+    internal struct InMarshallerMeta { }
+
+    internal ref struct InMarshaller
+    {
+        private DotnetException _managed;
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public void FromManaged(DotnetException managed) { _managed = managed; }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public void Free() {}
+    }
+
     internal ref struct Marshaller
     {
         private DotnetException _managed;
@@ -380,6 +397,23 @@ public partial class ResultNestedADotnetException : IUnion, IResult<NestedA, Dot
     [CustomMarshaller(typeof(ResultNestedADotnetException), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
 
+    [CustomMarshaller(typeof(ResultNestedADotnetException), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
+    internal struct InMarshallerMeta { }
+
+    internal ref struct InMarshaller
+    {
+        private ResultNestedADotnetException _managed;
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public void FromManaged(ResultNestedADotnetException managed) { _managed = managed; }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public void Free() {}
+    }
+
     internal ref struct Marshaller
     {
         private ResultNestedADotnetException _managed;
@@ -632,6 +666,23 @@ public partial struct ResultUintDotnetException : IUnion, IResult<uint, DotnetEx
 
     [CustomMarshaller(typeof(ResultUintDotnetException), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
+
+    [CustomMarshaller(typeof(ResultUintDotnetException), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
+    internal struct InMarshallerMeta { }
+
+    internal ref struct InMarshaller
+    {
+        private ResultUintDotnetException _managed;
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public void FromManaged(ResultUintDotnetException managed) { _managed = managed; }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public void Free() {}
+    }
 
     internal ref struct Marshaller
     {
