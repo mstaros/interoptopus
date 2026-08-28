@@ -662,11 +662,16 @@ Items 0–1c, R (the .NET 11 retarget — `LangVersion=preview`, `rt/dynamic.rs`
 which is gated on *Open items #1* — two of whose three positions are still unmeasured, so it is
 blocked on a measurement rather than on effort.
 
-**The tests are where the value is now.** `5d`, `5e`, `5f`, `5g` and `5h` all have their gates
-satisfied, and two of them cover guards already in master that nothing currently exercises:
-`5d` is the only check that item 4's empty-marshal-out guard actually fires, and `5f` the only
-check that 4a's invalid-tag arm actually throws. Both are verified today solely as text in a
-snapshot. `3e` remains the cheapest item on the board — one line in a plugin fixture.
+**The test items are almost all closed now.** `3e`, `5d`, `5e`, `5f`, `5h` and `5i` are done, and
+the guards they cover are executed rather than asserted as text. `5g` is the only one of that
+group still open, and `5c` remains partial — its Wire-reachable half is covered by
+`tests/output/wire/collision.rs`, the managed-side cases are not.
+
+**What made that possible was `csharp_suite`**, which compiles *and runs* the generated bindings
+under `cargo test`. It earned its place immediately: the 5h test had two compile errors on first
+submission — `IUnion` needs `System.Runtime.CompilerServices` rather than `InteropServices`, and
+xUnit's `Assert.Null` has no message overload unlike `Assert.False`. Under the previous
+arrangement both would have been committed as text and nobody would have known.
 
 **What 4c turned out to be, since the guess recorded here was half right.** This paragraph
 previously suspected 4c was already largely satisfied, because `8c70868d` put `_hasValue` on
@@ -723,11 +728,11 @@ not determinable from this document and has not been guessed at.
 | 5 | open | Snapshots move once; consumer projects compile the output | 3d ✔, 4b |
 | 5c | partial | Collision cases: `Value`, `B`/`IsB`. ~~casing-fold~~ — no such class, `union_names` allocates case-sensitively. A Wire-reachable stem-moving collision is covered by `tests/output/wire/collision.rs`; the managed-side cases remain | 1d ✔ |
 | 5d | **done** `5eda9a21` | ~~`default(struct).ToUnmanaged()` throws~~ `Test.Pattern.Union.cs` asserts both directions: `marshalling_a_default_union_out_throws` (`Assert.Throws<InvalidOperationException>` on `pattern_result_1(new ResultUintError())`, checking the message names the type) and `marshalling_a_constructed_union_out_does_not_throw`, so the guard cannot be made unconditional without a test noticing. Reaches the guard through `Marshaller.ToUnmanaged() { return _managed.ToUnmanaged(); }`; executes under `cargo test` via the wiring in `423105d0`. **Scope, since item 4 covers both methods and this row names one:** 5d is `ToUnmanaged` only and is fully satisfied. The `AsUnmanaged` half is not 5d and is separately blocked — `Issues.md` `5e2a319c` records, from Roslyn caller queries rather than text search, that no `AsUnmanaged` in either pipeline has a caller outside another `AsUnmanaged`, so that guard is unreachable from any C# call path | 4 ✔ |
-| 5e | open | Class union cannot produce non-null empty | 3a ✔ |
+| 5e | **done** `44a3d70` | ~~Class union cannot produce non-null empty~~ `Test.Pattern.Union.cs::a_class_backed_union_cannot_be_constructed_empty`. Reflection asserts the parameterless constructor on `OptionUtf8String` exists and is **non-public**, that `default` is a null reference rather than a zeroed instance, and that `HasValue` is constant `true` with a non-null `Value` on a constructed one. **Reflection rather than a call:** `new OptionUtf8String()` from the test assembly would fail to compile, which proves the point but leaves nothing that runs and nothing that can regress. The prior check was `enum_class_ctor::a_class_backed_enum_gets_a_private_parameterless_ctor`, which matches text in a snapshot — so making the constructor public again would have produced a diff a reviewer could accept with `cargo insta review`, and no test would have failed | 3a ✔ |
 | 5f | **done** | ~~Invalid native tag throws~~ `Test.Pattern.Union.cs::an_invalid_native_tag_throws` asserts `InteropException` and checks the message carries both the offending tag and the type name, reaching 4a's default arm in `Unmanaged.ToManaged()`. **Rust never builds a malformed enum** — that is undefined behaviour and would entitle the compiler to delete the arm being asserted. `functions/malformed.rs` returns an ordinary `#[repr(C)] { u32 tag; u32 payload; }` holding 99, deliberately not `#[ffi]` so it stays out of the inventory; the mismatch is confined to one hand-written `LibraryImport` in `Bindings/MalformedFixture.cs`. **That declaration must live in Bindings, not Tests:** `Unmanaged` and `Marshaller` are emitted `internal`, so the source generator can only wire the marshaller from inside that assembly — measured, CS0122 ×5. Return-by-value is *not* the constraint; `pattern_result_1` returns the same type by value and always compiled | 4a ✔ |
 | 5g | open | Default disposable `Dispose()` no-op | — |
-| 5h | open | Managed-only `DataEnum` case | 3c ✔ |
-| 5i | open | `default(ResultX)`/`default(OptionX)` tests; `AsOk()` on default | 4c |
+| 5h | **done** `8bf658c` | ~~Managed-only `DataEnum` case~~ `Test.Pattern.Union.cs::a_managed_only_union_is_still_projected_as_a_union`. **The load-bearing assertion is an absence:** `DataEnum` has `IUnion`, case types and a working `Value`/`TryGetValue`, but **no nested `Unmanaged` mirror**, because there is nothing to marshal it to. That is the only check anywhere that union projection and the FFI crossing are independent — the distinction 3d had to get right when it placed `[Union]` *outside* the `is_managed_only` guard. Without the absence assertion this is just another union test | 3c ✔ |
+| 5i | **done** `8bf658c` | ~~`default(ResultX)`/`default(OptionX)` tests; `AsOk()` on default~~ `Test.Pattern.Union.cs`: `a_default_struct_union_does_not_read_as_its_variant_zero_case` asserts `IsOk` is false on a default and `AsOk()` throws — the behaviour 4c changed, which until now nothing executed. **The exception type is deliberately not pinned.** `ExceptionForVariant()` still ignores `_hasValue` and hands back variant zero's `EnumException`; correcting that is 4b, so asserting the type here would force churn when it lands. The contract 4c established is "throws rather than returning a fabricated value", and that is what is asserted. `a_default_option_is_empty_rather_than_none` covers the `Option` half through `HasValue`/`Value` rather than `IsNone`, so it does not depend on which variant is tag zero — the distinction 4c exists to preserve | 4c |
 | 6 | open | `Result` leftovers: `IResult<T,E>` coexistence, `body_from_call` factory names | 5 green |
 
 **Two lists number separately, and the gate column names which.** `1` in the Done table above is
