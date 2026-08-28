@@ -658,9 +658,10 @@ the pass is `union_names`, it owns naming only, and there is no gate — see Dec
 
 Items 0–1c, R (the .NET 11 retarget — `LangVersion=preview`, `rt/dynamic.rs`, plugin DLLs;
 `9d664613`, in the Done table above), 1d, **3a, 3b, 3c, 3d, 3f, 4, 4a and 4c** are done, and
-**3e is satisfied but unverified** (see its row). **The open front is 4b** (the exception split),
-which is gated on *Open items #1* — two of whose three positions are still unmeasured, so it is
-blocked on a measurement rather than on effort.
+**3e is satisfied but unverified** (see its row). **The open front is 4b** (the exception split).
+Open items #1 is no longer measurement-blocked: all three positions, including an actual
+collection element, are measured. The remaining work is the contract choice and guards at each
+generated boundary.
 
 **The test items are almost all closed now.** `3e`, `5d`, `5e`, `5f`, `5h` and `5i` are done, and
 the guards they cover are executed rather than asserted as text. `5g` is the only one of that
@@ -794,33 +795,40 @@ Multi-field and named variant support. Retiring `IsOk` / `AsOk`.
    `wire/mod.rs:104` and `:264`, in the wire deserializer, a different path from marshal-out. It
    supports test 5e; it says nothing here.
 
-   **All three positions measured, and they agree.** `nullable.rs:35` defines nullability as
-   `TypeKind::Delegate(d) if d.kind == DelegateKind::Class` — class delegates only — and
-   `body_as_unmanaged.rs:47` / `body_to_unmanaged.rs:48` emit the `?... ?? default` form only when
-   that holds. A class-backed union therefore gets a bare `.AsUnmanaged()` wherever it appears.
+   **All three positions are now measured, and they agree on the boundary result, not on the
+   generated failure site.** `nullable.rs:35` defines nullability as
+   `TypeKind::Delegate(d) if d.kind == DelegateKind::Class` — class delegates only. A
+   class-backed union therefore reaches an unguarded instance conversion call instead of an
+   explicit null policy.
 
-   Position (b) was measured first: it NREs, and it does so *before* any marshaller, inside the
-   enclosing composite's conversion. Positions (a) and (c) were measured on 2026-08-28 in
-   `c70efeb`, by `Tests/Test.Union.NullMarshalOut.cs`, which the C# suite compiles and runs:
+   The direct and composite measurements live in
+   `Tests/Test.Union.NullMarshalOut.cs`. The actual collection measurement uses the durable
+   `Slice<Option<String>>` fixture `pattern_ffi_slice_of_option_string` and
+   `Tests/Test.Pattern.Slices.cs`:
 
-   | Position | Call | Result |
+   | Position | Trigger | First failing generated frame |
    |---|---|---|
-   | (a) argument, by value | `enums_4(null)` — `Layer3String` | `NullReferenceException` |
-   | (a) argument, nested three deep | `pattern_ffi_option_3(null)` | `NullReferenceException` |
-   | (b) composite field | — | `NullReferenceException` |
-   | (c) null union as another union's case payload | `pattern_ffi_option_3(Some(null))` | `NullReferenceException` |
+   | (a) argument, by value | `enums_4(null)` — `Layer3String` | `Layer3String.Marshaller.ToUnmanaged()`, calling `_managed.IntoUnmanaged()` |
+   | (b) composite field | `Layer1String.maybe_1 = null`, wrapped in `Layer3String.A` | `Layer1String.IntoUnmanaged()` |
+   | (c) collection element | `new OptionUtf8String[] { null! }.Slice()` | `SliceOptionUtf8String.From()`, at `managed[i].AsUnmanaged()` |
 
-   A control asserts the same call succeeds with a well-formed `Layer3String`, so these are
-   failures of nullness rather than of the call. Position (c) uses a nested union rather than a
-   collection because the corpus contains **no slice of unions**; the three-deep nesting is a
-   stronger shape anyway, since a null at the inner level traverses two conversions before the
-   dereference.
+   Each throws `NullReferenceException` before native entry. A collection control containing
+   `Some("hello")` and `None` reaches Rust and returns one present element. The earlier
+   `pattern_ffi_option_3(Some(null))` measurement remains useful nested-union coverage, but it is
+   not position (c): a case payload is not a collection element.
 
-   **What this settles for 4b.** The worry was that a different failure mode in (a) or (c) would
-   change what 4b implements. There is no different failure mode — all three fail identically, at
-   the same unguarded call, before any marshaller. **So 4b implements one thing in one place, not
-   three variants**, and the three-way exception choice below is the only question left in this
-   item.
+   **The collection measurement also exposes a separate exception-safety defect.**
+   `SliceOptionUtf8String.From()` calls `Marshal.AllocHGlobal` before the element loop; when
+   conversion throws, the partially-built slice is never returned and that buffer cannot be
+   disposed. Rust allocation counters cannot see this C# allocation. Fixing that generic slice
+   path is follow-up work, not part of choosing 4b's exception.
+
+   **What this settles for 4b.** The public contract can be one rule, but the implementation is
+   not one branch in one place. The actual collection case disproves that earlier conclusion:
+   direct arguments fail in a marshaller, composite fields fail in the enclosing conversion, and
+   collection elements fail in the non-blittable slice's `From` loop. 4b must cover all three
+   generated boundaries if it promises a consistent exception. The three-way exception choice
+   below remains; silently fabricating a default variant remains excluded.
 
    **And `Issues.md` `b4e07f12` is unblocked by the same measurement**, with its own condition
    intact: delegating `nullable.rs` to `struct_class::is_class` is now safe *provided*
@@ -874,15 +882,17 @@ Multi-field and named variant support. Retiring `IsOk` / `AsOk`.
    neither depends on which exception is thrown. The Remaining table already gives 3a's gate as
    `—`; this item previously contradicted it and was wrong.
 
-   **Tests exist, but they record behaviour rather than assert a contract.** 5e ("class union
-   cannot produce non-null empty") concerns a non-null invalid instance and does not exercise null
-   at marshal-out; that gap is now filled by `Tests/Test.Union.NullMarshalOut.cs` (`c70efeb`).
+   **Tests exist, but they do not yet assert the final exception contract.**
+   `Tests/Test.Union.NullMarshalOut.cs` records the direct and composite behaviour observed in
+   `c70efeb`. `Tests/Test.Pattern.Slices.cs` now adds the real collection position plus a valid
+   control that reaches Rust. Its null assertion deliberately requires only that an exception
+   occurs, because 4b still owns the exact type and a null must never become a fabricated variant.
 
-   Those tests assert `NullReferenceException` **because that is what was observed**, not because
-   it was chosen — the file says so in its own header. When 4b decides, they become assertions
-   about a decided contract and the expected type changes with it. Treat a failure there after 4b
-   as expected work, not as a regression. A numbered test row is still owed; numbering it was not
-   this item's call and is not this measurement's either.
+   When 4b decides, all three positions should assert the chosen contract. Treat that expected
+   test update as part of 4b, not as a regression. A numbered test row is still owed; numbering it
+   was not this measurement's call. The collection test also exercises the currently
+   exception-unsafe `AllocHGlobal` path described above, so the generic cleanup follow-up remains
+   explicit rather than being hidden by a green suite.
 
 2. ~~**Case→enum conversion.**~~ **Closed — the compiler provides it, and this is now confirmed by
    compilation rather than by reading alone.** The spec says *"An implicit union conversion exists

@@ -129,3 +129,9 @@ pub fn pattern_ffi_slice_of_unit_enum(slice: Slice<EnumDocumented>) -> u32 {
     }
     count
 }
+
+/// Measures marshal-out of a collection whose elements are class-backed unions.
+#[ffi]
+pub fn pattern_ffi_slice_of_option_string(slice: Slice<ffi::Option<ffi::String>>) -> u32 {
+    slice.as_slice().iter().filter(|x| x.is_some()).count() as u32
+}

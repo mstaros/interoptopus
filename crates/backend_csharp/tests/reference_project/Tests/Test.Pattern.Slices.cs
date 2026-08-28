@@ -144,4 +144,27 @@ public class TestPatternSlices
         using var sliceMut = new byte[] { 4, 5, 6 }.SliceMut();
         Interop.pattern_ffi_slice_4(slice, sliceMut);
     }
+
+    [Fact]
+    public void slice_of_class_backed_unions_marshals_valid_elements()
+    {
+        var some = OptionUtf8String.Some("hello".Utf8());
+        using var slice = new[] { some, OptionUtf8String.None }.Slice();
+
+        Assert.Equal(1u, Interop.pattern_ffi_slice_of_option_string(slice));
+        some.Dispose();
+    }
+
+    [Fact]
+    public void slice_of_class_backed_unions_rejects_null_elements()
+    {
+        var exception = Record.Exception(() =>
+        {
+            using var slice = new OptionUtf8String[] { null! }.Slice();
+            Interop.pattern_ffi_slice_of_option_string(slice);
+        });
+
+        // Item 4b still owns the exact exception type; a null must never become a fabricated variant.
+        Assert.NotNull(exception);
+    }
 }
