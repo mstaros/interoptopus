@@ -12,15 +12,15 @@ public static {{ name }} {{ v.name }} => new() { _variant = {{ v.id }}{% if writ
 
 // Checks
 {%- for v in variants %}
-public bool Is{{ v.name }} => {% if writes_has_value %}_hasValue && {% endif %}_variant == {{ v.id }};
+public bool Is{{ v.name }} => _variant == {{ v.id }};
 {%- endfor %}
 
 // Conversions
 {%- for v in variants %}
 {%- if v.has_payload %}
-public {{ v.type }} As{{ v.name }}() { if ({% if writes_has_value %}!_hasValue || {% endif %}_variant != {{ v.id }}) { throw ExceptionForVariant(); } else { return _{{ v.name }}; } }
+public {{ v.type }} As{{ v.name }}() { if (_variant != {{ v.id }}) { throw ExceptionForVariant(); } else { return _{{ v.name }}; } }
 {%- else %}
-public void As{{ v.name }}() { if ({% if writes_has_value %}!_hasValue || {% endif %}_variant != {{ v.id }}) throw ExceptionForVariant(); }
+public void As{{ v.name }}() { if (_variant != {{ v.id }}) throw ExceptionForVariant(); }
 {%- endif %}
 {%- endfor %}
 {%- if is_union_projected %}
