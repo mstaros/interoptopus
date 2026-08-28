@@ -3,7 +3,7 @@
 use crate::lang::TypeId;
 use crate::lang::types::kind::{TypeKind, TypePattern};
 use crate::pass::{OutputResult, PassInfo, model, output};
-use interoptopus_backends::template::Context;
+use interoptopus_backends::template::{Context, Value};
 use std::collections::HashMap;
 
 #[derive(Default)]
@@ -26,7 +26,6 @@ impl Pass {
         output_master: &output::common::master::Pass,
         types: &model::common::types::all::Pass,
         managed: &output::common::conversion::unmanaged_conversion::Pass,
-        struct_class: &model::common::types::info::struct_class::Pass,
         projection: &model::common::types::info::projection::Pass,
         mode: crate::pass::OperationMode,
     ) -> OutputResult {
@@ -55,15 +54,38 @@ impl Pass {
 
             let to_managed_method = managed.to_managed_name(*type_id);
 
-            // A value arriving from native is well-formed, so `ToManaged` must set the flag
-            // too — not only the factories. Item 4a replaces this whole method with a
-            // validated switch through case constructors, which establishes `_hasValue`
-            // implicitly; until then this is the write that keeps native-sourced values from
-            // reporting `Value == null`.
-            let writes_has_value = struct_class.is_struct(*type_id) && projection.is_union(*type_id);
+            // Item 4a: `ToManaged` builds the value through the case constructors `aa2d550d` added,
+            // in a switch over every variant. That establishes `_hasValue` implicitly, since those
+            // constructors already follow `writes_has_value` — which is why 3c's explicit write is
+            // gone and `struct_class` is no longer a parameter here.
+            //
+            // The default arm is the point: previously an unrecognised tag fell through every `if`
+            // and returned a value carrying that tag with no payload set. It now throws.
+            let is_union_projected = projection.is_union(*type_id);
+
+            let all_variants: Vec<HashMap<&str, Value>> = data_enum
+                .variants
+                .iter()
+                .map(|v| {
+                    let to_managed = v
+                        .ty
+                        .map(|ty| super::resolve_service_variant(ty, types, mode))
+                        .map(|ty| managed.to_managed_suffix(ty).to_string())
+                        .unwrap_or_default();
+
+                    let mut m = HashMap::new();
+                    m.insert("name", Value::normal_string(&v.stem));
+                    m.insert("id", Value::from(v.tag as i64));
+                    m.insert("case_type", Value::normal_string(&v.case_type));
+                    m.insert("has_payload", Value::from(v.ty.is_some()));
+                    m.insert("to_managed", Value::normal_string(&to_managed));
+                    m
+                })
+                .collect();
 
             let mut context = Context::new();
-            context.insert("writes_has_value", &writes_has_value);
+            context.insert("all_variants", &all_variants);
+            context.insert("is_union_projected", &is_union_projected);
             context.insert("name", name);
             context.insert("to_managed_method", to_managed_method);
             context.insert("variants", &variants);
