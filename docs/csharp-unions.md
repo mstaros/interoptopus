@@ -834,10 +834,36 @@ Multi-field and named variant support. Retiring `IsOk` / `AsOk`.
    intact: delegating `nullable.rs` to `struct_class::is_class` is now safe *provided*
    class-backed unions are excluded from the `?? default` path explicitly rather than by omission.
 
-   **The choice is three-way, not two.** `InvalidOperationException`, for consistency with the
-   Step 4 row for the struct empty state; `ArgumentNullException`, the conventional .NET answer
-   for a null argument at a public boundary; or joining the existing `?? default` policy and not
-   throwing at all.
+   **Decided 2026-08-28: `InvalidOperationException`.** The choice was three-way, not two —
+   `InvalidOperationException`, for consistency with the Step 4 row for the struct empty state;
+   `ArgumentNullException`, the conventional .NET answer for a null argument at a public boundary;
+   or joining the existing `?? default` policy and not throwing at all. The reasoning is kept
+   because the losing options are each defensible on a first reading.
+
+   **`?? default` is disqualified rather than merely worse.** It converts a loud failure into a
+   zeroed `Unmanaged` — a fabricated variant crossing FFI, which Rust reads as real. This
+   repository has no leak, double-free or use-after-free detection, and a snapshot would record
+   the substitution as correct text, so nothing here could catch it. An option that fails silently
+   in a system with no detection for silent failure is not a candidate.
+
+   **`ArgumentNullException` loses on the measurement.** All three positions fail *before any
+   marshaller*, and (b) and (c) are a composite field and a nested case payload — not arguments.
+   That exception carries a `paramName` and means "the caller passed null for parameter X"; for a
+   null two levels inside a `Layer2String` there is no parameter to name, and the description gets
+   worse as nesting deepens. `OptionOptionResultOptionUtf8StringError` already exists.
+
+   **`InvalidOperationException` wins on three properties that outlast this item.** It is what
+   item 4 already throws for a *default struct* union at marshal-out — the same condition in the
+   other representation, so one condition keeps one exception and a consumer writes one catch. It
+   stays accurate in every position, since "this object's state does not permit this operation" is
+   true of an argument, a field, a payload and an element alike. And it survives `b4e07f12`: once
+   `nullable.rs` delegates to `struct_class::is_class`, the guard site is shared with class-backed
+   composites and other reference types, and an exception phrased around *state* generalises there
+   where one phrased around *arguments* would need re-litigating per type.
+
+   **The cost, stated plainly:** this departs from what an experienced .NET developer expects for
+   a null at a public boundary. The message must carry that weight — name the type and say the
+   value corresponds to no Rust variant, as item 4's guard message already does.
 
    The third is the trap. `nullable.rs` promises "reference type / class" in its doc-comment and
    implements "class delegate"; after 3a class unions *are* reference types, so the gap invites a
