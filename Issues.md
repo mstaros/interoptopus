@@ -1131,13 +1131,13 @@ behind `09b82d44` and `c928d53e`.
 The `IsX`/`AsX` objection recorded earlier is *not* among the reasons; it rested on preserving
 public API, which is a weaker constraint where the consumers are owned.
 
-## nullable.rs classifies only class delegates as nullable, so every other reference type gets an unguarded conversion
+~~nullable.rs classifies only class delegates as nullable, so every other reference type gets an unguarded conversion~~ — fixed in `c56f941`
 
 ```issue
 id: b4e07f12
 kind: bug
 severity: medium
-status: open
+status: fixed
 ```
 
 ### Symptom
@@ -1180,22 +1180,44 @@ test yet reproduces a runtime `NullReferenceException` on a null class-backed fi
 different vocabulary — "is this a reference type" — and it is stale in the same way.
 `struct_class::is_class` already exists at `struct_class.rs:55` and is the authoritative answer.
 
-### Do not close this before `docs/csharp-unions.md` open item 1
+~~Do not close this before `docs/csharp-unions.md` open item 1~~ — satisfied, fixed in `c56f941`
 
-The obvious fix — delegate to `struct_class::is_class` — puts class-backed unions on the
-`?? default` branch, emitting `?.AsUnmanaged() ?? default`. For a union that yields a zeroed
-`Unmanaged`: discriminant 0, a fabricated variant crossing FFI, silently. That is precisely what
-3a's private constructor exists to prevent, and it is worse than the exception it replaces.
+The warning existed because the obvious fix — delegate to `struct_class::is_class` — would have
+put class-backed unions on the `?? default` branch, yielding a zeroed `Unmanaged`: discriminant 0,
+a fabricated variant crossing FFI, silently. Deciding that by accident is what it guarded against.
 
-Open item 1 decides what null at marshal-out should do. Widening `is_nullable` before that
-decision exists would pre-empt it by accident. Whichever way item 1 goes, class-backed unions
-must be excluded from the `?? default` path explicitly rather than by omission.
+**It was satisfied rather than waived.** Open item 1 closed with `InvalidOperationException`, and
+class-backed unions are now excluded from `?? default` **explicitly**, via `NullPolicy::Throw`.
+`nullable.rs` therefore asks `struct_class` instead of re-deriving reference-ness from `TypeKind`,
+ending the duplication `31248473` closed in `wire`'s `is_cs_value_type`.
 
-### Adjacent, unargued
+**A measurement in this issue was wrong, and the fix disproved it.** Before implementing, the
+class-backed *composite* population was reported empty: a truncated search over
+`^public partial class X$` returned fifteen hits, all unions and delegates. That was an artefact
+of the truncation. `Layer1String` and `Layer2String` carry `Utf8String`, so their managed
+conversion is `Into` and `struct_class` emits them as classes; they appear as `Layer3String`'s
+payloads and are now guarded. The snapshot moved, which is how the error surfaced.
 
-Whether `?? default` is right even for the types it already covers. Substituting a zeroed
-`Unmanaged` for a null class delegate has the same shape of problem; the file asserts the policy
-in a doc-comment and never argues it.
+**The delegate arm was left byte-for-byte identical**, still
+`TypeKind::Delegate(d) if d.kind == DelegateKind::Class` rather than `struct_class::is_class`.
+Those are *different predicates*, and swapping them would have changed delegate behaviour as a
+side effect of a classification cleanup.
+
+
+
+Adjacent, unargued — split out, still open
+
+Whether `?? default` is right even for the types it already covers. A zeroed `Unmanaged` for a
+class delegate is a **null function pointer**; Rust invoking it is no better than reading a
+fabricated variant, which is the reasoning that decided open item 1 the other way. The file
+asserts the policy in a doc-comment and never argues it.
+
+Not folded into `c56f941`: it is a behaviour change to working code, with eight delegate fields
+emitting `?? default` in the reference project alone. **Nobody has run it** — what a null callback
+actually does at the boundary is unmeasured. So the next step is the same as open item 1's was:
+measure first, then decide. `nullable.rs`'s `SubstituteDefault` variant carries a pointer here.
+
+
 
 ## Enum emission is gated on TypeKind::DataEnum in ten output passes, not on managed_conversion
 
