@@ -26,6 +26,8 @@ impl Pass {
         _pass_meta: &mut crate::pass::PassMeta,
         output_master: &output::common::master::Pass,
         types: &model::common::types::all::Pass,
+        struct_class: &model::common::types::info::struct_class::Pass,
+        projection: &model::common::types::info::projection::Pass,
         mode: crate::pass::OperationMode,
     ) -> OutputResult {
         let templates = output_master.templates();
@@ -54,7 +56,11 @@ impl Pass {
                 })
                 .collect();
 
+            let has_empty_state = struct_class.is_struct(*type_id) && projection.is_union(*type_id);
+
             let mut context = Context::new();
+            context.insert("has_empty_state", &has_empty_state);
+            context.insert("name", &ty.name);
             context.insert("variants", &variants);
 
             let rendered = templates.render("common/types/enums/body_exception_for_variant.cs", &context)?;

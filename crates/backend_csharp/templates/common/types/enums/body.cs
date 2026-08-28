@@ -78,7 +78,7 @@
         public void FromManaged({{ name }} managed) { _managed = managed; }
 
         {{ _fns_decorators_all | indent(width = 8) }}
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { return {{ marshaller_managed_receiver }}.AsUnmanaged(); }
 
         {{ _fns_decorators_all | indent(width = 8) }}
         public void Free() {}
@@ -102,7 +102,7 @@
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         {{ _fns_decorators_all | indent(width = 8) }}
-        public Unmanaged ToUnmanaged() { return _managed.{{ marshaller_to_unmanaged }}(); }
+        public Unmanaged ToUnmanaged() { return {{ marshaller_managed_receiver }}.{{ marshaller_to_unmanaged }}(); }
 
         {{ _fns_decorators_all | indent(width = 8) }}
         public {{ name }} ToManaged() { return _unmanaged.{{ marshaller_to_managed }}(); }

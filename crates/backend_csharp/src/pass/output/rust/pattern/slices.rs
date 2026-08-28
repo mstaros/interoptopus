@@ -10,6 +10,7 @@ use crate::lang::TypeId;
 use crate::lang::types::ManagedConversion;
 use crate::lang::types::kind::{TypeKind, TypePattern};
 use crate::output::{FileType, Output};
+use crate::pass::model::common::types::info::nullable::NullPolicy;
 use crate::pass::{OutputResult, PassInfo, model, output};
 use interoptopus_backends::template::Context;
 use std::collections::HashMap;
@@ -34,6 +35,7 @@ impl Pass {
         output_master: &output::common::master::Pass,
         types: &model::common::types::all::Pass,
         managed_conversion: &model::common::types::info::managed_conversion::Pass,
+        nullable: &model::common::types::info::nullable::Pass,
         unmanaged_names: &output::common::conversion::unmanaged_names::Pass,
     ) -> OutputResult {
         let templates = output_master.templates();
@@ -75,6 +77,7 @@ impl Pass {
                     context.insert("name", &ty.name);
                     context.insert("element_type", element_name);
                     context.insert("unmanaged_element_type", &unmanaged_name);
+                    context.insert("reject_null_elements", &(nullable.null_policy(element_ty_id) == Some(NullPolicy::Throw)));
                     context.insert("method", method);
                     let element_to_managed = match element_conversion {
                         ManagedConversion::Into => "IntoManaged",

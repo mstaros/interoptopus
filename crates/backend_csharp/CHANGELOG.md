@@ -28,18 +28,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   never sends. `ToUnmanaged`/`AsUnmanaged` now throw `InvalidOperationException` with
   "Cannot marshal a default X: it is empty and corresponds to no Rust variant. Construct one
   through a case constructor or factory." Construct through the generated case constructors or
-  factories instead. Class-backed enums are unaffected, since their empty state is a null
-  reference rather than a cleared `_hasValue`.
+  factories instead. Class-backed enums have no `_hasValue`; their null state is covered
+  separately below.
+
+- **Null class-backed unions now fail with `InvalidOperationException` before native entry.**
+  Direct parameters (including `ManagedToUnmanagedIn` borrows), composite fields, nested union
+  payloads and non-blittable slice elements use one contract: the message names the failing
+  type, member or index and says the value corresponds to no Rust variant. Previously these paths
+  reached an instance call on null and threw `NullReferenceException`; slice null rejection now
+  also occurs before `Marshal.AllocHGlobal`.
 
 - **`IsX` and `AsX` on a default struct-backed enum no longer report variant zero.** `IsOk` read
   `_variant == 0`, and `AsOk()` tested only the variant; neither consulted `_hasValue`. A
   default-constructed value therefore reported `HasValue == false` and `IsOk == true` at the same
   time, and `AsOk()` returned a zeroed payload read out of uninitialised memory instead of
-  throwing. Both now test `_hasValue` first: `IsX` is `false` on an empty value, and `AsX` throws
-  `ExceptionForVariant()` exactly as it already did on a variant mismatch. Code that called `AsX`
-  on a default value and used the result was consuming a fabricated value and now receives an
-  exception instead. Class-backed enums are unaffected — they carry no `_hasValue`, and their
-  empty state is a null reference.
+  throwing. Both now test `_hasValue` first: `IsX` is `false` on an empty value, and `AsX` gets
+  `InvalidOperationException` from `ExceptionForVariant()` before variant zero can be read as a
+  mismatch. Calls on a well-formed but different variant still receive `EnumException`. Code that
+  caught `EnumException` for a default value must catch `InvalidOperationException` instead.
+  Class-backed enums carry no `_hasValue`; their empty state is the null contract above.
 
 - **Class-backed enums no longer expose a public parameterless constructor.** `new EnumX()` on a
   class-backed enum previously produced a variant-zero instance from outside the type — a variant

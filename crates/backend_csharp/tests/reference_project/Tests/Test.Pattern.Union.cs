@@ -178,17 +178,17 @@ public partial class TestPatternUnion
     /// false and `IsOk` true at the same time, and `AsOk()` returned a payload read out of
     /// uninitialised memory — a fabricated value reaching a consumer, not merely a wrong flag.
     ///
-    /// The exception *type* is deliberately not pinned. `ExceptionForVariant()` still ignores
-    /// `_hasValue` and hands back variant zero's `EnumException`; correcting that is item 4b.
-    /// Asserting the type here would force churn when 4b lands, and the contract 4c established
-    /// is "throws rather than returning a value", which is what this asserts.
+    /// Item 4b pins the empty-state exception to `InvalidOperationException`. The helper must
+    /// consult `_hasValue` before `_variant`, or variant zero leaks through as `EnumException`.
     [Fact]
     public void a_default_struct_union_does_not_read_as_its_variant_zero_case()
     {
         var result = new ResultUintError();
 
         Assert.False(result.IsOk, "a default union holds no value, so no case is active");
-        Assert.ThrowsAny<Exception>(() => result.AsOk());
+        var exception = Assert.Throws<InvalidOperationException>(() => result.AsOk());
+        Assert.Contains(nameof(ResultUintError), exception.Message);
+        Assert.Contains("no Rust variant", exception.Message);
     }
 
     /// The `Option` half of 4c's soundness obligation: `default(OptionX)` is not `NoneCase`.

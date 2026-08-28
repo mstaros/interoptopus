@@ -41,7 +41,14 @@ public partial class {{ name }} : IDisposable
     {{ _fns_decorators_all | indent }}
     public static unsafe {{ name }} From({{ element_type }}[] managed)
     {
-        var rval = new {{ name }}();
+{% if reject_null_elements %}        for (var i = 0; i < managed.Length; ++i)
+        {
+            if (managed[i] is null)
+            {
+                throw new InvalidOperationException("Cannot marshal {{ name }} element at index " + i + ": {{ element_type }} is null and corresponds to no Rust variant. Construct it through a case constructor or factory.");
+            }
+        }
+{% endif %}        var rval = new {{ name }}();
         var size = Marshal.SizeOf<{{ unmanaged_element_type }}>();
         rval._data = Marshal.AllocHGlobal(size * managed.Length);
         rval._len = (ulong) managed.Length;

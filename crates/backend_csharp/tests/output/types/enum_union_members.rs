@@ -244,8 +244,8 @@ fn a_unit_only_enum_becomes_a_plain_csharp_enum() {
 /// Scoped by `writes_has_value`, so class-backed unions are untouched: they have no `_hasValue`
 /// and their `default` is a null reference, which cannot reach these members at all.
 ///
-/// `ExceptionForVariant()` is deliberately retained rather than a new exception type — which one
-/// an empty value should throw is item 4b, and it is gated.
+/// `ExceptionForVariant()` is deliberately retained, and item 4b now makes it return
+/// `InvalidOperationException` for the empty state before consulting `_variant`.
 ///
 /// **This test is also why the change is testable.** The template-only version (`9e3383f`,
 /// reverted in `a4e39ad`) caused Guarded to select no tests and pass a gate it never executed: a
@@ -263,6 +263,13 @@ fn a_default_struct_backed_union_does_not_read_as_variant_zero() {
         cs.contains("public uint AsCount() { if (!_hasValue || _variant != 1)"),
         "a struct-backed accessor must reject the empty state before returning a payload read out \
          of uninitialised memory"
+    );
+
+    assert!(
+        cs.contains(
+            "if (!_hasValue) return new InvalidOperationException(\"A default Meter is empty and corresponds to no Rust variant."
+        ),
+        "item 4b must classify the empty state before variant zero can become EnumException"
     );
 
     assert!(cs.contains("public bool IsBlank => _variant == 0;"), "class-backed unions keep the plain check: there is no _hasValue to read and default is a null reference, so the empty state is unreachable");

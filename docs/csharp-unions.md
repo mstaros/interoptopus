@@ -539,7 +539,7 @@ codebase means *"severe error, should never happen"*.
 `ExceptionForVariant()` returns the empty-state exception so existing
 `throw ExceptionForVariant()` call sites stay coherent.
 
-This is **decided**, not open — item 4b is implementation only.
+This is implemented by item 4b.
 
 ---
 
@@ -657,11 +657,11 @@ the pass is `union_names`, it owns naming only, and there is no gate — see Dec
 ### Remaining
 
 Items 0–1c, R (the .NET 11 retarget — `LangVersion=preview`, `rt/dynamic.rs`, plugin DLLs;
-`9d664613`, in the Done table above), 1d, **3a, 3b, 3c, 3d, 3f, 4, 4a and 4c** are done, and
-**3e is satisfied but unverified** (see its row). **The open front is 4b** (the exception split).
-Open items #1 is no longer measurement-blocked: all three positions, including an actual
-collection element, are measured. The remaining work is the contract choice and guards at each
-generated boundary.
+`9d664613`, in the Done table above), 1d, **3a, 3b, 3c, 3d, 3f, 4, 4a, 4b and 4c** are done, and
+**3e is satisfied but unverified** (see its row). **Open items #1 is closed:** all three positions
+were measured, and every generated boundary now rejects a null class-backed union with the decided
+`InvalidOperationException` contract before native entry. This unblocks 4d and the remaining Step 5
+work.
 
 **The test items are almost all closed now.** `3e`, `5d`, `5e`, `5f`, `5h` and `5i` are done, and
 the guards they cover are executed rather than asserted as text. `5g` is the only one of that
@@ -683,8 +683,9 @@ and `default(OptionX).Value` was already null. It was **not** true of the older 
 `Result` reported `HasValue == false` and `IsOk == true` simultaneously, and **`AsOk()` returned
 a zeroed payload out of uninitialised memory instead of throwing** — a wrong value reaching a
 consumer, which the row's original wording ("empty not `Ok`") undersold. Both conditions are now
-widened by `_hasValue`, scoped by `writes_has_value`; `ExceptionForVariant()` is kept so 4b's
-choice of exception stays open. Landed `6780d64`, changelog entry in the same commit.
+widened by `_hasValue`, scoped by `writes_has_value`; `ExceptionForVariant()` was retained for
+4b to classify the empty state before consulting variant zero. Landed `6780d64`, changelog entry
+in the same commit.
 
 **Step 3 is otherwise complete: Rust enums now project as C# 15 unions.** A payload-carrying enum
 emits `[Union]`, implements `IUnion`, and carries nested case types, public single-parameter case
@@ -721,25 +722,25 @@ not determinable from this document and has not been guessed at.
 | 3d | **done** `da741fa9` | ~~`[Union]` + `IUnion` via joined interface list~~ Both emitted, gated on `is_union_projected`, placed *outside* the `is_managed_only` guard — that guard governs the `Unmanaged` mirror and the marshaller, and a managed-only enum can still be a union (`DataEnum` is exactly that case). `IUnion` joins the existing list ahead of `IResult` and `IDisposable`. **`System.Runtime.CompilerServices.UnionAttribute`** confirmed against a net11 assembly that builds, and **`IUnion` resolves from the framework** — traced in `MpsAgent`: `IMerkleNode.cs:183` declares `IMerkleUnion : IUnion`, and `Tests/Unions.Tests` has several hand-written implementors. An earlier version of this row deferred `IUnion` because the specification leaves its namespace unspecified; **that read the proposal's open questions as live, and the feature has shipped.** `IUnion<TUnion>` stays out — recorded as removed. `using System.Runtime.CompilerServices;` was already emitted | case constructors ✔ (**not 3c, as previously recorded**) |
 | 3e | **satisfied, unverified** | ~~decide whether the compiler synthesises it~~ — settled: it does, via the generated constructor, so 3e reduces to "constructors are public and single-parameter" and nothing is emitted. `aa2d550d` makes that true, so **there is nothing left to build**. But no fixture compiles an implicit conversion, so the synthesis claim is specification-derived and **untested**. Closing it means adding one line to a plugin fixture — `ResultUintError r = new OkCase(5);` — and letting the plugin build prove it. Two spec-derived claims were already wrong today (3d's gate, `IUnion`'s namespace), which is why this is not marked done | 3b ✔, case constructors ✔ |
 | 3f | **done** `4a19b0e3` | ~~**Case-type accessibility — `public`**~~ Emitted `public` at the site rather than inherited, since a nested type defaults to `private` — unusable, because the case type could not then be named outside the union — and `internal` fails the same way across an assembly boundary. Landed with 3b as planned; asserted by `enum_case_types::case_types_are_public` | 3b ✔ |
-| 4 | **done** `2e17270` | ~~`ToUnmanaged` / `AsUnmanaged` empty guard~~ One branch in each of the two templates, rejecting the empty struct state before the copy. **Throws `InvalidOperationException` directly, not through `ExceptionForVariant()`** — that helper ignores `_hasValue` entirely, so for an empty value it matches `_variant == 0` and returns variant zero's `EnumException` as though the value were well-formed. Correcting it is 4b, which is gated, so routing through it now would emit the wrong exception until 4b lands. Scoped by `struct_class.is_struct(id) && projection.is_union(id)` — the same conjunction `body_unmanaged` and `body_ctors` use — because a class-backed union has no `_hasValue` to read and its `default` is a null reference. Neither pass previously received `struct_class` or `projection`; both were threaded, with four pipeline call sites. Breaking change, changelog entry `e9c39630`. **No test asserts that the guard fires** — that is 5d, whose gate this satisfies | — |
+| 4 | **done** `2e17270` | ~~`ToUnmanaged` / `AsUnmanaged` empty guard~~ One branch in each of the two templates, rejecting the empty struct state before the copy. **Throws `InvalidOperationException` directly, not through `ExceptionForVariant()`** — that helper ignores `_hasValue` entirely, so for an empty value it matches `_variant == 0` and returns variant zero's `EnumException` as though the value were well-formed. 4b now corrects the helper before variant matching; the direct marshal-out guard remains unchanged. Scoped by `struct_class.is_struct(id) && projection.is_union(id)` — the same conjunction `body_unmanaged` and `body_ctors` use — because a class-backed union has no `_hasValue` to read and its `default` is a null reference. Neither pass previously received `struct_class` or `projection`; both were threaded, with four pipeline call sites. Breaking change, changelog entry `e9c39630`. 5d executes the `ToUnmanaged` guard; 4b now pins the matching accessor exception | — |
 | 4a | **done** `056b9e4` | ~~`ToManaged` constructs via case ctors + validates tag~~ A `switch` expression over **every** variant, each arm calling a case constructor — `new E(new XCase(payload))` for payload variants, `new E(new XCase())` for unit ones — with a default arm throwing `InteropException`. **The default arm is the substance:** an unrecognised native tag previously fell through every `if` and returned a value carrying that tag with no payload set, a silently malformed value. 3c's `_managed._hasValue = true;` stopgap is deleted, since constructing through a case constructor establishes the flag implicitly — those constructors already follow `writes_has_value` — and `struct_class` left this pass with it. **The pass needed a second variant list:** the existing one is `filter_map` on `v.ty?`, payload-carrying only, so it cannot supply an arm per variant; the narrow list still drives the `[FieldOffset]` helper fields, which genuinely exist only for payload variants. Scoped to union-projected enums — a `Projection::Discriminant` enum has no case types emitted, so it keeps the mutation path. A test asserting the deleted line was **rewritten, not removed**: it now asserts construction through the case constructor and the presence of the throw arm, renamed `a_well_formed_value_gets_the_flag_however_it_is_constructed`| 3c ✔, case constructors ✔ |
-| 4b | open | Exception split (decided in Step 4; implementation only) | 4, 4a, **Open items #1** |
-| 4c | **done** `6780d64` | ~~`default(ResultX)` empty not `Ok`; `default(OptionX)` ≠ `NoneCase`~~ **A soundness obligation, not a preference** — specification § Well-formedness, *Soundness*: `Value` always evaluates to null or to a value of a case type, expressly including the default value of the union type. The side state is **forced, not chosen**: `Ok` is tag 0 and `default` is all-zero, so given tag preservation — settled, and load-bearing because it keeps the crossing a memcpy rather than an N-way translation — the discriminant cannot distinguish them, and `_hasValue` is the only remedy. **Measured before implementing, and this row's own wording undersold it.** The `Option` half and the C# 15 surface were already satisfied by `8c70868d` plus 3c. What was broken was the *older* accessor surface: `IsOk` read `_variant == 0` and `AsOk()` tested only the variant, so a default struct-backed `Result` reported `HasValue == false` and `IsOk == true` at once, and **`AsOk()` returned a zeroed payload out of uninitialised memory instead of throwing** — a wrong value reaching a consumer, not merely a mislabelled one. Both widened by `_hasValue`, scoped by `writes_has_value`; `ExceptionForVariant()` retained so 4b's choice stays open. Consequence recorded nowhere else: a `Value` that can be null makes a consumer's otherwise-exhaustive `switch` warn on unhandled null. Breaking change, changelog entry landed with it | 3c ✔, 4a |
-| 4d | partial | Wire has **two** throw sites, not one. Deserializer's unknown native tag → `InteropException`: **done**. Serializer's empty-state `else` should call `ExceptionForVariant()` instead of its own "Unknown variant": **open**, needs 4b's helper | 1d ✔, 4b |
-| 5 | open | Snapshots move once; consumer projects compile the output | 3d ✔, 4b |
+| 4b | **done** | ~~Exception split~~ `InvalidOperationException` now covers empty struct accessors and null class-backed unions at both marshaller forms, composite fields, nested payloads and slice elements. Slice rejection occurs before `AllocHGlobal`; generic post-allocation cleanup remains separate | 4 ✔, 4a ✔, **Open items #1** ✔ |
+| 4c | **done** `6780d64` | ~~`default(ResultX)` empty not `Ok`; `default(OptionX)` ≠ `NoneCase`~~ **A soundness obligation, not a preference** — specification § Well-formedness, *Soundness*: `Value` always evaluates to null or to a value of a case type, expressly including the default value of the union type. The side state is **forced, not chosen**: `Ok` is tag 0 and `default` is all-zero, so given tag preservation — settled, and load-bearing because it keeps the crossing a memcpy rather than an N-way translation — the discriminant cannot distinguish them, and `_hasValue` is the only remedy. **Measured before implementing, and this row's own wording undersold it.** The `Option` half and the C# 15 surface were already satisfied by `8c70868d` plus 3c. What was broken was the *older* accessor surface: `IsOk` read `_variant == 0` and `AsOk()` tested only the variant, so a default struct-backed `Result` reported `HasValue == false` and `IsOk == true` at once, and **`AsOk()` returned a zeroed payload out of uninitialised memory instead of throwing** — a wrong value reaching a consumer, not merely a mislabelled one. Both widened by `_hasValue`, scoped by `writes_has_value`; `ExceptionForVariant()` now checks `_hasValue` first under 4b. Consequence recorded nowhere else: a `Value` that can be null makes a consumer's otherwise-exhaustive `switch` warn on unhandled null. Breaking change, changelog entry landed with it | 3c ✔, 4a |
+| 4d | partial | Wire has **two** throw sites, not one. Deserializer's unknown native tag → `InteropException`: **done**. Serializer's empty-state `else` should call `ExceptionForVariant()` instead of its own "Unknown variant": **open**, now unblocked by 4b's helper | 1d ✔, 4b ✔ |
+| 5 | open | Snapshots move once; consumer projects compile the output | 3d ✔, 4b ✔ |
 | 5c | partial | Collision cases: `Value`, `B`/`IsB`. ~~casing-fold~~ — no such class, `union_names` allocates case-sensitively. A Wire-reachable stem-moving collision is covered by `tests/output/wire/collision.rs`; the managed-side cases remain | 1d ✔ |
 | 5d | **done** `5eda9a21` | ~~`default(struct).ToUnmanaged()` throws~~ `Test.Pattern.Union.cs` asserts both directions: `marshalling_a_default_union_out_throws` (`Assert.Throws<InvalidOperationException>` on `pattern_result_1(new ResultUintError())`, checking the message names the type) and `marshalling_a_constructed_union_out_does_not_throw`, so the guard cannot be made unconditional without a test noticing. Reaches the guard through `Marshaller.ToUnmanaged() { return _managed.ToUnmanaged(); }`; executes under `cargo test` via the wiring in `423105d0`. **Scope, since item 4 covers both methods and this row names one:** 5d is `ToUnmanaged` only and is fully satisfied. The `AsUnmanaged` half is not 5d and is separately blocked — `Issues.md` `5e2a319c` records, from Roslyn caller queries rather than text search, that no `AsUnmanaged` in either pipeline has a caller outside another `AsUnmanaged`, so that guard is unreachable from any C# call path | 4 ✔ |
 | 5e | **done** `44a3d70` | ~~Class union cannot produce non-null empty~~ `Test.Pattern.Union.cs::a_class_backed_union_cannot_be_constructed_empty`. Reflection asserts the parameterless constructor on `OptionUtf8String` exists and is **non-public**, that `default` is a null reference rather than a zeroed instance, and that `HasValue` is constant `true` with a non-null `Value` on a constructed one. **Reflection rather than a call:** `new OptionUtf8String()` from the test assembly would fail to compile, which proves the point but leaves nothing that runs and nothing that can regress. The prior check was `enum_class_ctor::a_class_backed_enum_gets_a_private_parameterless_ctor`, which matches text in a snapshot — so making the constructor public again would have produced a diff a reviewer could accept with `cargo insta review`, and no test would have failed | 3a ✔ |
 | 5f | **done** | ~~Invalid native tag throws~~ `Test.Pattern.Union.cs::an_invalid_native_tag_throws` asserts `InteropException` and checks the message carries both the offending tag and the type name, reaching 4a's default arm in `Unmanaged.ToManaged()`. **Rust never builds a malformed enum** — that is undefined behaviour and would entitle the compiler to delete the arm being asserted. `functions/malformed.rs` returns an ordinary `#[repr(C)] { u32 tag; u32 payload; }` holding 99, deliberately not `#[ffi]` so it stays out of the inventory; the mismatch is confined to one hand-written `LibraryImport` in `Bindings/MalformedFixture.cs`. **That declaration must live in Bindings, not Tests:** `Unmanaged` and `Marshaller` are emitted `internal`, so the source generator can only wire the marshaller from inside that assembly — measured, CS0122 ×5. Return-by-value is *not* the constraint; `pattern_result_1` returns the same type by value and always compiled | 4a ✔ |
 | 5g | open | Default disposable `Dispose()` no-op | — |
 | 5h | **done** `8bf658c` | ~~Managed-only `DataEnum` case~~ `Test.Pattern.Union.cs::a_managed_only_union_is_still_projected_as_a_union`. **The load-bearing assertion is an absence:** `DataEnum` has `IUnion`, case types and a working `Value`/`TryGetValue`, but **no nested `Unmanaged` mirror**, because there is nothing to marshal it to. That is the only check anywhere that union projection and the FFI crossing are independent — the distinction 3d had to get right when it placed `[Union]` *outside* the `is_managed_only` guard. Without the absence assertion this is just another union test | 3c ✔ |
-| 5i | **done** `8bf658c` | ~~`default(ResultX)`/`default(OptionX)` tests; `AsOk()` on default~~ `Test.Pattern.Union.cs`: `a_default_struct_union_does_not_read_as_its_variant_zero_case` asserts `IsOk` is false on a default and `AsOk()` throws — the behaviour 4c changed, which until now nothing executed. **The exception type is deliberately not pinned.** `ExceptionForVariant()` still ignores `_hasValue` and hands back variant zero's `EnumException`; correcting that is 4b, so asserting the type here would force churn when it lands. The contract 4c established is "throws rather than returning a fabricated value", and that is what is asserted. `a_default_option_is_empty_rather_than_none` covers the `Option` half through `HasValue`/`Value` rather than `IsNone`, so it does not depend on which variant is tag zero — the distinction 4c exists to preserve | 4c |
+| 5i | **done** `8bf658c` | ~~`default(ResultX)`/`default(OptionX)` tests; `AsOk()` on default~~ `Test.Pattern.Union.cs`: `a_default_struct_union_does_not_read_as_its_variant_zero_case` asserts `IsOk` is false on a default and `AsOk()` throws — the behaviour 4c changed, which until now nothing executed. **The exception type is now pinned by 4b.** `ExceptionForVariant()` checks `_hasValue` before `_variant`, and this test now asserts `InvalidOperationException` plus the type and "no Rust variant" message. The contract 4c established is "throws rather than returning a fabricated value", and that is what is asserted. `a_default_option_is_empty_rather_than_none` covers the `Option` half through `HasValue`/`Value` rather than `IsNone`, so it does not depend on which variant is tag zero — the distinction 4c exists to preserve | 4c |
 | 6 | open | `Result` leftovers: `IResult<T,E>` coexistence, `body_from_call` factory names | 5 green |
 
 **Two lists number separately, and the gate column names which.** `1` in the Done table above is
-the `union_names` model pass, and it is done. `Open items #1` is the class-union null-at-marshal-out
-question, whose three positions (a)/(b)/(c) are unmeasured in two of three — that is what gates 4b,
-not the Done-table item.
+the `union_names` model pass, and it is done. `Open items #1` is the now-closed class-union
+null-at-marshal-out question. Its measurements and 4b implementation are recorded below; it no
+longer gates later work.
 
 Item 1d gates 3b because 3b introduces `{case_type}`, a new collision class — every collision it
 resolves moves a stem, and every moved stem is a place `wire` and `body.cs` disagree. 5c is gated
@@ -783,7 +784,7 @@ Multi-field and named variant support. Retiring `IsOk` / `AsOk`.
 
 ## Open items
 
-1. **Null at marshal-out for a class-backed union.**
+1. **Closed — null at marshal-out for a class-backed union.**
 
    **Direction.** Marshal-out only — `ToUnmanaged()` / `AsUnmanaged()`, and the same call emitted
    on an enclosing composite's field. `Unmanaged.ToManaged()` constructs from native bytes and can
@@ -795,11 +796,10 @@ Multi-field and named variant support. Retiring `IsOk` / `AsOk`.
    `wire/mod.rs:104` and `:264`, in the wire deserializer, a different path from marshal-out. It
    supports test 5e; it says nothing here.
 
-   **All three positions are now measured, and they agree on the boundary result, not on the
-   generated failure site.** `nullable.rs:35` defines nullability as
-   `TypeKind::Delegate(d) if d.kind == DelegateKind::Class` — class delegates only. A
-   class-backed union therefore reaches an unguarded instance conversion call instead of an
-   explicit null policy.
+   **All three positions were measured, and they agreed on the boundary result, not on the
+   generated failure site.** At measurement time, `nullable.rs` classified class delegates only,
+   so a class-backed union reached an unguarded instance conversion call. The implemented
+   `NullPolicy::Throw` branch now records that distinction explicitly.
 
    The direct and composite measurements live in
    `Tests/Test.Union.NullMarshalOut.cs`. The actual collection measurement uses the durable
@@ -812,7 +812,8 @@ Multi-field and named variant support. Retiring `IsOk` / `AsOk`.
    | (b) composite field | `Layer1String.maybe_1 = null`, wrapped in `Layer3String.A` | `Layer1String.IntoUnmanaged()` |
    | (c) collection element | `new OptionUtf8String[] { null! }.Slice()` | `SliceOptionUtf8String.From()`, at `managed[i].AsUnmanaged()` |
 
-   Each throws `NullReferenceException` before native entry. A collection control containing
+   Before 4b, each threw `NullReferenceException` before native entry. A collection control
+   containing
    `Some("hello")` and `None` reaches Rust and returns one present element. The earlier
    `pattern_ffi_option_3(Some(null))` measurement remains useful nested-union coverage, but it is
    not position (c): a case payload is not a collection element.
@@ -823,12 +824,11 @@ Multi-field and named variant support. Retiring `IsOk` / `AsOk`.
    disposed. Rust allocation counters cannot see this C# allocation. Fixing that generic slice
    path is follow-up work, not part of choosing 4b's exception.
 
-   **What this settles for 4b.** The public contract can be one rule, but the implementation is
-   not one branch in one place. The actual collection case disproves that earlier conclusion:
-   direct arguments fail in a marshaller, composite fields fail in the enclosing conversion, and
-   collection elements fail in the non-blittable slice's `From` loop. 4b must cover all three
-   generated boundaries if it promises a consistent exception. The three-way exception choice
-   below remains; silently fabricating a default variant remains excluded.
+   **What this settled for 4b.** The public contract is one rule, but the implementation is not
+   one branch in one place. Direct arguments reach a marshaller, composite fields reach the
+   enclosing conversion, and collection elements reach the non-blittable slice's `From` loop.
+   4b therefore guards all three boundaries with `InvalidOperationException`; silently fabricating
+   a default variant remains excluded.
 
    **And `Issues.md` `b4e07f12` is unblocked by the same measurement**, with its own condition
    intact: delegating `nullable.rs` to `struct_class::is_class` is now safe *provided*
@@ -846,11 +846,12 @@ Multi-field and named variant support. Retiring `IsOk` / `AsOk`.
    the substitution as correct text, so nothing here could catch it. An option that fails silently
    in a system with no detection for silent failure is not a candidate.
 
-   **`ArgumentNullException` loses on the measurement.** All three positions fail *before any
-   marshaller*, and (b) and (c) are a composite field and a nested case payload — not arguments.
-   That exception carries a `paramName` and means "the caller passed null for parameter X"; for a
-   null two levels inside a `Layer2String` there is no parameter to name, and the description gets
-   worse as nesting deepens. `OptionOptionResultOptionUtf8StringError` already exists.
+   **`ArgumentNullException` loses on the measurement.** Only (a) is a public argument caught in
+   a marshaller; (b) and (c) are nested values handled by composite and slice conversion.
+   `ArgumentNullException` carries a `paramName` and means "the caller passed null for parameter
+   X"; for a null two levels inside a `Layer2String` there is no parameter to name, and the
+   description gets worse as nesting deepens. `OptionOptionResultOptionUtf8StringError` already
+   exists.
 
    **`InvalidOperationException` wins on three properties that outlast this item.** It is what
    item 4 already throws for a *default struct* union at marshal-out — the same condition in the
@@ -878,21 +879,35 @@ Multi-field and named variant support. Retiring `IsOk` / `AsOk`.
    **`InteropException` is excluded**, with its reason: it means *"severe error, should never
    happen"*, and a consumer passing null is an ordinary mistake, not corruption.
 
-   **Gates 4b, not 3a.** 3a is the private parameterless constructor plus dropping `_hasValue`;
-   neither depends on which exception is thrown. The Remaining table already gives 3a's gate as
-   `—`; this item previously contradicted it and was wrong.
+   **This gated 4b, not 3a.** 3a is the private parameterless constructor plus dropping
+   `_hasValue`; neither depends on which exception is thrown. The measurement and decision are
+   now consumed by 4b, while 3a remained independent.
 
-   **Tests exist, but they do not yet assert the final exception contract.**
-   `Tests/Test.Union.NullMarshalOut.cs` records the direct and composite behaviour observed in
-   `c70efeb`. `Tests/Test.Pattern.Slices.cs` now adds the real collection position plus a valid
-   control that reaches Rust. Its null assertion deliberately requires only that an exception
-   occurs, because 4b still owns the exact type and a null must never become a fabricated variant.
+   **The final exception contract is executable.** `Tests/Test.Union.NullMarshalOut.cs` asserts
+   `InvalidOperationException` for the default marshaller, `ManagedToUnmanagedIn`, composite-field
+   and nested-payload paths; each message names the failing type or member and says there is no Rust
+   variant. `Tests/Test.Pattern.Slices.cs` asserts the same contract plus the failing element index.
+   Valid controls in both files reach Rust.
 
-   When 4b decides, all three positions should assert the chosen contract. Treat that expected
-   test update as part of 4b, not as a regression. A numbered test row is still owed; numbering it
-   was not this measurement's call. The collection test also exercises the currently
-   exception-unsafe `AllocHGlobal` path described above, so the generic cleanup follow-up remains
-   explicit rather than being hidden by a green suite.
+   The collection guard now preflights null elements before `AllocHGlobal`, closing the measured
+   null-specific leak. A different element conversion can still throw after allocation, so generic
+   post-allocation cleanup remains explicit follow-up work rather than being hidden by a green
+   suite.
+
+   **4b implementation shape.** Reuse `NullPolicy::Throw`; do not add a second nullability
+   classification. Direct arguments are guarded in both enum marshaller forms before dereferencing
+   `_managed`. Composite fields keep the existing policy-driven guard. Enum payload conversion
+   applies the same policy before calling the nested value's conversion method. For struct-backed
+   unions, `ExceptionForVariant()` checks `_hasValue` before `_variant` and returns the same
+   `InvalidOperationException` class used by marshal-out. A non-blittable slice whose element policy
+   is `Throw` performs an indexed null preflight before constructing the result or calling
+   `Marshal.AllocHGlobal`; this both gives position (c) the same contract and avoids the measured
+   null-specific unmanaged-buffer leak. Generic post-allocation exception cleanup remains separate.
+
+   Every guard throws `InvalidOperationException`, names the affected type or member (and the slice
+   index where applicable), and says that the value corresponds to no Rust variant. Tests execute
+   the empty-struct accessor, default marshaller, `ManagedToUnmanagedIn`, composite-field,
+   nested-payload and slice-element paths, while retaining valid-value controls that reach Rust.
 
 2. ~~**Case→enum conversion.**~~ **Closed — the compiler provides it, and this is now confirmed by
    compilation rather than by reading alone.** The spec says *"An implicit union conversion exists

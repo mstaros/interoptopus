@@ -158,13 +158,11 @@ public class TestPatternSlices
     [Fact]
     public void slice_of_class_backed_unions_rejects_null_elements()
     {
-        var exception = Record.Exception(() =>
-        {
-            using var slice = new OptionUtf8String[] { null! }.Slice();
-            Interop.pattern_ffi_slice_of_option_string(slice);
-        });
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => new OptionUtf8String[] { null! }.Slice()
+        );
 
-        // Item 4b still owns the exact exception type; a null must never become a fabricated variant.
-        Assert.NotNull(exception);
+        Assert.Contains("SliceOptionUtf8String element at index 0", exception.Message);
+        Assert.Contains("no Rust variant", exception.Message);
     }
 }

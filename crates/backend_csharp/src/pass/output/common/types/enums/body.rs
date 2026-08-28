@@ -128,7 +128,15 @@ impl Pass {
             // `Unmanaged` mirror and the marshaller, and a managed-only enum can still be a
             // union. `DataEnum` in the reference project is exactly that case.
             let is_union_projected = projection.is_union(ty);
+            let marshaller_managed_receiver = if struct_class.is_class(ty) && is_union_projected {
+                format!(
+                    "(_managed ?? throw new InvalidOperationException(\"Cannot marshal {name}: it is null and corresponds to no Rust variant. Construct it through a case constructor or factory.\"))"
+                )
+            } else {
+                "_managed".to_string()
+            };
             context.insert("is_union_projected", &is_union_projected);
+            context.insert("marshaller_managed_receiver", &marshaller_managed_receiver);
             context.insert("visibility", &visibility);
             context.insert("is_result", &result_interface.is_some());
             context.insert("result_ok_name", result_interface.as_ref().map_or("", |r| r.ok_name.as_str()));
