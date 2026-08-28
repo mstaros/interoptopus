@@ -1,3 +1,4 @@
+using System;
 using My.Company;
 using My.Company.Common;
 using Xunit;
@@ -30,6 +31,38 @@ public class TestPatternStrings
     public void pattern_string_2()
     {
         Assert.Equal(11u, Interop.pattern_string_2("hello world".Utf8()));
+    }
+
+    /// <summary>
+    /// Establishes what a by-value pass does to the managed <c>Utf8String</c>.
+    /// </summary>
+    /// <remarks>
+    /// <c>Marshaller.ToUnmanaged()</c> calls <c>Utf8String.IntoUnmanaged()</c>, which nulls
+    /// <c>_ptr</c> on the managed side after handing the buffer over, and the type is declared
+    /// <c>[CustomMarshaller(..., MarshalMode.Default, ...)]</c> — one implementation serving in,
+    /// out, ref and return alike. Reading those together predicts that a second by-value pass of
+    /// the same instance throws.
+    ///
+    /// Nothing tested it. <c>pattern_string_1</c> builds a fresh <c>.Utf8()</c> per call, and
+    /// <c>string_by_ref_dont_leak</c> reuses its value by <c>ref</c>, where the callee may write
+    /// it back. This is the missing case, and it is written because the prediction came from
+    /// reading rather than running.
+    ///
+    /// It pins *ownership*, not a defect. Where the Rust signature takes <c>Utf8String</c> by
+    /// value, Rust owns and drops it, and consuming the managed instance is correct. The
+    /// observable consequence is the one the reference fixtures already work around by calling
+    /// <c>Clone()</c> before passing: after a by-value pass, the managed instance is spent.
+    ///
+    /// If this test fails, the reading above is wrong somewhere and the <c>Clone()</c> calls in
+    /// <c>Test.Core.Enums.cs</c> have some other explanation — which is worth knowing either way.
+    /// </remarks>
+    [Fact]
+    public void passing_a_string_by_value_consumes_it()
+    {
+        var s = "hello world".Utf8();
+
+        Assert.Equal(11u, Interop.pattern_string_2(s));
+        Assert.ThrowsAny<Exception>(() => Interop.pattern_string_2(s));
     }
 
     [Fact]
