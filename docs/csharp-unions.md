@@ -657,16 +657,28 @@ the pass is `union_names`, it owns naming only, and there is no gate — see Dec
 ### Remaining
 
 Items 0–1c, R (the .NET 11 retarget — `LangVersion=preview`, `rt/dynamic.rs`, plugin DLLs;
-`9d664613`, in the Done table above), 1d, **3a, 3b, 3c, 3d, 3f, 4 and 4a** are done, and **3e is
-satisfied but unverified** (see its row). **The open front is 4c** (`default(ResultX)` empty, not
-`Ok`), whose gates are now both satisfied.
+`9d664613`, in the Done table above), 1d, **3a, 3b, 3c, 3d, 3f, 4, 4a and 4c** are done, and
+**3e is satisfied but unverified** (see its row). **The open front is 4b** (the exception split),
+which is gated on *Open items #1* — two of whose three positions are still unmeasured, so it is
+blocked on a measurement rather than on effort.
 
-**4a unblocked two things worth taking together.** `5f` — *invalid native tag throws* — is the
-test for the default arm 4a just added, and that arm is currently unverified. `4c` may already be
-largely satisfied rather than open: `8c70868d` put `_hasValue` on `Result` carriers and 3c made
-`Value` consult it, so `default(ResultX).Value` should already be null rather than `Ok`. **That is
-reasoning, not a measurement** — check it before either implementing or closing 4c, and `5i` is
-where the check belongs.
+**The tests are where the value is now.** `5d`, `5e`, `5f`, `5g` and `5h` all have their gates
+satisfied, and two of them cover guards already in master that nothing currently exercises:
+`5d` is the only check that item 4's empty-marshal-out guard actually fires, and `5f` the only
+check that 4a's invalid-tag arm actually throws. Both are verified today solely as text in a
+snapshot. `3e` remains the cheapest item on the board — one line in a plugin fixture.
+
+**What 4c turned out to be, since the guess recorded here was half right.** This paragraph
+previously suspected 4c was already largely satisfied, because `8c70868d` put `_hasValue` on
+carriers and 3c made `Value` consult it. Measured: that is true of the **C# 15 surface and of
+`Option`** — `OptionUint`, `OptionVec`, `OptionEnumPayload` and `OptionInner` all carry the flag,
+and `default(OptionX).Value` was already null. It was **not** true of the older accessor surface.
+`IsOk` read `_variant == 0` and `AsOk()` tested only the variant, so a default struct-backed
+`Result` reported `HasValue == false` and `IsOk == true` simultaneously, and **`AsOk()` returned
+a zeroed payload out of uninitialised memory instead of throwing** — a wrong value reaching a
+consumer, which the row's original wording ("empty not `Ok`") undersold. Both conditions are now
+widened by `_hasValue`, scoped by `writes_has_value`; `ExceptionForVariant()` is kept so 4b's
+choice of exception stays open. Landed `6780d64`, changelog entry in the same commit.
 
 **Step 3 is otherwise complete: Rust enums now project as C# 15 unions.** A payload-carrying enum
 emits `[Union]`, implements `IUnion`, and carries nested case types, public single-parameter case
@@ -706,7 +718,7 @@ not determinable from this document and has not been guessed at.
 | 4 | **done** `2e17270` | ~~`ToUnmanaged` / `AsUnmanaged` empty guard~~ One branch in each of the two templates, rejecting the empty struct state before the copy. **Throws `InvalidOperationException` directly, not through `ExceptionForVariant()`** — that helper ignores `_hasValue` entirely, so for an empty value it matches `_variant == 0` and returns variant zero's `EnumException` as though the value were well-formed. Correcting it is 4b, which is gated, so routing through it now would emit the wrong exception until 4b lands. Scoped by `struct_class.is_struct(id) && projection.is_union(id)` — the same conjunction `body_unmanaged` and `body_ctors` use — because a class-backed union has no `_hasValue` to read and its `default` is a null reference. Neither pass previously received `struct_class` or `projection`; both were threaded, with four pipeline call sites. Breaking change, changelog entry `e9c39630`. **No test asserts that the guard fires** — that is 5d, whose gate this satisfies | — |
 | 4a | **done** `056b9e4` | ~~`ToManaged` constructs via case ctors + validates tag~~ A `switch` expression over **every** variant, each arm calling a case constructor — `new E(new XCase(payload))` for payload variants, `new E(new XCase())` for unit ones — with a default arm throwing `InteropException`. **The default arm is the substance:** an unrecognised native tag previously fell through every `if` and returned a value carrying that tag with no payload set, a silently malformed value. 3c's `_managed._hasValue = true;` stopgap is deleted, since constructing through a case constructor establishes the flag implicitly — those constructors already follow `writes_has_value` — and `struct_class` left this pass with it. **The pass needed a second variant list:** the existing one is `filter_map` on `v.ty?`, payload-carrying only, so it cannot supply an arm per variant; the narrow list still drives the `[FieldOffset]` helper fields, which genuinely exist only for payload variants. Scoped to union-projected enums — a `Projection::Discriminant` enum has no case types emitted, so it keeps the mutation path. A test asserting the deleted line was **rewritten, not removed**: it now asserts construction through the case constructor and the presence of the throw arm, renamed `a_well_formed_value_gets_the_flag_however_it_is_constructed`| 3c ✔, case constructors ✔ |
 | 4b | open | Exception split (decided in Step 4; implementation only) | 4, 4a, **Open items #1** |
-| 4c | open | `default(ResultX)` empty not `Ok`; `default(OptionX)` ≠ `NoneCase`. **A soundness obligation, not a preference** — specification § Well-formedness, *Soundness*: `Value` always evaluates to null or to a value of a case type, **expressly including the default value of the union type**. (An earlier version of this row cited *"for struct unions, `default` produces a `Value` of null"*. That rule sits in the specification's `[Obsolete]` section and is marked removed; the obligation survives under *Soundness*.) The side state is **forced, not chosen**: `Ok` is tag 0 and `default` is all-zero, so given tag preservation — settled, and load-bearing because it keeps the crossing a memcpy rather than an N-way translation — the discriminant cannot distinguish them, and `_hasValue` or equivalent is the only remedy. Consequence recorded nowhere else: a `Value` that can be null makes a consumer's otherwise-exhaustive `switch` warn on unhandled null | 3c ✔, 4a |
+| 4c | **done** `6780d64` | ~~`default(ResultX)` empty not `Ok`; `default(OptionX)` ≠ `NoneCase`~~ **A soundness obligation, not a preference** — specification § Well-formedness, *Soundness*: `Value` always evaluates to null or to a value of a case type, expressly including the default value of the union type. The side state is **forced, not chosen**: `Ok` is tag 0 and `default` is all-zero, so given tag preservation — settled, and load-bearing because it keeps the crossing a memcpy rather than an N-way translation — the discriminant cannot distinguish them, and `_hasValue` is the only remedy. **Measured before implementing, and this row's own wording undersold it.** The `Option` half and the C# 15 surface were already satisfied by `8c70868d` plus 3c. What was broken was the *older* accessor surface: `IsOk` read `_variant == 0` and `AsOk()` tested only the variant, so a default struct-backed `Result` reported `HasValue == false` and `IsOk == true` at once, and **`AsOk()` returned a zeroed payload out of uninitialised memory instead of throwing** — a wrong value reaching a consumer, not merely a mislabelled one. Both widened by `_hasValue`, scoped by `writes_has_value`; `ExceptionForVariant()` retained so 4b's choice stays open. Consequence recorded nowhere else: a `Value` that can be null makes a consumer's otherwise-exhaustive `switch` warn on unhandled null. Breaking change, changelog entry landed with it | 3c ✔, 4a |
 | 4d | partial | Wire has **two** throw sites, not one. Deserializer's unknown native tag → `InteropException`: **done**. Serializer's empty-state `else` should call `ExceptionForVariant()` instead of its own "Unknown variant": **open**, needs 4b's helper | 1d ✔, 4b |
 | 5 | open | Snapshots move once; consumer projects compile the output | 3d ✔, 4b |
 | 5c | partial | Collision cases: `Value`, `B`/`IsB`. ~~casing-fold~~ — no such class, `union_names` allocates case-sensitively. A Wire-reachable stem-moving collision is covered by `tests/output/wire/collision.rs`; the managed-side cases remain | 1d ✔ |

@@ -25,6 +25,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   factories instead. Class-backed enums are unaffected, since their empty state is a null
   reference rather than a cleared `_hasValue`.
 
+- **`IsX` and `AsX` on a default struct-backed enum no longer report variant zero.** `IsOk` read
+  `_variant == 0`, and `AsOk()` tested only the variant; neither consulted `_hasValue`. A
+  default-constructed value therefore reported `HasValue == false` and `IsOk == true` at the same
+  time, and `AsOk()` returned a zeroed payload read out of uninitialised memory instead of
+  throwing. Both now test `_hasValue` first: `IsX` is `false` on an empty value, and `AsX` throws
+  `ExceptionForVariant()` exactly as it already did on a variant mismatch. Code that called `AsX`
+  on a default value and used the result was consuming a fabricated value and now receives an
+  exception instead. Class-backed enums are unaffected — they carry no `_hasValue`, and their
+  empty state is a null reference.
+
 - **Class-backed enums no longer expose a public parameterless constructor.** `new EnumX()` on a
   class-backed enum previously produced a variant-zero instance from outside the type — a variant
   the Rust side never sent, and one that `default(EnumX)` (a null reference) does not otherwise
