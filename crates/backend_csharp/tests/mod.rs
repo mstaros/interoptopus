@@ -254,32 +254,20 @@ fn test_binary_dir() -> Result<PathBuf, Box<dyn Error>> {
     Ok(dir.to_path_buf())
 }
 
-/// Resolves `target/debug` and checks it against the path `Bindings.csproj` hardcodes.
+/// The directory `Bindings.csproj` looks in for the native library.
 ///
 /// That project reaches the native library through a `Content` glob five levels up from its own
-/// directory, which resolves to `<repo>/target/debug` and nothing else. A custom
-/// `CARGO_TARGET_DIR` moves cargo's output without moving the glob, so the two disagree silently
-/// and the C# build picks up no library at all. Name the mismatch rather than stage a file into a
-/// directory nobody reads.
-fn target_debug_dir() -> Result<PathBuf, Box<dyn Error>> {
-    let deps = test_binary_dir()?;
-    let actual = deps.parent().ok_or("test binary is not inside <target>/debug/deps")?;
-    let actual = std::fs::canonicalize(actual)?;
-
-    let expected = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("..").join("target").join("debug");
-    let expected = std::fs::canonicalize(&expected).map_err(|e| format!("Bindings.csproj globs {}, which does not exist: {e}", expected.display()))?;
-
-    if actual != expected {
-        return Err(format!(
-            "cargo writes to {} but Bindings.csproj globs {}. A custom CARGO_TARGET_DIR moves one and \
-             not the other; run this test with the default target directory.",
-            actual.display(),
-            expected.display()
-        )
-        .into());
-    }
-
-    Ok(actual)
+/// directory, which resolves to `<repo>/target/debug` and nothing else. That path is fixed no
+/// matter where cargo is writing, so staging copies *into* it rather than requiring the two to
+/// agree.
+///
+/// An earlier version asserted they matched and refused otherwise. It was wrong, and instructively
+/// so: it fired on 2026-08-28 under this repository's own transaction validation, which runs cargo
+/// with a private `CARGO_TARGET_DIR`, and would have failed every future transaction touching this
+/// crate. The two directories never needed to agree - the library only needs to be where the glob
+/// looks. A guard can be accurate about the facts and still enforce the wrong requirement.
+fn csproj_native_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("..").join("target").join("debug")
 }
 
 /// Copies the built cdylib up from `deps/` to where `Bindings.csproj` looks for it.
@@ -296,9 +284,14 @@ fn target_debug_dir() -> Result<PathBuf, Box<dyn Error>> {
 /// Features do not enter into this. `reference_project` declares none of its own and already
 /// requests the complete `interoptopus` feature set, so `--all-features` cannot change a byte of
 /// this library; the `deps` copy and an uplifted one are the same build.
-fn stage_reference_cdylib(target_debug: &Path) -> Result<PathBuf, Box<dyn Error>> {
-    let staged = target_debug.join(REFERENCE_CDYLIB);
-    let built = target_debug.join("deps").join(REFERENCE_CDYLIB);
+fn stage_reference_cdylib() -> Result<PathBuf, Box<dyn Error>> {
+    // Read from the directory holding this test binary - cargo's real `deps`, wherever that is -
+    // and write to the fixed path the csproj globs. The two need not be related, which is what
+    // makes this work under a custom `CARGO_TARGET_DIR`.
+    let built = test_binary_dir()?.join(REFERENCE_CDYLIB);
+    let native_dir = csproj_native_dir();
+    std::fs::create_dir_all(&native_dir)?;
+    let staged = native_dir.join(REFERENCE_CDYLIB);
 
     if !built.exists() {
         return Err(format!(

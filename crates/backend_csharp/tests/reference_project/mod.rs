@@ -28,12 +28,10 @@ fn interop() -> Result<(), Box<dyn std::error::Error>> {
 /// failure this test exists to end, not one to reproduce.
 #[test]
 fn csharp_suite() -> Result<(), Box<dyn std::error::Error>> {
-    let target_debug = crate::target_debug_dir()?;
-
     // Generate first. The bindings are gitignored, so a fresh worktree has none, and test order
     // across threads and nextest processes is not something this test may assume.
     crate::prepare_reference_bindings()?;
-    let staged = crate::stage_reference_cdylib(&target_debug)?;
+    let staged = crate::stage_reference_cdylib()?;
 
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let project_dir = manifest.join("tests").join("reference_project").join("Tests");
