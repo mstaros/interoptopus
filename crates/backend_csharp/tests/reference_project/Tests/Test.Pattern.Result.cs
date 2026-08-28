@@ -9,7 +9,7 @@ public class TestPatternResult
     [Fact]
     public void pattern_result_1()
     {
-        var x = new ResultUintError();
+        var x = ResultUintError.Ok(123);
         Interop.pattern_result_1(x).AsOk();
     }
 

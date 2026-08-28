@@ -6,7 +6,7 @@ use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
 use std::thread::sleep;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 #[macro_use]
 mod common;
@@ -223,4 +223,174 @@ fn dll_path_for<P: interoptopus::lang::plugin::PluginInfo>(base: impl AsRef<Path
     let name = name.as_ref().to_str().expect("plugin name must be valid UTF-8");
     prepare_plugin::<P>(&base, name).expect("failed to prepare plugin");
     base.join("_plugins").join(name)
+}
+
+/// The platform file name of the `reference_project` cdylib.
+#[cfg(windows)]
+const REFERENCE_CDYLIB: &str = "reference_project.dll";
+#[cfg(target_os = "macos")]
+const REFERENCE_CDYLIB: &str = "libreference_project.dylib";
+#[cfg(all(unix, not(target_os = "macos")))]
+const REFERENCE_CDYLIB: &str = "libreference_project.so";
+
+/// How long `dotnet` may run before it is killed and the test fails.
+///
+/// `cargo test` applies no per-test timeout, so a hung restore would stall the whole suite with
+/// no diagnostic and no obvious culprit. A cold build plus the full suite finishes well inside a
+/// minute locally, so ten minutes trips only on a genuine hang.
+const DOTNET_TIMEOUT: Duration = Duration::from_secs(600);
+
+const DOTNET_POLL: Duration = Duration::from_millis(200);
+
+/// The directory holding the running test binary, i.e. `<target>/<profile>/deps`.
+///
+/// Used as scratch space for the generation lock. It sits inside the target directory under every
+/// `CARGO_TARGET_DIR` setting, so it is always writable and never tracked, and unlike
+/// [`target_debug_dir`] it assumes nothing about where that directory sits relative to the repo -
+/// which keeps the snapshot test free of a constraint only the C# build actually has.
+fn test_binary_dir() -> Result<PathBuf, Box<dyn Error>> {
+    let exe = std::env::current_exe()?;
+    let dir = exe.parent().ok_or("test binary has no parent directory")?;
+    Ok(dir.to_path_buf())
+}
+
+/// The directory `Bindings.csproj` looks in for the native library.
+///
+/// That project reaches the native library through a `Content` glob five levels up from its own
+/// directory, which resolves to `<repo>/target/debug` and nothing else. That path is fixed no
+/// matter where cargo is writing, so staging copies *into* it rather than requiring the two to
+/// agree.
+///
+/// An earlier version asserted they matched and refused otherwise. It was wrong, and instructively
+/// so: it fired on 2026-08-28 under this repository's own transaction validation, which runs cargo
+/// with a private `CARGO_TARGET_DIR`, and would have failed every future transaction touching this
+/// crate. The two directories never needed to agree - the library only needs to be where the glob
+/// looks. A guard can be accurate about the facts and still enforce the wrong requirement.
+fn csproj_native_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("..").join("target").join("debug")
+}
+
+/// Copies the built cdylib up from `deps/` to where `Bindings.csproj` looks for it.
+///
+/// Cargo uplifts a workspace member's artifacts to `target/debug` only when that member is
+/// selected on the command line. Built instead as a dev-dependency of this crate,
+/// `reference_project` leaves an unhashed copy in `target/debug/deps` with no hardlink up, so the
+/// csproj glob matches nothing and the library never reaches the test output directory. Confirmed
+/// on this checkout 2026-08-28: `deps` held it, `target/debug` did not.
+///
+/// A copy is the whole of the fix, deliberately not a `cargo build`. Invoking cargo from inside a
+/// `cargo test` contends for the target-directory lock and blocks.
+///
+/// Features do not enter into this. `reference_project` declares none of its own and already
+/// requests the complete `interoptopus` feature set, so `--all-features` cannot change a byte of
+/// this library; the `deps` copy and an uplifted one are the same build.
+fn stage_reference_cdylib() -> Result<PathBuf, Box<dyn Error>> {
+    // Read from the directory holding this test binary - cargo's real `deps`, wherever that is -
+    // and write to the fixed path the csproj globs. The two need not be related, which is what
+    // makes this work under a custom `CARGO_TARGET_DIR`.
+    let built = test_binary_dir()?.join(REFERENCE_CDYLIB);
+    let native_dir = csproj_native_dir();
+    std::fs::create_dir_all(&native_dir)?;
+    let staged = native_dir.join(REFERENCE_CDYLIB);
+
+    if !built.exists() {
+        return Err(format!(
+            "{} is missing. `reference_project` is a dev-dependency of this crate, so cargo builds its \
+             cdylib before this test runs; absence means the layout changed.",
+            built.display()
+        )
+        .into());
+    }
+
+    // Same guard as the plugin staging: on Windows a mapped DLL cannot be overwritten.
+    if !stage_is_current(&staged, &built) {
+        std::fs::copy(&built, &staged)?;
+    }
+
+    Ok(staged)
+}
+
+/// True when `artifact` was last written no earlier than `source`.
+fn is_no_older_than(artifact: &Path, source: &Path) -> Result<bool, Box<dyn Error>> {
+    let artifact = std::fs::metadata(artifact)?.modified()?;
+    let source = std::fs::metadata(source)?.modified()?;
+    Ok(artifact >= source)
+}
+
+/// Runs `command` to completion with inherited stdio and a wall-clock timeout.
+///
+/// Inherited rather than captured, deliberately. `libtest` intercepts Rust-level printing, not a
+/// child's file descriptors, so compiler diagnostics and test-host output reach the terminal as
+/// they happen. Capturing with `output()` would hide exactly what a red test needs to be
+/// actionable, leaving the reader an exit code and nothing else.
+fn run_with_timeout(command: &mut std::process::Command, timeout: Duration) -> Result<std::process::ExitStatus, Box<dyn Error>> {
+    let mut child = command.spawn().map_err(|e| -> Box<dyn Error> {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            "`dotnet` is not on PATH. This test needs a .NET 11 preview SDK and fails rather than skips, \
+             so a missing toolchain cannot quietly stop the C# suite from running."
+                .into()
+        } else {
+            format!("failed to start `dotnet`: {e}").into()
+        }
+    })?;
+
+    let deadline = Instant::now() + timeout;
+    loop {
+        if let Some(status) = child.try_wait()? {
+            return Ok(status);
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(format!("`dotnet` exceeded {}s and was killed", timeout.as_secs()).into());
+        }
+        sleep(DOTNET_POLL);
+    }
+}
+
+/// Generates the reference-project bindings into the two directories that consume them.
+///
+/// Extracted from `reference_project::interop` so the C# suite test can guarantee the sources
+/// exist without depending on test ordering. Both callers are `#[test]`s in this binary, and
+/// `cargo-nextest` gives each its own process, so ordering is not merely unspecified - it is
+/// unavailable. The generated files are gitignored, so on a fresh worktree whichever test arrives
+/// first finds nothing on disk.
+///
+/// The lock and the content-conditional write are the two mechanisms [`prepare_plugin`] uses, for
+/// the same two reasons: interleaved writes from two processes corrupt the file, and an
+/// unconditional rewrite bumps mtime even when the bytes are identical. The second matters more
+/// here, because `reference_project::csharp_suite` compares timestamps to prove the assembly was
+/// built from the current sources, and churn would make that comparison vacuous.
+fn prepare_reference_bindings() -> Result<impl std::fmt::Display, Box<dyn Error>> {
+    use interoptopus::lang::meta::FileEmission;
+    use interoptopus_csharp::RustLibrary;
+    use interoptopus_csharp::config::{DllImportSearchPath, HeaderConfig, SearchPathConfig};
+    use interoptopus_csharp::dispatch::Dispatch;
+    use interoptopus_csharp::output::Target;
+
+    let multibuf = RustLibrary::builder(::reference_project::inventory())
+        .dll_name("reference_project")
+        .dispatch(Dispatch::custom(|x, _| match x.emission {
+            FileEmission::Common => Target::new("Interop.Common.cs", "My.Company.Common"),
+            FileEmission::Default => Target::new("Interop.cs", "My.Company"),
+            FileEmission::CustomModule(_) => Target::new("Interop.cs", "My.Company"),
+        }))
+        .headers(HeaderConfig { emit_version: false })
+        .search_path(SearchPathConfig { import_search_path: DllImportSearchPath::None })
+        .build()
+        .process()?;
+
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let bindings = manifest.join("tests").join("reference_project").join("Bindings");
+    std::fs::create_dir_all(&bindings)?;
+
+    // The lock lives in the target directory, not beside the sources: `Bindings` is a csproj folder
+    // whose only ignored entries are the generated `Interop*.cs`, so a lock file there would surface
+    // as untracked in any `git status` taken mid-run.
+    let _lock = PluginBuildLock::acquire(test_binary_dir()?.join(".lock-reference-bindings"))?;
+
+    multibuf.write_buffers_to_if_changed(&bindings)?;
+    multibuf.write_buffers_to_if_changed(manifest.join("benches").join("dotnet"))?;
+
+    Ok(multibuf)
 }

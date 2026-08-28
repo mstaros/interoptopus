@@ -21,8 +21,10 @@
       with any other cargo holding the target directory lock; observed 2026-08-27 as
       `failed to create file target\debug\reference_project.d`, cargo exit 101, in a plain
       `dotnet build` with no outer cargo at all. Under `cargo test` it would block rather than
-      fail. Provision on the cargo side: build the crate with every feature enabled before
-      building or testing this project.
+      fail. Provision on the cargo side: the Rust test reference_project::csharp_suite copies the
+      cdylib from target\debug\deps up to target\debug before invoking dotnet, and asserts
+      afterwards that it reached this project's output directory. Running that test is the
+      supported way to build this project.
 
       A fail-fast guard was attempted 2026-08-27 and removed. Hooked to
       BeforeTargets="PrepareForBuild", it did not fire on an up-to-date project - that target is
@@ -31,8 +33,12 @@
       DllNotFoundException from the Interop static constructor, which looks like a marshalling
       fault and is not.
 
-      The all-features flag is not optional: the bindings are generated with every feature
-      enabled, so a narrower build produces EntryPointNotFoundException, which looks like an
-      interop bug and is a build-configuration one. See docs/csharp-unions-handoff.md section 9.
+      An earlier version of this comment said the all-features flag was mandatory here, because a
+      narrower build supposedly yields EntryPointNotFoundException. That is wrong and was never
+      observed. reference_project declares no features of its own and already requests the
+      complete interoptopus feature set, so the all-features flag cannot change one byte of this cdylib;
+      verified 2026-08-28, including that no cfg(feature) appears anywhere in its sources. If a
+      missing export is ever suspected again, dump the export table and compare - do not infer it
+      from build flags. See docs/csharp-unions-handoff.md section 9.
     -->
 </Project>

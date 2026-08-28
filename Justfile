@@ -27,7 +27,7 @@ test-dotnet:
     # Make sure the DLL + Interop files exist
     cargo build -p reference_project  --all-features
     cargo test --test mod reference_project::interop  --all-features
-    cd crates/backend_csharp && dotnet test --project tests/reference_project/Tests/Tests.csproj
+    cd crates/backend_csharp && dotnet run --project tests/reference_project/Tests/Tests.csproj -c Debug
 
 # Runs .NET benchmarks.
 bench-dotnet:
@@ -70,4 +70,4 @@ test-agent:
     # Agents: Feel free to update the test logic here for the task at hand.
     cargo build -p reference_project --all-features
     cargo test -p interoptopus_csharp --test mod reference_project::interop --all-features
-    cd crates/backend_csharp && dotnet test --project tests/reference_project/Tests/Tests.csproj
+    cd crates/backend_csharp && dotnet run --project tests/reference_project/Tests/Tests.csproj -c Debug
