@@ -767,11 +767,14 @@ public partial class ResultNestedAError : IUnion, IResult<NestedA, Error>, IDisp
         [EditorBrowsable(EditorBrowsableState.Never)]
         internal ResultNestedAError IntoManaged()
         {
-            var _managed = new ResultNestedAError();
-            _managed._variant = _variant;
-            if (_variant == 0) _managed._Ok = _Ok._Ok.IntoManaged();
-            if (_variant == 1) _managed._Err = _Err._Err;
-            return _managed;
+            return _variant switch
+            {
+                0 => new ResultNestedAError(new OkCase(_Ok._Ok.IntoManaged())),
+                1 => new ResultNestedAError(new ErrCase(_Err._Err)),
+                2 => new ResultNestedAError(new PanicCase()),
+                3 => new ResultNestedAError(new NullCase()),
+                _ => throw new InteropException($"Unknown variant {_variant} for ResultNestedAError. The value did not originate from a well-formed Rust enum."),
+            };
         }
     }
 
