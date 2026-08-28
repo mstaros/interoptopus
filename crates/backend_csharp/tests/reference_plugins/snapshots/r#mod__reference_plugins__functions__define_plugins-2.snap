@@ -1,5 +1,6 @@
 ---
 source: crates/backend_csharp/tests/reference_plugins/functions.rs
+assertion_line: 10
 expression: multibuf
 ---
 === Interop.Common.cs ===
@@ -573,6 +574,7 @@ public partial struct ResultVoidError : IUnion, IResult<Unit, Error>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public Exception ExceptionForVariant()
     {
+        if (!_hasValue) return new InvalidOperationException("A default ResultVoidError is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         if (_variant == 0) return new EnumException();
         if (_variant == 1) return new EnumException<Error>(_Err);
         if (_variant == 2) return new EnumException();

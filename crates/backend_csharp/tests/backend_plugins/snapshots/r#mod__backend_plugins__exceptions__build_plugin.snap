@@ -1,5 +1,6 @@
 ---
 source: crates/backend_csharp/tests/backend_plugins/exceptions.rs
+assertion_line: 21
 expression: multibuf
 ---
 === Interop.Common.cs ===
@@ -544,6 +545,7 @@ public partial struct ResultUintDotnetException : IUnion, IResult<uint, DotnetEx
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public Exception ExceptionForVariant()
     {
+        if (!_hasValue) return new InvalidOperationException("A default ResultUintDotnetException is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         if (_variant == 0) return new EnumException<uint>(_Ok);
         if (_variant == 1) return new EnumException<DotnetException>(_Err);
         if (_variant == 2) return new EnumException();

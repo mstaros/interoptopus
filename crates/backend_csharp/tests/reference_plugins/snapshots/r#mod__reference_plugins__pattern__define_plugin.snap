@@ -1,5 +1,6 @@
 ---
 source: crates/backend_csharp/tests/reference_plugins/pattern.rs
+assertion_line: 11
 expression: multibuf
 ---
 === Interop.Common.cs ===
@@ -1070,6 +1071,7 @@ public partial struct ResultVec3f32Error : IUnion, IResult<Vec3f32, Error>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public Exception ExceptionForVariant()
     {
+        if (!_hasValue) return new InvalidOperationException("A default ResultVec3f32Error is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         if (_variant == 0) return new EnumException<Vec3f32>(_Ok);
         if (_variant == 1) return new EnumException<Error>(_Err);
         if (_variant == 2) return new EnumException();
