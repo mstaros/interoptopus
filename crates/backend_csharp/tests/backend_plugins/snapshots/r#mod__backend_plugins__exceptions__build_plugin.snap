@@ -408,7 +408,7 @@ public partial class ResultNestedADotnetException : IUnion, IResult<NestedA, Dot
         public void FromManaged(ResultNestedADotnetException managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultNestedADotnetException: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free() {}
@@ -432,7 +432,7 @@ public partial class ResultNestedADotnetException : IUnion, IResult<NestedA, Dot
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultNestedADotnetException: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.IntoUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultNestedADotnetException ToManaged() { return _unmanaged.IntoManaged(); }
