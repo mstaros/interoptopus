@@ -19028,7 +19028,7 @@ public partial class Layer2String : IDisposable
         var _unmanaged = new Unmanaged();
         _unmanaged.layer_1 = layer_1.IntoUnmanaged();
         _unmanaged.vec = vec.ToUnmanaged();
-        _unmanaged.the_enum = the_enum?.ToUnmanaged() ?? throw new InvalidOperationException("Cannot marshal Layer2String.the_enum: it is null and corresponds to no Rust variant. Construct it through a case constructor or factory.");
+        _unmanaged.the_enum = the_enum.ToUnmanaged();
         _unmanaged.strings = strings.IntoUnmanaged();
         return _unmanaged;
     }
@@ -19042,7 +19042,7 @@ public partial class Layer2String : IDisposable
         var _unmanaged = new Unmanaged();
         _unmanaged.layer_1 = layer_1.AsUnmanaged();
         _unmanaged.vec = vec.AsUnmanaged();
-        _unmanaged.the_enum = the_enum?.AsUnmanaged() ?? throw new InvalidOperationException("Cannot marshal Layer2String.the_enum: it is null and corresponds to no Rust variant. Construct it through a case constructor or factory.");
+        _unmanaged.the_enum = the_enum.AsUnmanaged();
         _unmanaged.strings = strings.AsUnmanaged();
         return _unmanaged;
     }
@@ -21088,7 +21088,7 @@ public partial struct Outer
     internal Unmanaged ToUnmanaged()
     {
         var _unmanaged = new Unmanaged();
-        _unmanaged.inner = inner?.ToUnmanaged() ?? throw new InvalidOperationException("Cannot marshal Outer.inner: it is null and corresponds to no Rust variant. Construct it through a case constructor or factory.");
+        _unmanaged.inner = inner.ToUnmanaged();
         return _unmanaged;
     }
 
@@ -21099,7 +21099,7 @@ public partial struct Outer
     internal Unmanaged AsUnmanaged()
     {
         var _unmanaged = new Unmanaged();
-        _unmanaged.inner = inner?.AsUnmanaged() ?? throw new InvalidOperationException("Cannot marshal Outer.inner: it is null and corresponds to no Rust variant. Construct it through a case constructor or factory.");
+        _unmanaged.inner = inner.AsUnmanaged();
         return _unmanaged;
     }
 
