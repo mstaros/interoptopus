@@ -1075,16 +1075,16 @@ public partial struct ResultVec3f32Error : IUnion, IResult<Vec3f32, Error>
     public static ResultVec3f32Error Null => new() { _variant = 3, _hasValue = true };
 
     // Checks
-    public bool IsOk => _variant == 0;
-    public bool IsErr => _variant == 1;
-    public bool IsPanic => _variant == 2;
-    public bool IsNull => _variant == 3;
+    public bool IsOk => _hasValue && _variant == 0;
+    public bool IsErr => _hasValue && _variant == 1;
+    public bool IsPanic => _hasValue && _variant == 2;
+    public bool IsNull => _hasValue && _variant == 3;
 
     // Conversions
-    public Vec3f32 AsOk() { if (_variant != 0) { throw ExceptionForVariant(); } else { return _Ok; } }
-    public Error AsErr() { if (_variant != 1) { throw ExceptionForVariant(); } else { return _Err; } }
-    public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
-    public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
+    public Vec3f32 AsOk() { if (!_hasValue || _variant != 0) { throw ExceptionForVariant(); } else { return _Ok; } }
+    public Error AsErr() { if (!_hasValue || _variant != 1) { throw ExceptionForVariant(); } else { return _Err; } }
+    public void AsPanic() { if (!_hasValue || _variant != 2) throw ExceptionForVariant(); }
+    public void AsNull() { if (!_hasValue || _variant != 3) throw ExceptionForVariant(); }
 
     // Case constructors — the union creation members the compiler reads case types from.
     public ResultVec3f32Error(OkCase value) { _variant = 0; _Ok = value.Value; _hasValue = true; }
