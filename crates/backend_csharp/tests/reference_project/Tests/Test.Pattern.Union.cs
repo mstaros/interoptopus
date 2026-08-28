@@ -1,15 +1,37 @@
 using System;
+using System.Runtime.InteropServices;
 using My.Company;
+using My.Company.Common;
 using Xunit;
 using Interop = My.Company.Interop;
+
+// The malformed-tag P/Invoke lives in `Bindings/MalformedFixture.cs`, not here. `Unmanaged` and
+// `Marshaller` are `internal` to that assembly, so a `LibraryImport` declared in this one cannot
+// use the custom marshaller at all - CS0122, measured 2026-08-28. Recorded in `Issues.md`.
 
 /// Executed assertions for union marshalling and the discriminated-union surface.
 ///
 /// Everything here was previously covered only by snapshot, which asserts text. Well-formed text
 /// that does not compile survived 78 green tests in August 2026; well-formed code that throws at
 /// runtime would survive a snapshot too.
-public class TestPatternUnion
+public partial class TestPatternUnion
 {
+    // See `Bindings/MalformedFixture.cs` for the declaration this test calls.
+
+    /// Item 5f: an invalid native tag throws rather than yielding a malformed managed value.
+    ///
+    /// Before item 4a (`056b9e4`) an unrecognised tag fell through every `if` and returned a
+    /// value carrying that tag with no payload set - silently malformed, and indistinguishable
+    /// from a well-formed one until something later read the wrong field.
+    [Fact]
+    public void an_invalid_native_tag_throws()
+    {
+        var ex = Assert.Throws<InteropException>(() => MalformedFixture.MalformedResultTag());
+
+        Assert.Contains("99", ex.Message);
+        Assert.Contains("ResultUintError", ex.Message);
+    }
+
     /// `_variant` sits at `[FieldOffset(0)]` overlapping every `Unmanaged{Variant}`, so each
     /// variant struct has to carry its own leading discriminant. A payload whose low bytes are
     /// zero would survive a clobbered tag by accident; every byte of `0xDEADBEEF` is set, so this
