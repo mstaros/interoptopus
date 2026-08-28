@@ -980,11 +980,14 @@ public partial class ResultWireOfHashMapStringStringError : IUnion, IResult<Wire
         [EditorBrowsable(EditorBrowsableState.Never)]
         internal ResultWireOfHashMapStringStringError IntoManaged()
         {
-            var _managed = new ResultWireOfHashMapStringStringError();
-            _managed._variant = _variant;
-            if (_variant == 0) _managed._Ok = _Ok._Ok.IntoManaged();
-            if (_variant == 1) _managed._Err = _Err._Err;
-            return _managed;
+            return _variant switch
+            {
+                0 => new ResultWireOfHashMapStringStringError(new OkCase(_Ok._Ok.IntoManaged())),
+                1 => new ResultWireOfHashMapStringStringError(new ErrCase(_Err._Err)),
+                2 => new ResultWireOfHashMapStringStringError(new PanicCase()),
+                3 => new ResultWireOfHashMapStringStringError(new NullCase()),
+                _ => throw new InteropException($"Unknown variant {_variant} for ResultWireOfHashMapStringStringError. The value did not originate from a well-formed Rust enum."),
+            };
         }
     }
 

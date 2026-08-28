@@ -532,11 +532,14 @@ public partial struct ResultVoidError : IUnion, IResult<Unit, Error>
         [EditorBrowsable(EditorBrowsableState.Never)]
         internal ResultVoidError ToManaged()
         {
-            var _managed = new ResultVoidError();
-            _managed._variant = _variant;
-            _managed._hasValue = true;
-            if (_variant == 1) _managed._Err = _Err._Err;
-            return _managed;
+            return _variant switch
+            {
+                0 => new ResultVoidError(new OkCase()),
+                1 => new ResultVoidError(new ErrCase(_Err._Err)),
+                2 => new ResultVoidError(new PanicCase()),
+                3 => new ResultVoidError(new NullCase()),
+                _ => throw new InteropException($"Unknown variant {_variant} for ResultVoidError. The value did not originate from a well-formed Rust enum."),
+            };
         }
     }
 

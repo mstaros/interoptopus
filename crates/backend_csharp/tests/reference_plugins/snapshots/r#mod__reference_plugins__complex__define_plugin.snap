@@ -866,12 +866,13 @@ public partial struct EnumPayload : IUnion
         [EditorBrowsable(EditorBrowsableState.Never)]
         internal EnumPayload ToManaged()
         {
-            var _managed = new EnumPayload();
-            _managed._variant = _variant;
-            _managed._hasValue = true;
-            if (_variant == 1) _managed._B = _B._B.ToManaged();
-            if (_variant == 2) _managed._C = _C._C;
-            return _managed;
+            return _variant switch
+            {
+                0 => new EnumPayload(new ACase()),
+                1 => new EnumPayload(new BCase(_B._B.ToManaged())),
+                2 => new EnumPayload(new CCase(_C._C)),
+                _ => throw new InteropException($"Unknown variant {_variant} for EnumPayload. The value did not originate from a well-formed Rust enum."),
+            };
         }
     }
 

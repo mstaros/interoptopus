@@ -976,12 +976,14 @@ public partial struct ResultVec3f32Error : IUnion, IResult<Vec3f32, Error>
         [EditorBrowsable(EditorBrowsableState.Never)]
         internal ResultVec3f32Error ToManaged()
         {
-            var _managed = new ResultVec3f32Error();
-            _managed._variant = _variant;
-            _managed._hasValue = true;
-            if (_variant == 0) _managed._Ok = _Ok._Ok.ToManaged();
-            if (_variant == 1) _managed._Err = _Err._Err;
-            return _managed;
+            return _variant switch
+            {
+                0 => new ResultVec3f32Error(new OkCase(_Ok._Ok.ToManaged())),
+                1 => new ResultVec3f32Error(new ErrCase(_Err._Err)),
+                2 => new ResultVec3f32Error(new PanicCase()),
+                3 => new ResultVec3f32Error(new NullCase()),
+                _ => throw new InteropException($"Unknown variant {_variant} for ResultVec3f32Error. The value did not originate from a well-formed Rust enum."),
+            };
         }
     }
 
