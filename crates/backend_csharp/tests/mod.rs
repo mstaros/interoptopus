@@ -1,8 +1,11 @@
 // #![allow(unused)]
 
 use interoptopus_csharp::pattern::Exception;
-use std::collections::HashSet;
+use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
 use std::error::Error;
+use std::hash::Hasher;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
 use std::thread::sleep;
@@ -21,8 +24,8 @@ mod model {
     mod service_rval_result;
 }
 
-/// Plugins already built and staged in this test process, keyed by staged DLL path.
-static BUILT_PLUGINS: LazyLock<Mutex<HashSet<PathBuf>>> = LazyLock::new(|| Mutex::new(HashSet::new()));
+/// Immutable staged DLLs already prepared in this test process, keyed by logical plugin path.
+static BUILT_PLUGINS: LazyLock<Mutex<HashMap<PathBuf, PathBuf>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// How long a lock file may exist before a later process treats it as abandoned.
 ///
@@ -52,7 +55,6 @@ impl PluginBuildLock {
                 Ok(mut file) => {
                     // Recorded for diagnosis only. Reclamation is by age: a pid can be reused,
                     // and checking liveness portably is more machinery than this warrants.
-                    use std::io::Write;
                     let _ = writeln!(file, "{}", std::process::id());
                     return Ok(Self { path });
                 }
@@ -63,7 +65,12 @@ impl PluginBuildLock {
                     }
                     sleep(PLUGIN_LOCK_POLL);
                 }
-                Err(e) => return Err(Box::new(e)),
+                Err(e) => {
+                    return Err(Box::new(io_context(
+                        format!("acquiring plugin build lock {}", path.display()),
+                        e,
+                    )));
+                }
             }
         }
     }
@@ -82,13 +89,11 @@ fn lock_is_abandoned(path: &Path) -> bool {
     SystemTime::now().duration_since(modified).is_ok_and(|age| age > PLUGIN_LOCK_TIMEOUT)
 }
 
-/// True when the staged DLL is already at least as new as the one just built.
-///
-/// The copy is the second cross-process hazard: on Windows a DLL another process has mapped
-/// cannot be overwritten (`os error 32`). Skipping the write when the staged file is current
-/// means the common path does not touch it at all, rather than writing and hoping nobody holds
-/// it. Unlike the build collision this one has not been reproduced - it is predicted by the
-/// code path and by this module's own comment above, and designed against on that basis.
+fn io_context(context: impl std::fmt::Display, error: std::io::Error) -> std::io::Error {
+    std::io::Error::new(error.kind(), format!("{context}: {error}"))
+}
+
+/// True when the fixed-path reference cdylib is already at least as new as its built source.
 fn stage_is_current(staged: &Path, built: &Path) -> bool {
     let (Ok(staged), Ok(built)) = (std::fs::metadata(staged), std::fs::metadata(built)) else {
         return false;
@@ -96,6 +101,121 @@ fn stage_is_current(staged: &Path, built: &Path) -> bool {
     match (staged.modified(), built.modified()) {
         (Ok(staged), Ok(built)) => staged >= built,
         _ => false,
+    }
+}
+
+/// Publishes one built plugin DLL at an immutable content-addressed path.
+///
+/// The file name stays unchanged because the dynamic runtime derives the managed assembly name
+/// from it. Only the parent directory varies with content. An existing address is verified and
+/// reused, never overwritten.
+fn stage_built_dll(staged_dir: &Path, built: &Path, name: &str) -> Result<PathBuf, Box<dyn Error>> {
+    let bytes = std::fs::read(built).map_err(|e| io_context(format!("reading built plugin {}", built.display()), e))?;
+    let mut hasher = DefaultHasher::new();
+    hasher.write(&bytes);
+    let fingerprint = format!("{:016x}", hasher.finish());
+
+    let content_dir = staged_dir.join("by-content").join(fingerprint);
+    std::fs::create_dir_all(&content_dir)
+        .map_err(|e| io_context(format!("creating plugin content directory {}", content_dir.display()), e))?;
+    let staged = content_dir.join(name);
+
+    match std::fs::read(&staged) {
+        Ok(existing) => {
+            ensure_staged_plugin_matches(&existing, &bytes, built, &staged)?;
+            return Ok(staged);
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => {
+            return Err(io_context(format!("reading existing staged plugin {}", staged.display()), e).into());
+        }
+    }
+
+    match std::fs::OpenOptions::new().write(true).create_new(true).open(&staged) {
+        Ok(mut file) => {
+            file.write_all(&bytes)
+                .map_err(|e| io_context(format!("writing immutable staged plugin {}", staged.display()), e))?;
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+            let existing = std::fs::read(&staged)
+                .map_err(|e| io_context(format!("reading concurrently staged plugin {}", staged.display()), e))?;
+            ensure_staged_plugin_matches(&existing, &bytes, built, &staged)?;
+        }
+        Err(e) => {
+            return Err(io_context(format!("creating immutable staged plugin {}", staged.display()), e).into());
+        }
+    }
+
+    Ok(staged)
+}
+
+fn ensure_staged_plugin_matches(existing: &[u8], built_bytes: &[u8], built: &Path, staged: &Path) -> Result<(), Box<dyn Error>> {
+    if existing != built_bytes {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            format!(
+                "plugin fingerprint collision: built plugin {} differs from immutable staged plugin {}",
+                built.display(),
+                staged.display()
+            ),
+        )
+        .into());
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod plugin_staging_tests {
+    use super::stage_built_dll;
+    use std::error::Error;
+    use std::fs::File;
+    use std::path::Path;
+
+    #[cfg(windows)]
+    fn hold_without_write_share(path: &Path) -> std::io::Result<File> {
+        use std::fs::OpenOptions;
+        use std::os::windows::fs::OpenOptionsExt;
+
+        // FILE_SHARE_READ: readers remain allowed, but an overwrite is denied.
+        OpenOptions::new().read(true).share_mode(1).open(path)
+    }
+
+    #[cfg(not(windows))]
+    fn hold_without_write_share(path: &Path) -> std::io::Result<File> {
+        File::open(path)
+    }
+
+    #[test]
+    fn changed_plugin_content_does_not_overwrite_a_published_path() -> Result<(), Box<dyn Error>> {
+        let root = tempfile::tempdir()?;
+        let staged_dir = root.path().join("_plugins");
+        let built = root.path().join("built.dll");
+        let first_bytes = b"first plugin version";
+        let second_bytes = b"second plugin version";
+
+        std::fs::write(&built, first_bytes)?;
+        let first = stage_built_dll(&staged_dir, &built, "fixture.dll")?;
+        let held = hold_without_write_share(&first)?;
+        assert_eq!(stage_built_dll(&staged_dir, &built, "fixture.dll")?, first);
+
+        std::fs::write(&built, second_bytes)?;
+
+        #[cfg(windows)]
+        assert!(
+            std::fs::copy(&built, &first).is_err(),
+            "the fixture must reject overwriting the published DLL while its handle is held"
+        );
+
+        let second = stage_built_dll(&staged_dir, &built, "fixture.dll")?;
+        drop(held);
+
+        assert_ne!(first, second);
+        assert_eq!(first.file_name(), second.file_name());
+        assert_eq!(std::fs::read(&first)?, first_bytes);
+        assert_eq!(std::fs::read(&second)?, second_bytes);
+        assert_eq!(stage_built_dll(&staged_dir, &built, "fixture.dll")?, second);
+
+        Ok(())
     }
 }
 
@@ -110,15 +230,17 @@ fn stage_is_current(staged: &Path, built: &Path) -> bool {
 ///
 /// **Writes are conditional on content**, which is load-bearing rather than an optimisation.
 /// `write_buffers_to` writes unconditionally for `Overwrite::Always` buffers, which the interop
-/// files use. Rewriting identical bytes still bumps mtime, which would make `dotnet` rebuild,
-/// which would make the built DLL newer than the staged one, which would fire the copy that
-/// [`stage_is_current`] exists to avoid — reintroducing the mapped-DLL collision (`os error
-/// 32`). The in-process set cannot prevent that: nextest gives each test its own process.
+/// files use. Rewriting identical bytes still bumps mtime and forces needless plugin rebuilds.
+/// Built DLLs are published at immutable content-addressed paths so a process never overwrites a
+/// pathname another process may already have loaded.
 ///
 /// The generated buffer is returned rather than consumed so `define_plugin!` can snapshot it.
 /// The snapshot assertion stays in that macro deliberately — moving it here would make every
 /// loader assert a snapshot it did not ask for.
-fn prepare_plugin<P: interoptopus::lang::plugin::PluginInfo>(base: &Path, name: &str) -> Result<impl std::fmt::Display, Box<dyn Error>> {
+fn prepare_plugin<P: interoptopus::lang::plugin::PluginInfo>(
+    base: &Path,
+    name: &str,
+) -> Result<(impl std::fmt::Display, PathBuf), Box<dyn Error>> {
     use interoptopus_csharp::dispatch::Dispatch;
 
     // Single-sourced on purpose. If the definer and the loader each built their own generation
@@ -130,26 +252,37 @@ fn prepare_plugin<P: interoptopus::lang::plugin::PluginInfo>(base: &Path, name: 
         .process()?;
 
     let project_dir = base.join(name);
-    let staged = base.join("_plugins").join(name);
-    let staged_dir = staged.parent().expect("staged path has a parent");
-    std::fs::create_dir_all(staged_dir)?;
+    let staged_dir = base.join("_plugins");
+    let plugin_key = staged_dir.join(name);
+    std::fs::create_dir_all(&staged_dir)
+        .map_err(|e| io_context(format!("creating plugin staging directory {}", staged_dir.display()), e))?;
+
+    if let Some(staged) = BUILT_PLUGINS.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).get(&plugin_key).cloned() {
+        return Ok((multibuf, staged));
+    }
 
     // Held across generation as well as build: two processes writing the same source file
     // interleaved would be as bad as two compiling it.
     let _lock = PluginBuildLock::acquire(staged_dir.join(format!(".lock-{name}")))?;
 
     let mut built = BUILT_PLUGINS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    if !built.contains(&staged) {
-        std::fs::create_dir_all(&project_dir)?;
+    let staged = if let Some(staged) = built.get(&plugin_key) {
+        staged.clone()
+    } else {
+        std::fs::create_dir_all(&project_dir)
+            .map_err(|e| io_context(format!("creating plugin project directory {}", project_dir.display()), e))?;
         // Not `write_buffers_to`: that rewrites unconditionally. The content check has to live
         // in `Multibuf` rather than here because the per-buffer `Overwrite` policy is private,
         // so a loop over `iter()` would silently clobber `Overwrite::Never` files.
-        multibuf.write_buffers_to_if_changed(&project_dir)?;
-        build_and_stage(&project_dir, &staged, name)?;
-        built.insert(staged.clone());
-    }
+        multibuf.write_buffers_to_if_changed(&project_dir).map_err(|e| {
+            std::io::Error::other(format!("writing generated plugin sources under {}: {e}", project_dir.display()))
+        })?;
+        let staged = build_and_stage(&project_dir, &staged_dir, name)?;
+        built.insert(plugin_key, staged.clone());
+        staged
+    };
 
-    Ok(multibuf)
+    Ok((multibuf, staged))
 }
 
 /// Builds the plugin project and stages its DLL.
@@ -158,12 +291,16 @@ fn prepare_plugin<P: interoptopus::lang::plugin::PluginInfo>(base: &Path, name: 
 /// function does neither. Split out of the old `ensure_plugin_built` so that generation,
 /// locking and the once-per-process check live together in [`prepare_plugin`] and this is only
 /// the part that shells out.
-fn build_and_stage(project_dir: &Path, staged: &Path, name: &str) -> Result<(), Box<dyn Error>> {
+fn build_and_stage(project_dir: &Path, staged_dir: &Path, name: &str) -> Result<PathBuf, Box<dyn Error>> {
     // `name` is the DLL file name; the project directory and its csproj share the stem.
     let stem = Path::new(name).file_stem().expect("plugin name must carry a .dll suffix");
     let csproj = project_dir.join(stem).with_extension("csproj");
 
-    let status = std::process::Command::new("dotnet").args(["build", "-c", "Release", "-v", "q"]).arg(&csproj).status()?;
+    let status = std::process::Command::new("dotnet")
+        .args(["build", "-c", "Release", "-v", "q"])
+        .arg(&csproj)
+        .status()
+        .map_err(|e| io_context(format!("starting dotnet build for {}", csproj.display()), e))?;
     if !status.success() {
         // NuGet resolves its package root and user-level config from the ambient environment.
         // A stripped environment fails restore with `Value cannot be null (Parameter 'path1')`
@@ -176,10 +313,7 @@ fn build_and_stage(project_dir: &Path, staged: &Path, name: &str) -> Result<(), 
     }
 
     let built_dll = project_dir.join("bin").join("Release").join("net11.0").join(name);
-    if !stage_is_current(staged, &built_dll) {
-        std::fs::copy(&built_dll, staged)?;
-    }
-    Ok(())
+    stage_built_dll(staged_dir, &built_dll, name)
 }
 
 /// Generates interop files for `$plugin` into the `$base/$name` folder, ensures the plugin is
@@ -192,7 +326,7 @@ fn build_and_stage(project_dir: &Path, staged: &Path, name: &str) -> Result<(), 
 macro_rules! define_plugin {
     ($plugin:ty, $name:expr, $base:expr) => {{
         let base = ::std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join($base);
-        let multibuf = crate::prepare_plugin::<$plugin>(&base, $name)?;
+        let (multibuf, _) = crate::prepare_plugin::<$plugin>(&base, $name)?;
 
         insta::assert_snapshot!(multibuf);
     }};
@@ -221,8 +355,8 @@ macro_rules! load_plugin {
 fn dll_path_for<P: interoptopus::lang::plugin::PluginInfo>(base: impl AsRef<Path>, name: impl AsRef<Path>) -> PathBuf {
     let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(base);
     let name = name.as_ref().to_str().expect("plugin name must be valid UTF-8");
-    prepare_plugin::<P>(&base, name).expect("failed to prepare plugin");
-    base.join("_plugins").join(name)
+    let (_, staged) = prepare_plugin::<P>(&base, name).expect("failed to prepare plugin");
+    staged
 }
 
 /// The platform file name of the `reference_project` cdylib.

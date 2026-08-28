@@ -664,26 +664,24 @@ and `mod.rs` each exist under both `enums/` and `composites/`; a batch aimed at 
 the other. Anchor on text unique to the intended file, and read the dry run's file list before
 applying.
 
-**A first run in a fresh worktree can fail the concurrency test.** `prepare_plugin`'s doc comment
-at `tests/mod.rs:108` records it — *"a fresh worktree fails three of sixty-two on the first run and
-passes on the second."* Changing `Directory.Build.props` invalidates every plugin build and
-reproduces exactly this. Re-run before investigating. (The runtime failure site is different:
-`tests/mod.rs:224`, where `prepare_plugin` is called and where the `PermissionDenied` panics in the
-2026-08-27 notes surface.)
+**Plugin DLL staging no longer overwrites a published path.** The earlier first-run
+`PermissionDenied` failure came from all processes publishing a logical plugin to one mutable
+`_plugins/<name>` pathname. Staging is now content-addressed under
+`_plugins/by-content/<fingerprint>/<name>`: identical bytes reuse the existing path through a
+read-only check, while changed bytes receive a new directory. The original filename is preserved
+for managed assembly lookup. The deterministic Windows regression holds the old path without write
+sharing, proves an overwrite fails, and stages the changed bytes elsewhere. See
+[`csharp-plugin-staging.md`](csharp-plugin-staging.md).
+
+A first run should now pass. Treat a new `Access denied` as a defect to investigate rather than a
+reason to rerun; plugin-preparation filesystem errors now name the operation and paths.
 
 ### MCP tooling notes, 2026-08-27
 
-**Do not run the suite before committing.** Validation runs it anyway, and running it yourself
-holds the plugin DLLs. Three failed validations traced to exactly this: `PermissionDenied`
-(Windows error 5) on `prepare_plugin` in `tests/mod.rs:224`, because a local `nextest` run still
-had the assemblies loaded. Each retried clean with **no edits between attempts**, which is what
-makes the diagnosis testable rather than assumed. Use `RustEditor:diagnostics` for a fast compile
-check instead, then commit.
-
-**And do not retry a call that timed out.** The MCP connector gives up at around two minutes while
-the cargo process keeps running. Retrying immediately races the predecessor and produced
-`LINK : fatal error LNK1104: cannot open file … mod-<hash>.exe` — the linker could not write the
-test binary because the first run still held it. Poll for the result instead of re-issuing.
+**Do not blindly retry a call that timed out.** The MCP connector can give up while the cargo
+process keeps running. Immutable plugin staging removes the loaded-plugin overwrite, but
+overlapping cargo processes can still contend for Rust compiler/linker outputs or other fixed-path
+test artifacts. Poll for the existing result before re-issuing the command.
 
 **Snapshot acceptance is iterative, not one-shot.** `insta` stops at the *first* failing snapshot
 within a test, and some tests write several — `reference_plugins::service::define_plugins` writes
