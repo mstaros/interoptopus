@@ -1,6 +1,5 @@
 ---
 source: crates/backend_csharp/tests/reference_project/mod.rs
-assertion_line: 27
 expression: multibuf
 ---
 === Interop.Common.cs ===
@@ -18897,7 +18896,7 @@ public partial class Layer1String : IDisposable
     internal Unmanaged IntoUnmanaged()
     {
         var _unmanaged = new Unmanaged();
-        _unmanaged.maybe_1 = maybe_1.IntoUnmanaged();
+        _unmanaged.maybe_1 = maybe_1?.IntoUnmanaged() ?? throw new InvalidOperationException("Cannot marshal Layer1String.maybe_1: it is null and corresponds to no Rust variant. Construct it through a case constructor or factory.");
         _unmanaged.maybe_2 = maybe_2.IntoUnmanaged();
         _unmanaged.maybe_3 = maybe_3.IntoUnmanaged();
         return _unmanaged;
@@ -18910,7 +18909,7 @@ public partial class Layer1String : IDisposable
     internal Unmanaged AsUnmanaged()
     {
         var _unmanaged = new Unmanaged();
-        _unmanaged.maybe_1 = maybe_1.AsUnmanaged();
+        _unmanaged.maybe_1 = maybe_1?.AsUnmanaged() ?? throw new InvalidOperationException("Cannot marshal Layer1String.maybe_1: it is null and corresponds to no Rust variant. Construct it through a case constructor or factory.");
         _unmanaged.maybe_2 = maybe_2.AsUnmanaged();
         _unmanaged.maybe_3 = maybe_3.AsUnmanaged();
         return _unmanaged;
@@ -19029,7 +19028,7 @@ public partial class Layer2String : IDisposable
         var _unmanaged = new Unmanaged();
         _unmanaged.layer_1 = layer_1.IntoUnmanaged();
         _unmanaged.vec = vec.ToUnmanaged();
-        _unmanaged.the_enum = the_enum.ToUnmanaged();
+        _unmanaged.the_enum = the_enum?.ToUnmanaged() ?? throw new InvalidOperationException("Cannot marshal Layer2String.the_enum: it is null and corresponds to no Rust variant. Construct it through a case constructor or factory.");
         _unmanaged.strings = strings.IntoUnmanaged();
         return _unmanaged;
     }
@@ -19043,7 +19042,7 @@ public partial class Layer2String : IDisposable
         var _unmanaged = new Unmanaged();
         _unmanaged.layer_1 = layer_1.AsUnmanaged();
         _unmanaged.vec = vec.AsUnmanaged();
-        _unmanaged.the_enum = the_enum.AsUnmanaged();
+        _unmanaged.the_enum = the_enum?.AsUnmanaged() ?? throw new InvalidOperationException("Cannot marshal Layer2String.the_enum: it is null and corresponds to no Rust variant. Construct it through a case constructor or factory.");
         _unmanaged.strings = strings.AsUnmanaged();
         return _unmanaged;
     }
@@ -21089,7 +21088,7 @@ public partial struct Outer
     internal Unmanaged ToUnmanaged()
     {
         var _unmanaged = new Unmanaged();
-        _unmanaged.inner = inner.ToUnmanaged();
+        _unmanaged.inner = inner?.ToUnmanaged() ?? throw new InvalidOperationException("Cannot marshal Outer.inner: it is null and corresponds to no Rust variant. Construct it through a case constructor or factory.");
         return _unmanaged;
     }
 
@@ -21100,7 +21099,7 @@ public partial struct Outer
     internal Unmanaged AsUnmanaged()
     {
         var _unmanaged = new Unmanaged();
-        _unmanaged.inner = inner.AsUnmanaged();
+        _unmanaged.inner = inner?.AsUnmanaged() ?? throw new InvalidOperationException("Cannot marshal Outer.inner: it is null and corresponds to no Rust variant. Construct it through a case constructor or factory.");
         return _unmanaged;
     }
 
