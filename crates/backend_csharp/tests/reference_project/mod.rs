@@ -7,6 +7,20 @@ use std::path::PathBuf;
 #[test]
 fn interop() -> Result<(), Box<dyn std::error::Error>> {
     let multibuf = crate::prepare_reference_bindings()?;
+    let interop = multibuf.buffer("Interop.cs").expect("reference bindings must contain Interop.cs").to_string();
+
+    assert!(interop.contains(
+        "public static partial ResultVoidError pattern_string_6a([MarshalUsing(typeof(UseString.InMarshallerMeta))] in UseString _0);"
+    ));
+    assert!(interop.contains("public static partial ResultVoidError pattern_string_6b(ref UseString y);"));
+    assert!(interop.contains("public static partial IntPtr ref1(ref long x);"));
+    assert!(interop.contains("[MarshalUsing(typeof(ResultUintError.InMarshallerMeta))] in ResultUintError _0"));
+    assert!(interop.contains("[MarshalUsing(typeof(OptionUtf8String.InMarshallerMeta))] in OptionUtf8String _0"));
+    assert!(interop.contains("[CustomMarshaller(typeof(UseString), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]"));
+    assert!(interop.contains("internal struct InMarshallerMeta { }"));
+    assert!(interop.contains("public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }"));
+    assert!(interop.contains("public static unsafe uint pattern_string_13("));
+    assert!(interop.contains("return pattern_string_13(in _0, callback_wrapped);"));
 
     insta::assert_snapshot!(multibuf);
 

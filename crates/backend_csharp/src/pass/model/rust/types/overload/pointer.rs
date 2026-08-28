@@ -3,12 +3,14 @@
 //! For every `Pointer::IntPtr(pointee, _)` that is fully resolved in the `all` pass,
 //! this pass creates two new types — `Pointer::ByRef(pointee)` and `Pointer::ByOut(pointee)` —
 //! with fresh `TypeIds` derived from the original. It registers them in the kind, name,
-//! and all passes, and registers the family in the overload all pass.
+//! and all passes, and registers the family in the overload all pass. Read-only pointers
+//! to types requiring custom marshalling use C# `in`; all other by-reference pointers
+//! retain `ref`.
 
 use crate::lang::TypeId;
 use crate::lang::meta::{Emission, Visibility};
-use crate::lang::types::kind::{Pointer, PointerKind, TypeKind};
-use crate::lang::types::{Decorators, OverloadFamily, ParamDecorator, PointerFamily, Type};
+use crate::lang::types::kind::{DelegateKind, IntPtrHint, Pointer, PointerKind, TypeKind, TypePattern, Util};
+use crate::lang::types::{Decorators, ManagedConversion, OverloadFamily, ParamDecorator, PointerFamily, Type};
 use crate::pass::Outcome::Unchanged;
 use crate::pass::{ModelResult, PassInfo, model};
 use std::collections::HashSet;
@@ -35,26 +37,35 @@ impl Pass {
         kinds: &mut model::common::types::kind::Pass,
         names: &mut model::common::types::names::Pass,
         types: &mut model::common::types::all::Pass,
+        managed_conversion: &model::common::types::info::managed_conversion::Pass,
         overloads: &mut model::rust::types::overload::all::Pass,
     ) -> ModelResult {
         let mut outcome = Unchanged;
 
         // Collect IntPtr types that are fully resolved in the map pass
-        let intptr_types: Vec<(TypeId, TypeId)> = kinds
+        let intptr_types: Vec<(TypeId, TypeId, IntPtrHint)> = kinds
             .iter()
             .filter_map(|(&type_id, kind)| match kind {
-                TypeKind::Pointer(Pointer { kind: PointerKind::IntPtr(_), target }) => Some((type_id, *target)),
+                TypeKind::Pointer(Pointer { kind: PointerKind::IntPtr(hint), target }) => Some((type_id, *target, *hint)),
                 _ => None,
             })
             .collect();
 
-        for (intptr_id, pointee_id) in intptr_types {
+        for (intptr_id, pointee_id, hint) in intptr_types {
             if self.processed.contains(&intptr_id) {
                 continue;
             }
 
             // Wait until the IntPtr type is fully resolved in the map pass
-            let Some(intptr_type) = types.get(intptr_id) else {
+            if types.get(intptr_id).is_none() {
+                continue;
+            }
+
+            let Some(pointee_type) = types.get(pointee_id) else {
+                continue;
+            };
+
+            let Some(conversion) = managed_conversion.managed_conversion(pointee_id) else {
                 continue;
             };
 
@@ -64,6 +75,12 @@ impl Pass {
             };
 
             let pointee_name = pointee_name.clone();
+            let by_ref_decorator =
+                if hint == IntPtrHint::Read && conversion != ManagedConversion::AsIs && supports_in_marshaller(&pointee_type.kind) {
+                    ParamDecorator::In { marshaller: format!("{pointee_name}.InMarshallerMeta") }
+            } else {
+                ParamDecorator::Ref
+            };
 
             // Derive new TypeIds for ByRef and ByOut variants
             let by_ref_id = TypeId::from_id(intptr_id.id().derive(0x_6279_7265_665F_7369)); // "byref_si"
@@ -86,7 +103,7 @@ impl Pass {
                     visibility: Visibility::Public,
                     docs: Vec::new(),
                     kind: TypeKind::Pointer(Pointer { kind: PointerKind::ByRef, target: pointee_id }),
-                    decorators: Decorators { param: Some(ParamDecorator::Ref), ..Default::default() },
+                    decorators: Decorators { param: Some(by_ref_decorator), ..Default::default() },
                 },
             );
             types.set(
@@ -113,5 +130,24 @@ impl Pass {
         }
 
         Ok(outcome)
+    }
+}
+
+fn supports_in_marshaller(kind: &TypeKind) -> bool {
+    match kind {
+        TypeKind::Composite(_) | TypeKind::DataEnum(_) => true,
+        TypeKind::Delegate(delegate) => matches!(delegate.kind, DelegateKind::Class),
+        TypeKind::TypePattern(pattern) => matches!(
+            pattern,
+            TypePattern::Utf8String
+                | TypePattern::Slice(_)
+                | TypePattern::SliceMut(_)
+                | TypePattern::Vec(_)
+                | TypePattern::Option(_, _)
+                | TypePattern::Result(_, _, _)
+                | TypePattern::Wire(_)
+        ),
+        TypeKind::Util(Util::WireBuffer) => true,
+        _ => false,
     }
 }

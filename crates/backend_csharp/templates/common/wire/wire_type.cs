@@ -105,6 +105,23 @@ public partial class {{ wire_name }} : IDisposable
         }
     }
 
+    [CustomMarshaller(typeof({{ wire_name }}), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
+    internal struct InMarshallerMeta { }
+
+    internal ref struct InMarshaller
+    {
+        private {{ wire_name }} _managed;
+
+        {{ _fns_decorators_all | indent(width = 8) }}
+        public void FromManaged({{ wire_name }} managed) { _managed = managed; }
+
+        {{ _fns_decorators_all | indent(width = 8) }}
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+
+        {{ _fns_decorators_all | indent(width = 8) }}
+        public void Free() {}
+    }
+
     internal ref struct Marshaller
     {
         private {{ wire_name }} _managed;

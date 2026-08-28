@@ -10,7 +10,7 @@ use crate::lang::FunctionId;
 use crate::lang::functions::FunctionKind;
 use crate::lang::functions::overload::{ArgTransform, FnTransforms, OverloadKind, RvalTransform};
 use crate::lang::functions::{Argument, Function};
-use crate::lang::types::OverloadFamily;
+use crate::lang::types::{OverloadFamily, ParamDecorator};
 use crate::lang::types::kind::{Primitive, TypeKind, TypePattern};
 use crate::output::{FileType, Output};
 use crate::pass::{OutputResult, PassInfo, format_docs, model, output};
@@ -116,7 +116,7 @@ fn render(
 
     // Build native call forwarding names — only for args that have a native counterpart
     // (i.e., skip synthetic args like CancellationToken).
-    let native_args = build_native_args(original_args, &transforms.args);
+    let native_args = build_native_args(original_args, &overload_fn.signature.arguments, &transforms.args, types, name)?;
 
     // Return type: use the overload function's rval directly (Task type for async, original for body)
     let rval = types
@@ -238,20 +238,38 @@ fn resolve_args(
     Ok((out, has_wraps))
 }
 
-fn build_native_args(args: &[Argument], transforms: &[ArgTransform]) -> Vec<HashMap<&'static str, Value>> {
+fn build_native_args(
+    args: &[Argument],
+    overload_args: &[Argument],
+    transforms: &[ArgTransform],
+    types: &model::common::types::all::Pass,
+    fn_name: &str,
+) -> Result<Vec<HashMap<&'static str, Value>>, crate::Error> {
     args.iter()
+        .zip(overload_args)
         .zip(transforms)
-        .map(|(arg, transform)| {
+        .map(|((arg, overload_arg), transform)| {
             let forwarded = match transform {
                 ArgTransform::WrapDelegate => format!("{}_wrapped", arg.name),
-                ArgTransform::Ref => format!("ref {}", arg.name),
+                ArgTransform::Ref => {
+                    let decorator = types
+                        .get(overload_arg.ty)
+                        .and_then(|t| t.decorators.param.as_ref())
+                        .ok_or_else(|| crate::Error::from(format!("by-ref decorator for arg `{}` of overload `{}`", arg.name, fn_name)))?;
+                    let modifier = match decorator {
+                        ParamDecorator::In { .. } => "in",
+                        ParamDecorator::Ref => "ref",
+                        _ => return Err(crate::Error::from(format!("invalid by-ref decorator for arg `{}` of overload `{}`", arg.name, fn_name))),
+                    };
+                    format!("{modifier} {}", arg.name)
+                }
                 ArgTransform::Service => format!("{}.Context", arg.name),
                 ArgTransform::PassThrough => arg.name.clone(),
                 ArgTransform::CancellationToken => unreachable!("CancellationToken has no native counterpart"),
             };
             let mut m = HashMap::new();
             m.insert("name", Value::normal_string(&forwarded));
-            m
+            Ok(m)
         })
         .collect()
 }

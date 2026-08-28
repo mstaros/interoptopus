@@ -112,6 +112,23 @@ internal partial struct WireBuffer
 
     [CustomMarshaller(typeof(WireBuffer), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
+    [CustomMarshaller(typeof(WireBuffer), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
+    internal struct InMarshallerMeta { }
+
+    internal ref struct InMarshaller
+    {
+        private WireBuffer _managed;
+
+        {{ _fns_decorators_all | indent(width = 8) }}
+        public void FromManaged(WireBuffer managed) { _managed = managed; }
+
+        {{ _fns_decorators_all | indent(width = 8) }}
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+
+        {{ _fns_decorators_all | indent(width = 8) }}
+        public void Free() {}
+    }
+
     internal ref struct Marshaller
     {
         private WireBuffer _managed;

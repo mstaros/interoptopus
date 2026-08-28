@@ -30,3 +30,6 @@ pub fn pattern_ffi_option_3(x: Option<Option<Result<Option<String>, super::resul
 pub fn pattern_ffi_option_4(x: Outer) -> Inner {
     x.inner.into_option().unwrap_or(Inner { x: f32::NAN })
 }
+
+#[ffi]
+pub fn pattern_option_string_borrow(_: &Option<String>) {}

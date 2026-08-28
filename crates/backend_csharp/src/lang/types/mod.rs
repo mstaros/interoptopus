@@ -33,6 +33,7 @@ impl std::fmt::Display for MarshalAs {
 /// Decorators for function / method parameters.
 #[derive(Clone, Debug)]
 pub enum ParamDecorator {
+    In { marshaller: String },
     Ref,
     Out,
     MarshalAs(MarshalAs),
@@ -41,6 +42,7 @@ pub enum ParamDecorator {
 impl std::fmt::Display for ParamDecorator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::In { marshaller } => write!(f, "[MarshalUsing(typeof({marshaller}))] in"),
             Self::Ref => write!(f, "ref"),
             Self::Out => write!(f, "out"),
             Self::MarshalAs(m) => write!(f, "[MarshalAs({m})]"),

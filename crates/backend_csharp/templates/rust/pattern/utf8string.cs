@@ -154,6 +154,23 @@ public partial class Utf8String : IDisposable
     [CustomMarshaller(typeof(Utf8String), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
 
+    [CustomMarshaller(typeof(Utf8String), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
+    internal struct InMarshallerMeta { }
+
+    internal ref struct InMarshaller
+    {
+        private Utf8String _managed;
+
+        {{ _fns_decorators_all | indent(width = 8) }}
+        public void FromManaged(Utf8String managed) { _managed = managed; }
+
+        {{ _fns_decorators_all | indent(width = 8) }}
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+
+        {{ _fns_decorators_all | indent(width = 8) }}
+        public void Free() {}
+    }
+
     internal ref struct Marshaller
     {
         private Utf8String _managed; // Used when converting managed -> unmanaged

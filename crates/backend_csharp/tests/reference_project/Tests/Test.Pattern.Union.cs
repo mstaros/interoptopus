@@ -63,6 +63,42 @@ public partial class TestPatternUnion
         Assert.Equal(1u, Interop.pattern_result_1(ResultUintError.Ok(1)).AsOk());
     }
 
+    /// The `in` path selects the dedicated borrow marshaller, making the struct union's
+    /// `AsUnmanaged` empty-state guard executable rather than testing only `ToUnmanaged`.
+    [Fact]
+    public void borrowing_a_default_struct_union_reaches_the_as_unmanaged_guard()
+    {
+        var empty = new ResultUintError();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => Interop.pattern_result_borrow(empty));
+        Assert.Contains("ResultUintError", ex.Message);
+    }
+
+    [Fact]
+    public void borrowing_a_constructed_struct_union_preserves_the_value()
+    {
+        var result = ResultUintError.Ok(7);
+
+        Interop.pattern_result_borrow(in result);
+        Interop.pattern_result_borrow(in result);
+
+        Assert.Equal(7u, result.AsOk());
+    }
+
+    /// Class-backed unions need separate coverage: `in` is a readonly reference to the managed
+    /// reference, while the active owned payload must remain usable and disposable after the call.
+    [Fact]
+    public void borrowing_a_class_backed_union_preserves_its_owned_payload()
+    {
+        var option = OptionUtf8String.Some("borrowed".Utf8());
+
+        Interop.pattern_option_string_borrow(in option);
+        Interop.pattern_option_string_borrow(in option);
+
+        Assert.Equal("borrowed", option.AsSome().String);
+        option.Dispose();
+    }
+
     /// Soundness, in the language spec's sense: the default value of a union type has a null
     /// `Value`. This is what makes the guard above necessary rather than redundant.
     [Fact]

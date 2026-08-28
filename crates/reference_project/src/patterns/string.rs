@@ -1,4 +1,4 @@
-use crate::patterns::callback::CStrPassthrough;
+use crate::patterns::callback::{CStrPassthrough, MyCallback};
 use crate::patterns::result::Error;
 use crate::types::string::{UseCStrPtr, UseString};
 use interoptopus::ffi;
@@ -109,4 +109,9 @@ pub fn pattern_string_11(_: &ffi::String) {}
 #[ffi]
 pub fn pattern_string_12(c: CStrPassthrough, v: CStrPtr<'static>) -> CStrPtr<'static> {
     c.call(v)
+}
+
+#[ffi]
+pub fn pattern_string_13(_: &UseString, callback: MyCallback) -> u32 {
+    callback.call(1)
 }

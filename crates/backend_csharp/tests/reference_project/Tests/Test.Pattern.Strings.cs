@@ -84,7 +84,11 @@ public class TestPatternStrings
     public void pattern_string_6()
     {
         var r1 = new UseString { s1 = "hello".Utf8(), s2 = "world".Utf8() };
-        Interop.pattern_string_6a(ref r1);
+        Interop.pattern_string_6a(in r1).AsOk();
+        Interop.pattern_string_6a(in r1).AsOk();
+        Assert.Equal("hello", r1.s1.String);
+        Assert.Equal("world", r1.s2.String);
+        r1.Dispose();
 
         var y = new UseString { s1 = "".Utf8(), s2 = "".Utf8() };
         Interop.pattern_string_6b(ref y).AsOk();
@@ -141,7 +145,9 @@ public class TestPatternStrings
     public void pattern_string_11()
     {
         var s = "hello world".Utf8();
-        Interop.pattern_string_11(ref s);
+        Interop.pattern_string_11(in s);
+        Interop.pattern_string_11(in s);
+        Assert.Equal("hello world", s.String);
         s.Dispose();
     }
 
@@ -155,15 +161,24 @@ public class TestPatternStrings
     [Fact]
     public void pattern_string_13()
     {
+        var value = new UseString { s1 = "hello".Utf8(), s2 = "world".Utf8() };
+
+        Assert.Equal(2u, Interop.pattern_string_13(in value, x => x + 1));
+        Assert.Equal("hello", value.s1.String);
+        Assert.Equal("world", value.s2.String);
+        value.Dispose();
     }
 
 
     [Fact]
-    public void string_by_ref_dont_leak()
+    public void string_by_in_does_not_observably_consume()
     {
         // TODO - Can we somehow measure memory use?
         var w = new UseString { s1 = "hello".Utf8(), s2 = "world".Utf8() };
-        for (var i = 0; i < 1024 * 1024; i++) Interop.pattern_string_6a(ref w);
+        for (var i = 0; i < 1024 * 1024; i++) Interop.pattern_string_6a(in w);
+        Assert.Equal("hello", w.s1.String);
+        Assert.Equal("world", w.s2.String);
+        w.Dispose();
     }
 
     [Fact]

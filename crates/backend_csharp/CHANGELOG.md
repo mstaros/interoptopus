@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ⚠️ Breaking
 
+- **Read-only custom-marshalled pointer overloads now use `in T` instead of `ref T`.**
+  Their dedicated `ManagedToUnmanagedIn` marshaller borrows through `AsUnmanaged()` and does
+  not move ownership out of the managed value or write it back after the call. Call sites that
+  explicitly passed `ref` must use `in` (or the permitted unadorned call form). Raw `IntPtr`
+  declarations, read/write pointers, and direct / `AsIs` pointer overloads remain unchanged.
+
 - **Unit-only enums are now emitted as plain C# enums.** An enum whose variants all carry no
   payload was previously generated as a struct with `IsX`/`AsX` accessors, per-variant case
   types, `Value`, `HasValue`, `TryGetValue` and a custom marshaller. It is now a plain C# enum

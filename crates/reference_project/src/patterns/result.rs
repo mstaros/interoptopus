@@ -28,3 +28,6 @@ pub fn pattern_result_3(x: Result<(), Error>) -> Result<(), Error> {
 pub fn pattern_result_4(x: Result<(), ()>) -> Result<(), ()> {
     x
 }
+
+#[ffi]
+pub fn pattern_result_borrow(_: &Result<u32, Error>) {}
