@@ -97,4 +97,38 @@ public class TestEnums
 
         Assert.Equal("hello", Interop.enums_4(l3).String);
     }
+
+    /// <summary>
+    /// Item 3e: the compiler synthesises an implicit conversion from a case type to its union.
+    /// </summary>
+    /// <remarks>
+    /// Nothing is generated for 3e. <c>aa2d550d</c> emits the case constructors
+    /// — <c>public EnumPayload(CCase value)</c> — and the C# 15 union feature is specified to
+    /// synthesise the conversion from them, so 3e reduces to "the constructors are public and
+    /// single-parameter", which is already true.
+    ///
+    /// That reasoning was taken from the specification and never compiled, which is why the item
+    /// stayed "satisfied, unverified": two other specification-derived claims had already turned
+    /// out wrong — 3d's recorded gate, and the namespace <c>IUnion</c> resolves from.
+    ///
+    /// The assertions below are almost incidental. **If the conversion is not synthesised, this
+    /// file does not compile**, and that is the actual proof. It only became possible to state it
+    /// this way once <c>csharp_suite</c> began compiling and running the generated bindings from
+    /// <c>cargo test</c>; before that, nothing in the repository compiled this output.
+    /// </remarks>
+    [Fact]
+    public void a_case_type_converts_implicitly_to_its_union()
+    {
+        // Assignment position, unit case and payload-carrying case.
+        EnumPayload unit = new EnumPayload.ACase();
+        EnumPayload payload = new EnumPayload.CCase(123);
+
+        Assert.Equal(EnumPayload.A, unit);
+        Assert.Equal(EnumPayload.C(123), payload);
+
+        // Argument position, and across the FFI boundary rather than only inside C#: enums_2
+        // doubles the payload, so a value that survives the round trip proves the conversion
+        // produced a well-formed union and not merely something that type-checked.
+        Assert.Equal(EnumPayload.C(246), Interop.enums_2(new EnumPayload.CCase(123)));
+    }
 }
