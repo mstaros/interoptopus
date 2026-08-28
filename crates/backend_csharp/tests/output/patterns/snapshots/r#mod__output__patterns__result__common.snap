@@ -195,16 +195,16 @@ public partial struct ResultUintVoid : IUnion, IResult<uint, Unit>
     public static ResultUintVoid Null => new() { _variant = 3, _hasValue = true };
 
     // Checks
-    public bool IsOk => _variant == 0;
-    public bool IsErr => _variant == 1;
-    public bool IsPanic => _variant == 2;
-    public bool IsNull => _variant == 3;
+    public bool IsOk => _hasValue && _variant == 0;
+    public bool IsErr => _hasValue && _variant == 1;
+    public bool IsPanic => _hasValue && _variant == 2;
+    public bool IsNull => _hasValue && _variant == 3;
 
     // Conversions
-    public uint AsOk() { if (_variant != 0) { throw ExceptionForVariant(); } else { return _Ok; } }
-    public void AsErr() { if (_variant != 1) throw ExceptionForVariant(); }
-    public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
-    public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
+    public uint AsOk() { if (!_hasValue || _variant != 0) { throw ExceptionForVariant(); } else { return _Ok; } }
+    public void AsErr() { if (!_hasValue || _variant != 1) throw ExceptionForVariant(); }
+    public void AsPanic() { if (!_hasValue || _variant != 2) throw ExceptionForVariant(); }
+    public void AsNull() { if (!_hasValue || _variant != 3) throw ExceptionForVariant(); }
 
     // Case constructors — the union creation members the compiler reads case types from.
     public ResultUintVoid(OkCase value) { _variant = 0; _Ok = value.Value; _hasValue = true; }
