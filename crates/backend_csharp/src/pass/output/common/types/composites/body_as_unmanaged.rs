@@ -5,6 +5,7 @@
 
 use crate::lang::TypeId;
 use crate::lang::types::kind::TypeKind;
+use crate::pass::model::common::types::info::nullable::NullPolicy;
 use crate::pass::{OutputResult, PassInfo, model, output};
 use interoptopus_backends::template::Context;
 use std::collections::HashMap;
@@ -44,11 +45,23 @@ impl Pass {
                 .iter()
                 .map(|f| {
                     let suffix = managed.as_unmanaged_suffix(f.ty);
-                    let is_nullable = nullable.is_nullable(f.ty).unwrap_or(false);
-                    let as_unmanaged = if is_nullable && !suffix.is_empty() {
-                        format!("?{suffix} ?? default")
-                    } else {
+
+                    // An empty suffix means the field converts as-is, so there is nothing to
+                    // guard: `?` on a value type does not compile.
+                    let as_unmanaged = if suffix.is_empty() {
                         suffix.to_string()
+                    } else {
+                        match nullable.null_policy(f.ty).unwrap_or(NullPolicy::NotNullable) {
+                            NullPolicy::NotNullable => suffix.to_string(),
+                            NullPolicy::SubstituteDefault => format!("?{suffix} ?? default"),
+
+                            // A zeroed `Unmanaged` for a union is discriminant 0 — a fabricated
+                            // variant crossing FFI. `docs/csharp-unions.md` Open items 1.
+                            NullPolicy::Throw => format!(
+                                "?{suffix} ?? throw new InvalidOperationException(\"Cannot marshal {name}.{field}: it is null and corresponds to no Rust variant. Construct it through a case constructor or factory.\")",
+                                field = f.name
+                            ),
+                        }
                     };
 
                     let mut m = HashMap::new();
