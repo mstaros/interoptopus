@@ -5,6 +5,9 @@
 use interoptopus::inventory::RustInventory;
 use interoptopus::{builtins_string, builtins_vec, builtins_wire, constant, extra_type, ffi, function, service};
 
+#[cfg(feature = "allocation-tracking")]
+mod allocation_tracking;
+
 pub mod constants;
 pub mod functions;
 /// Reference implementations of patterns.
@@ -50,7 +53,8 @@ pub mod types;
 pub mod wire;
 
 pub fn inventory() -> RustInventory {
-    RustInventory::new()
+    let mut inventory = RustInventory::new();
+    let _ = inventory
         // Functions
         .register(builtins_string!())
         .register(builtins_wire!())
@@ -237,6 +241,12 @@ pub fn inventory() -> RustInventory {
         .register(service!(services::ignored::ServiceIgnoringMethods))
         .register(service!(services::multiple_ctors::ServiceMultipleCtors))
         .register(service!(services::slice::ServiceVariousSlices))
-        .register(service!(services::string::ServiceStrings))
-        .validate()
+        .register(service!(services::string::ServiceStrings));
+
+    #[cfg(feature = "allocation-tracking")]
+    let _ = inventory
+        .register(function!(allocation_tracking::__test_live_bytes))
+        .register(function!(allocation_tracking::__test_live_allocations));
+
+    inventory.validate()
 }

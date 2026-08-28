@@ -281,9 +281,10 @@ fn csproj_native_dir() -> PathBuf {
 /// A copy is the whole of the fix, deliberately not a `cargo build`. Invoking cargo from inside a
 /// `cargo test` contends for the target-directory lock and blocks.
 ///
-/// Features do not enter into this. `reference_project` declares none of its own and already
-/// requests the complete `interoptopus` feature set, so `--all-features` cannot change a byte of
-/// this library; the `deps` copy and an uplifted one are the same build.
+/// The backend's dev-dependency enables `reference_project/allocation-tracking`. That same
+/// feature instance supplies both `reference_project::inventory()` to the generator and this
+/// already-built cdylib, so the generated probes and their native exports cannot diverge. The
+/// `deps` copy and an uplifted one are the same feature build.
 fn stage_reference_cdylib() -> Result<PathBuf, Box<dyn Error>> {
     // Read from the directory holding this test binary - cargo's real `deps`, wherever that is -
     // and write to the fixed path the csproj globs. The two need not be related, which is what

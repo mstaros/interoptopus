@@ -21,6 +21,8 @@ fn interop() -> Result<(), Box<dyn std::error::Error>> {
     assert!(interop.contains("public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }"));
     assert!(interop.contains("public static unsafe uint pattern_string_13("));
     assert!(interop.contains("return pattern_string_13(in _0, callback_wrapped);"));
+    assert!(interop.contains("public static partial ulong __test_live_bytes();"));
+    assert!(interop.contains("public static partial ulong __test_live_allocations();"));
 
     insta::assert_snapshot!(multibuf);
 

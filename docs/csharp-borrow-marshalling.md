@@ -139,11 +139,17 @@ test step and the C# suite step.
 
 ### What it does not establish
 
-The repository has no allocator instrumentation, sanitizer, or reliable memory accounting for
-the native/C# crossing. A green suite does **not** prove absence of leaks, double frees, or
-native use-after-free outside the exercised behavior. The existing `string_by_ref_dont_leak`
-and `string_by_out_dont_leak` tests explicitly carry that limitation. This limitation is part
-of the verification record, not a substitute for a failed test.
+The feature-gated Rust allocator probes described in
+[the allocation-observability design](csharp-allocation-observability.md) now verify that the
+direct `Utf8String` and composite `UseString` shared-borrow cases produce no net change in live
+Rust allocations or bytes, and that disposing those owners restores the measured baseline.
+
+That result remains narrower than general native-memory safety. It does not prove that no balanced
+allocation/deallocation events occurred during a call, cover C# `GCHandle` or
+`Marshal.AllocHGlobal` resources, diagnose use-after-free, or cover the vector, wire, callback,
+async, and service ownership families. A double free will normally terminate the process before a
+counter assertion can diagnose it. The unmeasured `string_by_out_dont_leak` test retains its TODO;
+these limits remain part of the verification record.
 
 ## Compatibility
 

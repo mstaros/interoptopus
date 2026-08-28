@@ -4,6 +4,9 @@ using My.Company.Common;
 using Xunit;
 using Interop = My.Company.Interop;
 
+// The allocation probes report process-global native state, so snapshots must not overlap other FFI tests.
+[assembly: CollectionBehavior(DisableTestParallelization = true)]
+
 public class TestPatternStrings
 {
     [Fact]
@@ -142,13 +145,28 @@ public class TestPatternStrings
     }
 
     [Fact]
-    public void pattern_string_11()
+    public void pattern_string_11_preserves_rust_allocation_snapshot()
     {
-        var s = "hello world".Utf8();
-        Interop.pattern_string_11(in s);
-        Interop.pattern_string_11(in s);
-        Assert.Equal("hello world", s.String);
-        s.Dispose();
+        var baselineBytes = Interop.__test_live_bytes();
+        var baselineAllocations = Interop.__test_live_allocations();
+
+        {
+            using var s = "hello world".Utf8();
+            var ownedBytes = Interop.__test_live_bytes();
+            var ownedAllocations = Interop.__test_live_allocations();
+
+            Assert.True(ownedBytes > baselineBytes);
+            Assert.True(ownedAllocations > baselineAllocations);
+
+            for (var i = 0; i < 1024; i++) Interop.pattern_string_11(in s);
+
+            Assert.Equal("hello world", s.String);
+            Assert.Equal(ownedBytes, Interop.__test_live_bytes());
+            Assert.Equal(ownedAllocations, Interop.__test_live_allocations());
+        }
+
+        Assert.Equal(baselineBytes, Interop.__test_live_bytes());
+        Assert.Equal(baselineAllocations, Interop.__test_live_allocations());
     }
 
     [Fact]
@@ -171,14 +189,29 @@ public class TestPatternStrings
 
 
     [Fact]
-    public void string_by_in_does_not_observably_consume()
+    public void string_by_in_preserves_rust_allocation_snapshot()
     {
-        // TODO - Can we somehow measure memory use?
-        var w = new UseString { s1 = "hello".Utf8(), s2 = "world".Utf8() };
-        for (var i = 0; i < 1024 * 1024; i++) Interop.pattern_string_6a(in w);
-        Assert.Equal("hello", w.s1.String);
-        Assert.Equal("world", w.s2.String);
-        w.Dispose();
+        var baselineBytes = Interop.__test_live_bytes();
+        var baselineAllocations = Interop.__test_live_allocations();
+
+        {
+            using var w = new UseString { s1 = "hello".Utf8(), s2 = "world".Utf8() };
+            var ownedBytes = Interop.__test_live_bytes();
+            var ownedAllocations = Interop.__test_live_allocations();
+
+            Assert.True(ownedBytes > baselineBytes);
+            Assert.True(ownedAllocations > baselineAllocations);
+
+            for (var i = 0; i < 1024; i++) Interop.pattern_string_6a(in w);
+
+            Assert.Equal("hello", w.s1.String);
+            Assert.Equal("world", w.s2.String);
+            Assert.Equal(ownedBytes, Interop.__test_live_bytes());
+            Assert.Equal(ownedAllocations, Interop.__test_live_allocations());
+        }
+
+        Assert.Equal(baselineBytes, Interop.__test_live_bytes());
+        Assert.Equal(baselineAllocations, Interop.__test_live_allocations());
     }
 
     [Fact]

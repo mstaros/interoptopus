@@ -29,7 +29,7 @@ interoptopus_backends.workspace = true
 [dev-dependencies]
 interoptopus = { workspace = true, features = ["macros", "serde"] }
 interoptopus_csharp = { path = ".", features = ["unstable-plugins", "unstable-rt-dotnet-download", "unstable-extensions"] }
-reference_project.workspace = true
+reference_project = { workspace = true, features = ["allocation-tracking"] }
 insta.workspace = true
 tokio.workspace = true
 memory-stats = "1.2.0"
