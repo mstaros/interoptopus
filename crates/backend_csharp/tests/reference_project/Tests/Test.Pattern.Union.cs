@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using My.Company;
 using My.Company.Common;
@@ -92,5 +93,45 @@ public partial class TestPatternUnion
         Assert.True(ok.TryGetValue(out ResultUintError.OkCase okCase));
         Assert.Equal(7u, okCase.Value);
         Assert.False(ok.TryGetValue(out ResultUintError.ErrCase _));
+    }
+
+    /// Item 5e: a class-backed union has no reachable empty state, where a struct-backed one is
+    /// merely guarded against its own.
+    ///
+    /// The two are not symmetric. `ResultUintError` above is a struct: `default` is a legal,
+    /// non-null, variant-zero value, which is why `_hasValue` and the marshal-out guard exist.
+    /// `OptionUtf8String` is a class: `default` is a null reference, and every non-null instance
+    /// was produced from inside the type. Item 3a is what keeps that true — declaring any
+    /// constructor removes the implicit public one, so a single `private OptionUtf8String() { }`
+    /// stops `new OptionUtf8String()` yielding a variant-zero instance from outside.
+    ///
+    /// Reflection rather than a call. `new OptionUtf8String()` from here would fail to compile,
+    /// which does prove the point but leaves nothing that runs and nothing that can regress. Until
+    /// now the only check was `enum_class_ctor::a_class_backed_enum_gets_a_private_parameterless_ctor`,
+    /// which matches text in a snapshot — so making the constructor public again would produce a
+    /// snapshot diff a reviewer could accept, and no test would fail.
+    [Fact]
+    public void a_class_backed_union_cannot_be_constructed_empty()
+    {
+        var parameterless = typeof(OptionUtf8String).GetConstructor(
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            types: Type.EmptyTypes,
+            modifiers: null);
+
+        Assert.NotNull(parameterless);
+        Assert.False(
+            parameterless!.IsPublic,
+            "item 3a made this constructor private; public again means `new OptionUtf8String()` can "
+                + "produce a variant-zero instance from outside the type, which corresponds to no Rust variant");
+
+        // No empty state to guard: absence is a null reference, not a zeroed instance.
+        Assert.Null(default(OptionUtf8String));
+
+        // Which is why `HasValue` is a constant here rather than a field read, and `Value` is
+        // never null on an instance that exists at all.
+        var none = OptionUtf8String.None;
+        Assert.True(none.HasValue);
+        Assert.NotNull(none.Value);
     }
 }
