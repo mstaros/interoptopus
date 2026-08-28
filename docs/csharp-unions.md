@@ -794,15 +794,37 @@ Multi-field and named variant support. Retiring `IsOk` / `AsOk`.
    `wire/mod.rs:104` and `:264`, in the wire deserializer, a different path from marshal-out. It
    supports test 5e; it says nothing here.
 
-   **Measured, not asserted.** Position (b) NREs today, and it does so *before* any marshaller.
-   `nullable.rs:35` defines nullability as `TypeKind::Delegate(d) if d.kind == DelegateKind::Class`
-   — class delegates only — and `body_as_unmanaged.rs:47` / `body_to_unmanaged.rs:48` emit the
-   `?... ?? default` form only when that holds. A class-backed union field therefore gets a bare
-   `.AsUnmanaged()`, and the dereference happens inside the enclosing composite's conversion, not
-   in a marshaller. Positions (a) and (c) are **unmeasured**, and reproducing them is cheap — one composite
-   carrying a class-backed union by value, one carrying a collection of them, through the
-   existing corpus. **Do it before 4b**: a different failure mode in either changes what 4b
-   implements, and 4b is the wrong place to discover it.
+   **All three positions measured, and they agree.** `nullable.rs:35` defines nullability as
+   `TypeKind::Delegate(d) if d.kind == DelegateKind::Class` — class delegates only — and
+   `body_as_unmanaged.rs:47` / `body_to_unmanaged.rs:48` emit the `?... ?? default` form only when
+   that holds. A class-backed union therefore gets a bare `.AsUnmanaged()` wherever it appears.
+
+   Position (b) was measured first: it NREs, and it does so *before* any marshaller, inside the
+   enclosing composite's conversion. Positions (a) and (c) were measured on 2026-08-28 in
+   `c70efeb`, by `Tests/Test.Union.NullMarshalOut.cs`, which the C# suite compiles and runs:
+
+   | Position | Call | Result |
+   |---|---|---|
+   | (a) argument, by value | `enums_4(null)` — `Layer3String` | `NullReferenceException` |
+   | (a) argument, nested three deep | `pattern_ffi_option_3(null)` | `NullReferenceException` |
+   | (b) composite field | — | `NullReferenceException` |
+   | (c) null union as another union's case payload | `pattern_ffi_option_3(Some(null))` | `NullReferenceException` |
+
+   A control asserts the same call succeeds with a well-formed `Layer3String`, so these are
+   failures of nullness rather than of the call. Position (c) uses a nested union rather than a
+   collection because the corpus contains **no slice of unions**; the three-deep nesting is a
+   stronger shape anyway, since a null at the inner level traverses two conversions before the
+   dereference.
+
+   **What this settles for 4b.** The worry was that a different failure mode in (a) or (c) would
+   change what 4b implements. There is no different failure mode — all three fail identically, at
+   the same unguarded call, before any marshaller. **So 4b implements one thing in one place, not
+   three variants**, and the three-way exception choice below is the only question left in this
+   item.
+
+   **And `Issues.md` `b4e07f12` is unblocked by the same measurement**, with its own condition
+   intact: delegating `nullable.rs` to `struct_class::is_class` is now safe *provided*
+   class-backed unions are excluded from the `?? default` path explicitly rather than by omission.
 
    **The choice is three-way, not two.** `InvalidOperationException`, for consistency with the
    Step 4 row for the struct empty state; `ArgumentNullException`, the conventional .NET answer
@@ -826,10 +848,16 @@ Multi-field and named variant support. Retiring `IsOk` / `AsOk`.
    neither depends on which exception is thrown. The Remaining table already gives 3a's gate as
    `—`; this item previously contradicted it and was wrong.
 
-   **No test row covers this yet.** 5e ("class union cannot produce non-null empty") concerns a
-   non-null invalid instance and does not exercise null at marshal-out. A row asserting "null
-   union at marshal-out throws the decided exception" is missing; it is not added here because
-   numbering new rows is not this item's call.
+   **Tests exist, but they record behaviour rather than assert a contract.** 5e ("class union
+   cannot produce non-null empty") concerns a non-null invalid instance and does not exercise null
+   at marshal-out; that gap is now filled by `Tests/Test.Union.NullMarshalOut.cs` (`c70efeb`).
+
+   Those tests assert `NullReferenceException` **because that is what was observed**, not because
+   it was chosen — the file says so in its own header. When 4b decides, they become assertions
+   about a decided contract and the expected type changes with it. Treat a failure there after 4b
+   as expected work, not as a regression. A numbered test row is still owed; numbering it was not
+   this item's call and is not this measurement's either.
+
 2. ~~**Case→enum conversion.**~~ **Closed — the compiler provides it, and this is now confirmed by
    compilation rather than by reading alone.** The spec says *"An implicit union conversion exists
    from each case type to the union type"*, and it *"works by calling the corresponding generated
