@@ -98,11 +98,14 @@ public partial struct ResultUintVoid : IUnion, IResult<uint, Unit>
         [EditorBrowsable(EditorBrowsableState.Never)]
         internal ResultUintVoid ToManaged()
         {
-            var _managed = new ResultUintVoid();
-            _managed._variant = _variant;
-            _managed._hasValue = true;
-            if (_variant == 0) _managed._Ok = _Ok._Ok;
-            return _managed;
+            return _variant switch
+            {
+                0 => new ResultUintVoid(new OkCase(_Ok._Ok)),
+                1 => new ResultUintVoid(new ErrCase()),
+                2 => new ResultUintVoid(new PanicCase()),
+                3 => new ResultUintVoid(new NullCase()),
+                _ => throw new InteropException($"Unknown variant {_variant} for ResultUintVoid. The value did not originate from a well-formed Rust enum."),
+            };
         }
     }
 

@@ -204,11 +204,14 @@ public partial class ResultFliparooDotnetException : IUnion, IResult<Fliparoo, D
         [EditorBrowsable(EditorBrowsableState.Never)]
         internal ResultFliparooDotnetException IntoManaged()
         {
-            var _managed = new ResultFliparooDotnetException();
-            _managed._variant = _variant;
-            if (_variant == 0) _managed._Ok = _Ok._Ok.IntoManaged();
-            if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
-            return _managed;
+            return _variant switch
+            {
+                0 => new ResultFliparooDotnetException(new OkCase(_Ok._Ok.IntoManaged())),
+                1 => new ResultFliparooDotnetException(new ErrCase(_Err._Err.ToManaged())),
+                2 => new ResultFliparooDotnetException(new PanicCase()),
+                3 => new ResultFliparooDotnetException(new NullCase()),
+                _ => throw new InteropException($"Unknown variant {_variant} for ResultFliparooDotnetException. The value did not originate from a well-formed Rust enum."),
+            };
         }
     }
 
@@ -468,11 +471,14 @@ public partial class ResultHeavyDotnetException : IUnion, IResult<Heavy, DotnetE
         [EditorBrowsable(EditorBrowsableState.Never)]
         internal ResultHeavyDotnetException IntoManaged()
         {
-            var _managed = new ResultHeavyDotnetException();
-            _managed._variant = _variant;
-            if (_variant == 0) _managed._Ok = _Ok._Ok.IntoManaged();
-            if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
-            return _managed;
+            return _variant switch
+            {
+                0 => new ResultHeavyDotnetException(new OkCase(_Ok._Ok.IntoManaged())),
+                1 => new ResultHeavyDotnetException(new ErrCase(_Err._Err.ToManaged())),
+                2 => new ResultHeavyDotnetException(new PanicCase()),
+                3 => new ResultHeavyDotnetException(new NullCase()),
+                _ => throw new InteropException($"Unknown variant {_variant} for ResultHeavyDotnetException. The value did not originate from a well-formed Rust enum."),
+            };
         }
     }
 

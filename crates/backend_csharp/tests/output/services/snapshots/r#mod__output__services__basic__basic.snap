@@ -146,11 +146,14 @@ public partial class ResultCounterError : IUnion, IResult<IntPtr, Error>, IDispo
         [EditorBrowsable(EditorBrowsableState.Never)]
         internal ResultCounterError IntoManaged()
         {
-            var _managed = new ResultCounterError();
-            _managed._variant = _variant;
-            if (_variant == 0) _managed._Ok = _Ok._Ok;
-            if (_variant == 1) _managed._Err = _Err._Err;
-            return _managed;
+            return _variant switch
+            {
+                0 => new ResultCounterError(new OkCase(_Ok._Ok)),
+                1 => new ResultCounterError(new ErrCase(_Err._Err)),
+                2 => new ResultCounterError(new PanicCase()),
+                3 => new ResultCounterError(new NullCase()),
+                _ => throw new InteropException($"Unknown variant {_variant} for ResultCounterError. The value did not originate from a well-formed Rust enum."),
+            };
         }
     }
 

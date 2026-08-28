@@ -154,18 +154,14 @@ fn a_class_backed_union_has_no_flag_to_consult() {
 }
 
 #[test]
-fn the_flag_is_written_where_a_well_formed_value_is_constructed() {
+fn a_well_formed_value_gets_the_flag_however_it_is_constructed() {
     let cs = generated_interop();
 
     assert!(
         cs.contains("public static Meter Count(uint value) => new() { _variant = 1, _Count = value, _hasValue = true };"),
         "a factory produces a well-formed value, so it must set the flag"
     );
-    assert!(
-        cs.contains("_managed._hasValue = true;"),
-        "a value arriving from native is well-formed too; without this write ToManaged would \
-         produce values whose Value reports null"
-    );
+    assert!(!cs.contains("_managed._hasValue = true;"), "item 4a deleted 3c's explicit write; if it is back, ToManaged has regressed to mutating a default instance"); assert!(cs.contains("new Meter(new CountCase("), "a value arriving from native is well-formed too, and ToManaged now establishes that by building through the case constructor, which sets the flag itself"); assert!(cs.contains("_ => throw new InteropException("), "and an unrecognised native tag must throw rather than yield a value carrying that tag with no payload");
 }
 
 /// Eligibility asks whether a variant **can** carry a payload, not whether one **does**.

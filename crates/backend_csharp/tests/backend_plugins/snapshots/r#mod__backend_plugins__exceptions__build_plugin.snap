@@ -204,11 +204,14 @@ public partial class ResultNestedADotnetException : IUnion, IResult<NestedA, Dot
         [EditorBrowsable(EditorBrowsableState.Never)]
         internal ResultNestedADotnetException IntoManaged()
         {
-            var _managed = new ResultNestedADotnetException();
-            _managed._variant = _variant;
-            if (_variant == 0) _managed._Ok = _Ok._Ok.IntoManaged();
-            if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
-            return _managed;
+            return _variant switch
+            {
+                0 => new ResultNestedADotnetException(new OkCase(_Ok._Ok.IntoManaged())),
+                1 => new ResultNestedADotnetException(new ErrCase(_Err._Err.ToManaged())),
+                2 => new ResultNestedADotnetException(new PanicCase()),
+                3 => new ResultNestedADotnetException(new NullCase()),
+                _ => throw new InteropException($"Unknown variant {_variant} for ResultNestedADotnetException. The value did not originate from a well-formed Rust enum."),
+            };
         }
     }
 
@@ -464,12 +467,14 @@ public partial struct ResultUintDotnetException : IUnion, IResult<uint, DotnetEx
         [EditorBrowsable(EditorBrowsableState.Never)]
         internal ResultUintDotnetException ToManaged()
         {
-            var _managed = new ResultUintDotnetException();
-            _managed._variant = _variant;
-            _managed._hasValue = true;
-            if (_variant == 0) _managed._Ok = _Ok._Ok;
-            if (_variant == 1) _managed._Err = _Err._Err.ToManaged();
-            return _managed;
+            return _variant switch
+            {
+                0 => new ResultUintDotnetException(new OkCase(_Ok._Ok)),
+                1 => new ResultUintDotnetException(new ErrCase(_Err._Err.ToManaged())),
+                2 => new ResultUintDotnetException(new PanicCase()),
+                3 => new ResultUintDotnetException(new NullCase()),
+                _ => throw new InteropException($"Unknown variant {_variant} for ResultUintDotnetException. The value did not originate from a well-formed Rust enum."),
+            };
         }
     }
 
