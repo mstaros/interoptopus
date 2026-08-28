@@ -50,8 +50,14 @@ fn csharp_suite() -> Result<(), Box<dyn std::error::Error>> {
     // A finished build is not evidence that anything was built. The tool-level build cache served
     // stale outputs across four consecutive builds on 2026-08-27 and produced three separate wrong
     // diagnoses; a green run over a stale assembly would recreate precisely the blind spot this
-    // test closes. The first assertion below was observed failing on this checkout before the
-    // staging above existed - the output directory held no native library at all.
+    // test closes.
+    //
+    // Be exact about what these three have and have not shown. The *condition* the first one
+    // catches was observed directly: before the staging above existed, the output directory held
+    // no native library, because the Content glob in `Bindings.csproj` matched nothing. The
+    // assertion itself has never fired - it did not exist then. All three are unfired guards, and
+    // an unfired guard is worth less than one that has been watched failing. Do not write that any
+    // of them caught something until it has.
     let output_dir = project_dir.join("bin").join("Debug").join("net11.0");
     let interop_cs = manifest.join("tests").join("reference_project").join("Bindings").join("Interop.cs");
     let copied = output_dir.join(crate::REFERENCE_CDYLIB);
