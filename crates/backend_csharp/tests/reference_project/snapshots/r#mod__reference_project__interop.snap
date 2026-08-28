@@ -227,7 +227,7 @@ public partial class OptionUtf8String : IUnion, IDisposable
         public void FromManaged(OptionUtf8String managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null OptionUtf8String: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free() {}
@@ -251,7 +251,7 @@ public partial class OptionUtf8String : IUnion, IDisposable
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null OptionUtf8String: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.IntoUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public OptionUtf8String ToManaged() { return _unmanaged.IntoManaged(); }
@@ -10320,7 +10320,7 @@ public partial class Layer3String : IUnion, IDisposable
         public void FromManaged(Layer3String managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null Layer3String: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free() {}
@@ -10344,7 +10344,7 @@ public partial class Layer3String : IUnion, IDisposable
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null Layer3String: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.IntoUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public Layer3String ToManaged() { return _unmanaged.IntoManaged(); }
@@ -10790,7 +10790,7 @@ public partial class OptionOptionResultOptionUtf8StringError : IUnion, IDisposab
         public void FromManaged(OptionOptionResultOptionUtf8StringError managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null OptionOptionResultOptionUtf8StringError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free() {}
@@ -10814,7 +10814,7 @@ public partial class OptionOptionResultOptionUtf8StringError : IUnion, IDisposab
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null OptionOptionResultOptionUtf8StringError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.IntoUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public OptionOptionResultOptionUtf8StringError ToManaged() { return _unmanaged.IntoManaged(); }
@@ -10993,7 +10993,7 @@ public partial class OptionResultOptionUtf8StringError : IUnion, IDisposable
         public void FromManaged(OptionResultOptionUtf8StringError managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null OptionResultOptionUtf8StringError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free() {}
@@ -11017,7 +11017,7 @@ public partial class OptionResultOptionUtf8StringError : IUnion, IDisposable
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null OptionResultOptionUtf8StringError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.IntoUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public OptionResultOptionUtf8StringError ToManaged() { return _unmanaged.IntoManaged(); }
@@ -11635,7 +11635,7 @@ public partial class ResultOptionUtf8StringError : IUnion, IResult<OptionUtf8Str
         public void FromManaged(ResultOptionUtf8StringError managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultOptionUtf8StringError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free() {}
@@ -11659,7 +11659,7 @@ public partial class ResultOptionUtf8StringError : IUnion, IResult<OptionUtf8Str
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultOptionUtf8StringError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.IntoUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultOptionUtf8StringError ToManaged() { return _unmanaged.IntoManaged(); }
@@ -11900,7 +11900,7 @@ public partial class ResultServiceAsyncCancelError : IUnion, IResult<IntPtr, Err
         public void FromManaged(ResultServiceAsyncCancelError managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceAsyncCancelError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free() {}
@@ -11924,7 +11924,7 @@ public partial class ResultServiceAsyncCancelError : IUnion, IResult<IntPtr, Err
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceAsyncCancelError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.IntoUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultServiceAsyncCancelError ToManaged() { return _unmanaged.IntoManaged(); }
@@ -12165,7 +12165,7 @@ public partial class ResultServiceAsyncCtorError : IUnion, IResult<IntPtr, Error
         public void FromManaged(ResultServiceAsyncCtorError managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceAsyncCtorError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free() {}
@@ -12189,7 +12189,7 @@ public partial class ResultServiceAsyncCtorError : IUnion, IResult<IntPtr, Error
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceAsyncCtorError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.IntoUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultServiceAsyncCtorError ToManaged() { return _unmanaged.IntoManaged(); }
@@ -12430,7 +12430,7 @@ public partial class ResultServiceAsyncPanicError : IUnion, IResult<IntPtr, Erro
         public void FromManaged(ResultServiceAsyncPanicError managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceAsyncPanicError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free() {}
@@ -12454,7 +12454,7 @@ public partial class ResultServiceAsyncPanicError : IUnion, IResult<IntPtr, Erro
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceAsyncPanicError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.IntoUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultServiceAsyncPanicError ToManaged() { return _unmanaged.IntoManaged(); }
@@ -12695,7 +12695,7 @@ public partial class ResultServiceAsyncResultError : IUnion, IResult<IntPtr, Err
         public void FromManaged(ResultServiceAsyncResultError managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceAsyncResultError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free() {}
@@ -12719,7 +12719,7 @@ public partial class ResultServiceAsyncResultError : IUnion, IResult<IntPtr, Err
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceAsyncResultError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.IntoUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultServiceAsyncResultError ToManaged() { return _unmanaged.IntoManaged(); }
@@ -12960,7 +12960,7 @@ public partial class ResultServiceAsyncSleepError : IUnion, IResult<IntPtr, Erro
         public void FromManaged(ResultServiceAsyncSleepError managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceAsyncSleepError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free() {}
@@ -12984,7 +12984,7 @@ public partial class ResultServiceAsyncSleepError : IUnion, IResult<IntPtr, Erro
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceAsyncSleepError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.IntoUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultServiceAsyncSleepError ToManaged() { return _unmanaged.IntoManaged(); }
@@ -13225,7 +13225,7 @@ public partial class ResultServiceAsyncStructsError : IUnion, IResult<IntPtr, Er
         public void FromManaged(ResultServiceAsyncStructsError managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceAsyncStructsError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free() {}
@@ -13249,7 +13249,7 @@ public partial class ResultServiceAsyncStructsError : IUnion, IResult<IntPtr, Er
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceAsyncStructsError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.IntoUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultServiceAsyncStructsError ToManaged() { return _unmanaged.IntoManaged(); }
@@ -13490,7 +13490,7 @@ public partial class ResultServiceAsyncVecStringError : IUnion, IResult<IntPtr, 
         public void FromManaged(ResultServiceAsyncVecStringError managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceAsyncVecStringError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free() {}
@@ -13514,7 +13514,7 @@ public partial class ResultServiceAsyncVecStringError : IUnion, IResult<IntPtr, 
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceAsyncVecStringError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.IntoUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultServiceAsyncVecStringError ToManaged() { return _unmanaged.IntoManaged(); }
@@ -13755,7 +13755,7 @@ public partial class ResultServiceAsyncWireError : IUnion, IResult<IntPtr, Error
         public void FromManaged(ResultServiceAsyncWireError managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceAsyncWireError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free() {}
@@ -13779,7 +13779,7 @@ public partial class ResultServiceAsyncWireError : IUnion, IResult<IntPtr, Error
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceAsyncWireError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.IntoUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultServiceAsyncWireError ToManaged() { return _unmanaged.IntoManaged(); }
@@ -14020,7 +14020,7 @@ public partial class ResultServiceCallbacksError : IUnion, IResult<IntPtr, Error
         public void FromManaged(ResultServiceCallbacksError managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceCallbacksError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free() {}
@@ -14044,7 +14044,7 @@ public partial class ResultServiceCallbacksError : IUnion, IResult<IntPtr, Error
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceCallbacksError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.IntoUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultServiceCallbacksError ToManaged() { return _unmanaged.IntoManaged(); }
@@ -14285,7 +14285,7 @@ public partial class ResultServiceDependentError : IUnion, IResult<IntPtr, Error
         public void FromManaged(ResultServiceDependentError managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceDependentError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free() {}
@@ -14309,7 +14309,7 @@ public partial class ResultServiceDependentError : IUnion, IResult<IntPtr, Error
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceDependentError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.IntoUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultServiceDependentError ToManaged() { return _unmanaged.IntoManaged(); }
@@ -14550,7 +14550,7 @@ public partial class ResultServiceIgnoringMethodsError : IUnion, IResult<IntPtr,
         public void FromManaged(ResultServiceIgnoringMethodsError managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceIgnoringMethodsError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free() {}
@@ -14574,7 +14574,7 @@ public partial class ResultServiceIgnoringMethodsError : IUnion, IResult<IntPtr,
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceIgnoringMethodsError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.IntoUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultServiceIgnoringMethodsError ToManaged() { return _unmanaged.IntoManaged(); }
@@ -14815,7 +14815,7 @@ public partial class ResultServiceMainError : IUnion, IResult<IntPtr, Error>, ID
         public void FromManaged(ResultServiceMainError managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceMainError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free() {}
@@ -14839,7 +14839,7 @@ public partial class ResultServiceMainError : IUnion, IResult<IntPtr, Error>, ID
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceMainError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.IntoUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultServiceMainError ToManaged() { return _unmanaged.IntoManaged(); }
@@ -15080,7 +15080,7 @@ public partial class ResultServiceMultipleCtorsError : IUnion, IResult<IntPtr, E
         public void FromManaged(ResultServiceMultipleCtorsError managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceMultipleCtorsError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free() {}
@@ -15104,7 +15104,7 @@ public partial class ResultServiceMultipleCtorsError : IUnion, IResult<IntPtr, E
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceMultipleCtorsError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.IntoUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultServiceMultipleCtorsError ToManaged() { return _unmanaged.IntoManaged(); }
@@ -15345,7 +15345,7 @@ public partial class ResultServiceResultError : IUnion, IResult<IntPtr, Error>, 
         public void FromManaged(ResultServiceResultError managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceResultError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free() {}
@@ -15369,7 +15369,7 @@ public partial class ResultServiceResultError : IUnion, IResult<IntPtr, Error>, 
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceResultError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.IntoUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultServiceResultError ToManaged() { return _unmanaged.IntoManaged(); }
@@ -15610,7 +15610,7 @@ public partial class ResultServiceStringsError : IUnion, IResult<IntPtr, Error>,
         public void FromManaged(ResultServiceStringsError managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceStringsError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free() {}
@@ -15634,7 +15634,7 @@ public partial class ResultServiceStringsError : IUnion, IResult<IntPtr, Error>,
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceStringsError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.IntoUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultServiceStringsError ToManaged() { return _unmanaged.IntoManaged(); }
@@ -15875,7 +15875,7 @@ public partial class ResultServiceVariousSlicesError : IUnion, IResult<IntPtr, E
         public void FromManaged(ResultServiceVariousSlicesError managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceVariousSlicesError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free() {}
@@ -15899,7 +15899,7 @@ public partial class ResultServiceVariousSlicesError : IUnion, IResult<IntPtr, E
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultServiceVariousSlicesError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.IntoUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultServiceVariousSlicesError ToManaged() { return _unmanaged.IntoManaged(); }
@@ -16141,7 +16141,7 @@ public partial class ResultUseStringError : IUnion, IResult<UseString, Error>, I
         public void FromManaged(ResultUseStringError managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultUseStringError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free() {}
@@ -16165,7 +16165,7 @@ public partial class ResultUseStringError : IUnion, IResult<UseString, Error>, I
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultUseStringError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.IntoUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultUseStringError ToManaged() { return _unmanaged.IntoManaged(); }
@@ -16407,7 +16407,7 @@ public partial class ResultUtf8StringError : IUnion, IResult<Utf8String, Error>,
         public void FromManaged(ResultUtf8StringError managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultUtf8StringError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free() {}
@@ -16431,7 +16431,7 @@ public partial class ResultUtf8StringError : IUnion, IResult<Utf8String, Error>,
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultUtf8StringError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.IntoUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultUtf8StringError ToManaged() { return _unmanaged.IntoManaged(); }
@@ -16673,7 +16673,7 @@ public partial class ResultVecUtf8StringError : IUnion, IResult<VecUtf8String, E
         public void FromManaged(ResultVecUtf8StringError managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultVecUtf8StringError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free() {}
@@ -16697,7 +16697,7 @@ public partial class ResultVecUtf8StringError : IUnion, IResult<VecUtf8String, E
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultVecUtf8StringError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.IntoUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultVecUtf8StringError ToManaged() { return _unmanaged.IntoManaged(); }
@@ -16939,7 +16939,7 @@ public partial class ResultWireOfHashMapStringStringError : IUnion, IResult<Wire
         public void FromManaged(ResultWireOfHashMapStringStringError managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultWireOfHashMapStringStringError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free() {}
@@ -16963,7 +16963,7 @@ public partial class ResultWireOfHashMapStringStringError : IUnion, IResult<Wire
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultWireOfHashMapStringStringError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.IntoUnmanaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultWireOfHashMapStringStringError ToManaged() { return _unmanaged.IntoManaged(); }
