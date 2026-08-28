@@ -27,8 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no variant set, and previously marshalled to Rust as variant zero — a variant the Rust side
   never sends. `ToUnmanaged`/`AsUnmanaged` now throw `InvalidOperationException` with
   "Cannot marshal a default X: it is empty and corresponds to no Rust variant. Construct one
-  through a case constructor or factory." Construct through the generated case constructors or
-  factories instead. Class-backed enums have no `_hasValue`; their null state is covered
+  through a case constructor or factory." `Wire<T>` serialization delegates to the same
+  classifier instead of emitting a separate "Unknown variant" error. Construct through the
+  generated case constructors or factories instead. Class-backed enums have no `_hasValue`;
+  their null state is covered
   separately below.
 
 - **Null class-backed unions now fail with `InvalidOperationException` before native entry.**
