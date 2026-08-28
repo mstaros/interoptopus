@@ -1,6 +1,6 @@
 using System;
 using System.Reflection;
-using System.Runtime.InteropServices;
+using System.Runtime.CompilerServices;
 using My.Company;
 using My.Company.Common;
 using Xunit;
@@ -185,10 +185,7 @@ public partial class TestPatternUnion
         var type = typeof(DataEnum);
 
         Assert.Contains(typeof(IUnion), type.GetInterfaces());
-        Assert.Null(
-            type.GetNestedType("Unmanaged", BindingFlags.Public | BindingFlags.NonPublic),
-            "DataEnum is managed-only, so it should have no unmanaged mirror; if one appeared, the "
-                + "union projection and the FFI crossing have been coupled again");
+Assert.False(type.GetNestedType("Unmanaged", BindingFlags.Public | BindingFlags.NonPublic) is not null, "DataEnum is managed-only, so it should have no unmanaged mirror; if one appeared, the union projection and the FFI crossing have been coupled again");
 
         var s = DataEnum.S("hello");
 
