@@ -362,12 +362,12 @@ public partial struct OptionUint : IUnion
     public static OptionUint None => new() { _variant = 1, _hasValue = true };
 
     // Checks
-    public bool IsSome => _variant == 0;
-    public bool IsNone => _variant == 1;
+    public bool IsSome => _hasValue && _variant == 0;
+    public bool IsNone => _hasValue && _variant == 1;
 
     // Conversions
-    public uint AsSome() { if (_variant != 0) { throw ExceptionForVariant(); } else { return _Some; } }
-    public void AsNone() { if (_variant != 1) throw ExceptionForVariant(); }
+    public uint AsSome() { if (!_hasValue || _variant != 0) { throw ExceptionForVariant(); } else { return _Some; } }
+    public void AsNone() { if (!_hasValue || _variant != 1) throw ExceptionForVariant(); }
 
     // Case constructors — the union creation members the compiler reads case types from.
     public OptionUint(SomeCase value) { _variant = 0; _Some = value.Value; _hasValue = true; }
@@ -533,12 +533,12 @@ public partial struct OptionVec : IUnion
     public static OptionVec None => new() { _variant = 1, _hasValue = true };
 
     // Checks
-    public bool IsSome => _variant == 0;
-    public bool IsNone => _variant == 1;
+    public bool IsSome => _hasValue && _variant == 0;
+    public bool IsNone => _hasValue && _variant == 1;
 
     // Conversions
-    public Vec AsSome() { if (_variant != 0) { throw ExceptionForVariant(); } else { return _Some; } }
-    public void AsNone() { if (_variant != 1) throw ExceptionForVariant(); }
+    public Vec AsSome() { if (!_hasValue || _variant != 0) { throw ExceptionForVariant(); } else { return _Some; } }
+    public void AsNone() { if (!_hasValue || _variant != 1) throw ExceptionForVariant(); }
 
     // Case constructors — the union creation members the compiler reads case types from.
     public OptionVec(SomeCase value) { _variant = 0; _Some = value.Value; _hasValue = true; }
@@ -716,16 +716,16 @@ public partial struct ResultVoidVoid : IUnion, IResult<Unit, Unit>
     public static ResultVoidVoid Null => new() { _variant = 3, _hasValue = true };
 
     // Checks
-    public bool IsOk => _variant == 0;
-    public bool IsErr => _variant == 1;
-    public bool IsPanic => _variant == 2;
-    public bool IsNull => _variant == 3;
+    public bool IsOk => _hasValue && _variant == 0;
+    public bool IsErr => _hasValue && _variant == 1;
+    public bool IsPanic => _hasValue && _variant == 2;
+    public bool IsNull => _hasValue && _variant == 3;
 
     // Conversions
-    public void AsOk() { if (_variant != 0) throw ExceptionForVariant(); }
-    public void AsErr() { if (_variant != 1) throw ExceptionForVariant(); }
-    public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
-    public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
+    public void AsOk() { if (!_hasValue || _variant != 0) throw ExceptionForVariant(); }
+    public void AsErr() { if (!_hasValue || _variant != 1) throw ExceptionForVariant(); }
+    public void AsPanic() { if (!_hasValue || _variant != 2) throw ExceptionForVariant(); }
+    public void AsNull() { if (!_hasValue || _variant != 3) throw ExceptionForVariant(); }
 
     // Case constructors — the union creation members the compiler reads case types from.
     public ResultVoidVoid(OkCase value) { _variant = 0; _hasValue = true; }
@@ -9732,16 +9732,16 @@ public partial struct EnumExplicitPayload : IUnion
     public static EnumExplicitPayload D => new() { _variant = 20, _hasValue = true };
 
     // Checks
-    public bool IsA => _variant == 10;
-    public bool IsB => _variant == 11;
-    public bool IsC => _variant == 12;
-    public bool IsD => _variant == 20;
+    public bool IsA => _hasValue && _variant == 10;
+    public bool IsB => _hasValue && _variant == 11;
+    public bool IsC => _hasValue && _variant == 12;
+    public bool IsD => _hasValue && _variant == 20;
 
     // Conversions
-    public void AsA() { if (_variant != 10) throw ExceptionForVariant(); }
-    public uint AsB() { if (_variant != 11) { throw ExceptionForVariant(); } else { return _B; } }
-    public Vec3f32 AsC() { if (_variant != 12) { throw ExceptionForVariant(); } else { return _C; } }
-    public void AsD() { if (_variant != 20) throw ExceptionForVariant(); }
+    public void AsA() { if (!_hasValue || _variant != 10) throw ExceptionForVariant(); }
+    public uint AsB() { if (!_hasValue || _variant != 11) { throw ExceptionForVariant(); } else { return _B; } }
+    public Vec3f32 AsC() { if (!_hasValue || _variant != 12) { throw ExceptionForVariant(); } else { return _C; } }
+    public void AsD() { if (!_hasValue || _variant != 20) throw ExceptionForVariant(); }
 
     // Case constructors — the union creation members the compiler reads case types from.
     public EnumExplicitPayload(ACase value) { _variant = 10; _hasValue = true; }
@@ -10283,12 +10283,12 @@ public partial struct OptionEnumPayload : IUnion
     public static OptionEnumPayload None => new() { _variant = 1, _hasValue = true };
 
     // Checks
-    public bool IsSome => _variant == 0;
-    public bool IsNone => _variant == 1;
+    public bool IsSome => _hasValue && _variant == 0;
+    public bool IsNone => _hasValue && _variant == 1;
 
     // Conversions
-    public EnumPayload AsSome() { if (_variant != 0) { throw ExceptionForVariant(); } else { return _Some; } }
-    public void AsNone() { if (_variant != 1) throw ExceptionForVariant(); }
+    public EnumPayload AsSome() { if (!_hasValue || _variant != 0) { throw ExceptionForVariant(); } else { return _Some; } }
+    public void AsNone() { if (!_hasValue || _variant != 1) throw ExceptionForVariant(); }
 
     // Case constructors — the union creation members the compiler reads case types from.
     public OptionEnumPayload(SomeCase value) { _variant = 0; _Some = value.Value; _hasValue = true; }
@@ -10454,12 +10454,12 @@ public partial struct OptionInner : IUnion
     public static OptionInner None => new() { _variant = 1, _hasValue = true };
 
     // Checks
-    public bool IsSome => _variant == 0;
-    public bool IsNone => _variant == 1;
+    public bool IsSome => _hasValue && _variant == 0;
+    public bool IsNone => _hasValue && _variant == 1;
 
     // Conversions
-    public Inner AsSome() { if (_variant != 0) { throw ExceptionForVariant(); } else { return _Some; } }
-    public void AsNone() { if (_variant != 1) throw ExceptionForVariant(); }
+    public Inner AsSome() { if (!_hasValue || _variant != 0) { throw ExceptionForVariant(); } else { return _Some; } }
+    public void AsNone() { if (!_hasValue || _variant != 1) throw ExceptionForVariant(); }
 
     // Case constructors — the union creation members the compiler reads case types from.
     public OptionInner(SomeCase value) { _variant = 0; _Some = value.Value; _hasValue = true; }
@@ -15878,16 +15878,16 @@ public partial struct ResultNestedArrayError : IUnion, IResult<NestedArray, Erro
     public static ResultNestedArrayError Null => new() { _variant = 3, _hasValue = true };
 
     // Checks
-    public bool IsOk => _variant == 0;
-    public bool IsErr => _variant == 1;
-    public bool IsPanic => _variant == 2;
-    public bool IsNull => _variant == 3;
+    public bool IsOk => _hasValue && _variant == 0;
+    public bool IsErr => _hasValue && _variant == 1;
+    public bool IsPanic => _hasValue && _variant == 2;
+    public bool IsNull => _hasValue && _variant == 3;
 
     // Conversions
-    public NestedArray AsOk() { if (_variant != 0) { throw ExceptionForVariant(); } else { return _Ok; } }
-    public Error AsErr() { if (_variant != 1) { throw ExceptionForVariant(); } else { return _Err; } }
-    public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
-    public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
+    public NestedArray AsOk() { if (!_hasValue || _variant != 0) { throw ExceptionForVariant(); } else { return _Ok; } }
+    public Error AsErr() { if (!_hasValue || _variant != 1) { throw ExceptionForVariant(); } else { return _Err; } }
+    public void AsPanic() { if (!_hasValue || _variant != 2) throw ExceptionForVariant(); }
+    public void AsNull() { if (!_hasValue || _variant != 3) throw ExceptionForVariant(); }
 
     // Case constructors — the union creation members the compiler reads case types from.
     public ResultNestedArrayError(OkCase value) { _variant = 0; _Ok = value.Value; _hasValue = true; }
@@ -16112,16 +16112,16 @@ public partial struct ResultOptionEnumPayloadError : IUnion, IResult<OptionEnumP
     public static ResultOptionEnumPayloadError Null => new() { _variant = 3, _hasValue = true };
 
     // Checks
-    public bool IsOk => _variant == 0;
-    public bool IsErr => _variant == 1;
-    public bool IsPanic => _variant == 2;
-    public bool IsNull => _variant == 3;
+    public bool IsOk => _hasValue && _variant == 0;
+    public bool IsErr => _hasValue && _variant == 1;
+    public bool IsPanic => _hasValue && _variant == 2;
+    public bool IsNull => _hasValue && _variant == 3;
 
     // Conversions
-    public OptionEnumPayload AsOk() { if (_variant != 0) { throw ExceptionForVariant(); } else { return _Ok; } }
-    public Error AsErr() { if (_variant != 1) { throw ExceptionForVariant(); } else { return _Err; } }
-    public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
-    public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
+    public OptionEnumPayload AsOk() { if (!_hasValue || _variant != 0) { throw ExceptionForVariant(); } else { return _Ok; } }
+    public Error AsErr() { if (!_hasValue || _variant != 1) { throw ExceptionForVariant(); } else { return _Err; } }
+    public void AsPanic() { if (!_hasValue || _variant != 2) throw ExceptionForVariant(); }
+    public void AsNull() { if (!_hasValue || _variant != 3) throw ExceptionForVariant(); }
 
     // Case constructors — the union creation members the compiler reads case types from.
     public ResultOptionEnumPayloadError(OkCase value) { _variant = 0; _Ok = value.Value; _hasValue = true; }
@@ -16346,16 +16346,16 @@ public partial struct ResultUintError : IUnion, IResult<uint, Error>
     public static ResultUintError Null => new() { _variant = 3, _hasValue = true };
 
     // Checks
-    public bool IsOk => _variant == 0;
-    public bool IsErr => _variant == 1;
-    public bool IsPanic => _variant == 2;
-    public bool IsNull => _variant == 3;
+    public bool IsOk => _hasValue && _variant == 0;
+    public bool IsErr => _hasValue && _variant == 1;
+    public bool IsPanic => _hasValue && _variant == 2;
+    public bool IsNull => _hasValue && _variant == 3;
 
     // Conversions
-    public uint AsOk() { if (_variant != 0) { throw ExceptionForVariant(); } else { return _Ok; } }
-    public Error AsErr() { if (_variant != 1) { throw ExceptionForVariant(); } else { return _Err; } }
-    public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
-    public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
+    public uint AsOk() { if (!_hasValue || _variant != 0) { throw ExceptionForVariant(); } else { return _Ok; } }
+    public Error AsErr() { if (!_hasValue || _variant != 1) { throw ExceptionForVariant(); } else { return _Err; } }
+    public void AsPanic() { if (!_hasValue || _variant != 2) throw ExceptionForVariant(); }
+    public void AsNull() { if (!_hasValue || _variant != 3) throw ExceptionForVariant(); }
 
     // Case constructors — the union creation members the compiler reads case types from.
     public ResultUintError(OkCase value) { _variant = 0; _Ok = value.Value; _hasValue = true; }
@@ -16580,16 +16580,16 @@ public partial struct ResultUlongError : IUnion, IResult<ulong, Error>
     public static ResultUlongError Null => new() { _variant = 3, _hasValue = true };
 
     // Checks
-    public bool IsOk => _variant == 0;
-    public bool IsErr => _variant == 1;
-    public bool IsPanic => _variant == 2;
-    public bool IsNull => _variant == 3;
+    public bool IsOk => _hasValue && _variant == 0;
+    public bool IsErr => _hasValue && _variant == 1;
+    public bool IsPanic => _hasValue && _variant == 2;
+    public bool IsNull => _hasValue && _variant == 3;
 
     // Conversions
-    public ulong AsOk() { if (_variant != 0) { throw ExceptionForVariant(); } else { return _Ok; } }
-    public Error AsErr() { if (_variant != 1) { throw ExceptionForVariant(); } else { return _Err; } }
-    public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
-    public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
+    public ulong AsOk() { if (!_hasValue || _variant != 0) { throw ExceptionForVariant(); } else { return _Ok; } }
+    public Error AsErr() { if (!_hasValue || _variant != 1) { throw ExceptionForVariant(); } else { return _Err; } }
+    public void AsPanic() { if (!_hasValue || _variant != 2) throw ExceptionForVariant(); }
+    public void AsNull() { if (!_hasValue || _variant != 3) throw ExceptionForVariant(); }
 
     // Case constructors — the union creation members the compiler reads case types from.
     public ResultUlongError(OkCase value) { _variant = 0; _Ok = value.Value; _hasValue = true; }
@@ -16800,16 +16800,16 @@ public partial struct ResultVoidError : IUnion, IResult<Unit, Error>
     public static ResultVoidError Null => new() { _variant = 3, _hasValue = true };
 
     // Checks
-    public bool IsOk => _variant == 0;
-    public bool IsErr => _variant == 1;
-    public bool IsPanic => _variant == 2;
-    public bool IsNull => _variant == 3;
+    public bool IsOk => _hasValue && _variant == 0;
+    public bool IsErr => _hasValue && _variant == 1;
+    public bool IsPanic => _hasValue && _variant == 2;
+    public bool IsNull => _hasValue && _variant == 3;
 
     // Conversions
-    public void AsOk() { if (_variant != 0) throw ExceptionForVariant(); }
-    public Error AsErr() { if (_variant != 1) { throw ExceptionForVariant(); } else { return _Err; } }
-    public void AsPanic() { if (_variant != 2) throw ExceptionForVariant(); }
-    public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
+    public void AsOk() { if (!_hasValue || _variant != 0) throw ExceptionForVariant(); }
+    public Error AsErr() { if (!_hasValue || _variant != 1) { throw ExceptionForVariant(); } else { return _Err; } }
+    public void AsPanic() { if (!_hasValue || _variant != 2) throw ExceptionForVariant(); }
+    public void AsNull() { if (!_hasValue || _variant != 3) throw ExceptionForVariant(); }
 
     // Case constructors — the union creation members the compiler reads case types from.
     public ResultVoidError(OkCase value) { _variant = 0; _hasValue = true; }
@@ -17062,14 +17062,14 @@ public partial struct EnumNum : IUnion
     public static EnumNum C(nint value) => new() { _variant = 2, _C = value, _hasValue = true };
 
     // Checks
-    public bool IsA => _variant == 0;
-    public bool IsB => _variant == 1;
-    public bool IsC => _variant == 2;
+    public bool IsA => _hasValue && _variant == 0;
+    public bool IsB => _hasValue && _variant == 1;
+    public bool IsC => _hasValue && _variant == 2;
 
     // Conversions
-    public nuint AsA() { if (_variant != 0) { throw ExceptionForVariant(); } else { return _A; } }
-    public void AsB() { if (_variant != 1) throw ExceptionForVariant(); }
-    public nint AsC() { if (_variant != 2) { throw ExceptionForVariant(); } else { return _C; } }
+    public nuint AsA() { if (!_hasValue || _variant != 0) { throw ExceptionForVariant(); } else { return _A; } }
+    public void AsB() { if (!_hasValue || _variant != 1) throw ExceptionForVariant(); }
+    public nint AsC() { if (!_hasValue || _variant != 2) { throw ExceptionForVariant(); } else { return _C; } }
 
     // Case constructors — the union creation members the compiler reads case types from.
     public EnumNum(ACase value) { _variant = 0; _A = value.Value; _hasValue = true; }
@@ -17263,14 +17263,14 @@ public partial struct EnumPayload : IUnion
     public static EnumPayload C(uint value) => new() { _variant = 2, _C = value, _hasValue = true };
 
     // Checks
-    public bool IsA => _variant == 0;
-    public bool IsB => _variant == 1;
-    public bool IsC => _variant == 2;
+    public bool IsA => _hasValue && _variant == 0;
+    public bool IsB => _hasValue && _variant == 1;
+    public bool IsC => _hasValue && _variant == 2;
 
     // Conversions
-    public void AsA() { if (_variant != 0) throw ExceptionForVariant(); }
-    public Vec3f32 AsB() { if (_variant != 1) { throw ExceptionForVariant(); } else { return _B; } }
-    public uint AsC() { if (_variant != 2) { throw ExceptionForVariant(); } else { return _C; } }
+    public void AsA() { if (!_hasValue || _variant != 0) throw ExceptionForVariant(); }
+    public Vec3f32 AsB() { if (!_hasValue || _variant != 1) { throw ExceptionForVariant(); } else { return _B; } }
+    public uint AsC() { if (!_hasValue || _variant != 2) { throw ExceptionForVariant(); } else { return _C; } }
 
     // Case constructors — the union creation members the compiler reads case types from.
     public EnumPayload(ACase value) { _variant = 0; _hasValue = true; }
