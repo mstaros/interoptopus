@@ -55,16 +55,14 @@ public class TestNullAtMarshalOut
 
     /// Position (c): a well-formed union whose case payload is itself a null class-backed union.
     ///
-    /// `ResultOptionUtf8StringError.OkCase` carries an `OptionUtf8String`, which is class-backed.
+    /// `OptionOptionResultOptionUtf8StringError.SomeCase` carries `OptionResultOptionUtf8StringError`, itself class-backed.
     /// The outer union is not null; the inner one is. This is the nesting the item asks about, and
     /// the corpus offers it in a better form than a collection would — there is no slice of unions
     /// to use.
     [Fact]
     public void a_union_carrying_a_null_class_backed_payload()
     {
-        var outer = ResultOptionUtf8StringError.Ok(null!);
-
-        var ex = Record.Exception(() => Interop.pattern_ffi_option_2(outer));
+var outer = OptionOptionResultOptionUtf8StringError.Some(null!);         var ex = Record.Exception(() => Interop.pattern_ffi_option_3(outer));
 
         Assert.NotNull(ex);
         Assert.IsType<NullReferenceException>(ex);
