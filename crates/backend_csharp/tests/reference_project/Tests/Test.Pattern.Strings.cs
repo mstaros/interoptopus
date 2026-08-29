@@ -215,14 +215,36 @@ public class TestPatternStrings
     }
 
     [Fact]
-    public void string_by_out_dont_leak()
+    public void string_by_ref_write_back_preserves_replacement_allocation_snapshot()
     {
-        // TODO - Can we somehow measure memory use?
-        for (var i = 0; i < 1024 * 1024; i++)
+        var baselineBytes = Interop.__test_live_bytes();
+        var baselineAllocations = Interop.__test_live_allocations();
+        var w = new UseString { s1 = "hello".Utf8(), s2 = "world".Utf8() };
+
+        try
         {
-            var w = new UseString { s1 = "hello".Utf8(), s2 = "world".Utf8() };
-            var r2 = Interop.pattern_string_6b(ref w);
+            // The first call replaces "hello"/"world" with the smaller "s1"/"s2" allocation pair.
+            Interop.pattern_string_6b(ref w).AsOk();
+            var replacementBytes = Interop.__test_live_bytes();
+            var replacementAllocations = Interop.__test_live_allocations();
+
+            Assert.True(replacementBytes > baselineBytes);
+            Assert.True(replacementAllocations > baselineAllocations);
+
+            for (var i = 0; i < 1024; i++) Interop.pattern_string_6b(ref w).AsOk();
+
+            Assert.Equal("s1", w.s1.String);
+            Assert.Equal("s2", w.s2.String);
+            Assert.Equal(replacementBytes, Interop.__test_live_bytes());
+            Assert.Equal(replacementAllocations, Interop.__test_live_allocations());
         }
+        finally
+        {
+            w.Dispose();
+        }
+
+        Assert.Equal(baselineBytes, Interop.__test_live_bytes());
+        Assert.Equal(baselineAllocations, Interop.__test_live_allocations());
     }
 
     [Fact]

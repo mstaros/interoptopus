@@ -142,6 +142,45 @@ public class TestPatternVec
     }
 
     [Fact]
+    public void vec_dispose_and_move_restore_rust_allocation_baseline()
+    {
+        var baselineBytes = Interop.__test_live_bytes();
+        var baselineAllocations = Interop.__test_live_allocations();
+        var disposed = Interop.pattern_vec_1();
+
+        try
+        {
+            Assert.True(Interop.__test_live_bytes() > baselineBytes);
+            Assert.True(Interop.__test_live_allocations() > baselineAllocations);
+
+            disposed.Dispose();
+
+            Assert.Equal(baselineBytes, Interop.__test_live_bytes());
+            Assert.Equal(baselineAllocations, Interop.__test_live_allocations());
+        }
+        finally
+        {
+            disposed.Dispose();
+        }
+
+        var moved = Interop.pattern_vec_1();
+        try
+        {
+            Assert.True(Interop.__test_live_bytes() > baselineBytes);
+            Assert.True(Interop.__test_live_allocations() > baselineAllocations);
+
+            Interop.pattern_vec_2(moved);
+
+            Assert.Equal(baselineBytes, Interop.__test_live_bytes());
+            Assert.Equal(baselineAllocations, Interop.__test_live_allocations());
+        }
+        finally
+        {
+            moved.Dispose();
+        }
+    }
+
+    [Fact]
     public void vec_empty()
     {
         using var empty = VecUtf8String.Empty();

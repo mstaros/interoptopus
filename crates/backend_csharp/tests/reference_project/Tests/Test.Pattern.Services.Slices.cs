@@ -1,9 +1,35 @@
 using My.Company;
+using Interop = My.Company.Interop;
 using My.Company.Common;
 using Xunit;
 
 public class TestPatternServicesSlices
 {
+    [Fact]
+    public void unique_service_dispose_restores_rust_allocation_baseline()
+    {
+        var baselineBytes = Interop.__test_live_bytes();
+        var baselineAllocations = Interop.__test_live_allocations();
+
+        {
+            using var service = ServiceVariousSlices.Create();
+            var ownedBytes = Interop.__test_live_bytes();
+            var ownedAllocations = Interop.__test_live_allocations();
+
+            Assert.True(ownedBytes > baselineBytes);
+            Assert.True(ownedAllocations > baselineAllocations);
+
+            var slice = service.ReturnSlice();
+            Assert.Equal(64, slice.Count);
+            Assert.Equal(123, (int)slice[0]);
+            Assert.Equal(ownedBytes, Interop.__test_live_bytes());
+            Assert.Equal(ownedAllocations, Interop.__test_live_allocations());
+        }
+
+        Assert.Equal(baselineBytes, Interop.__test_live_bytes());
+        Assert.Equal(baselineAllocations, Interop.__test_live_allocations());
+    }
+
     [Fact]
     public void ReturnSliceMut()
     {
