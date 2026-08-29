@@ -58,6 +58,12 @@
 {% if is_disposable %}
     public void Dispose()
     {
+        {%- if has_empty_state %}
+        // A default value holds no variant, so there is nothing to free. Without this the
+        // dispatch below matches variant zero and survives only because `?.` short-circuits on
+        // a null payload — correct by accident rather than by construction.
+        if (!_hasValue) return;
+        {%- endif %}
         {%- for v in disposable_variants %}
         if (_variant == {{ v.tag }}) {{ v.name }}?.Dispose();
         {%- endfor %}

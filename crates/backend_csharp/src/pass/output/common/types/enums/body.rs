@@ -120,11 +120,20 @@ impl Pass {
             // `projection`.
             let rejects_null = nullable.null_policy(*type_id) == Some(model::common::types::info::nullable::NullPolicy::Throw);
 
+            // Item 5g: a default struct-backed union holds no value, so `Dispose()` must free
+            // nothing. Today it matches on `_variant` alone and survives only because the
+            // null-conditional short-circuits on a null payload — correct by accident. There is
+            // no struct-backed disposable union in the corpus (disposability comes from `Into`
+            // payloads, and `Into` is what makes the union class-backed), so this guard is
+            // written in advance and is expected to change no snapshot.
+            let has_empty_state = struct_class.is_struct(*type_id) && projection.is_union(*type_id);
+
             let marshaller_to_unmanaged = managed.to_unmanaged_name(*type_id);
             let marshaller_to_managed = managed.to_managed_name(*type_id);
             let result_interface = result_interface(type_kind, types, mode);
 
             let mut context = Context::new();
+            context.insert("has_empty_state", &has_empty_state);
             context.insert("rejects_null", &rejects_null);
             context.insert("name", name);
             context.insert("struct_or_class", struct_or_class);
