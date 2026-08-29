@@ -58,6 +58,18 @@ public class TestPatternResult
         Assert.Throws<EnumException>(() => resultInterface.AsErr());
     }
 
+    /// The C# 15 union conversion is supplied by the compiler from the generated public
+    /// single-parameter case constructor. Keeping the IResult assignment in the same test proves
+    /// that the new case-type surface coexists with the established Result interface.
+    [Fact]
+    public void case_type_implicitly_converts_and_preserves_iresult()
+    {
+        ResultUintError result = new ResultUintError.OkCase(5);
+        IResult<uint, Error> resultInterface = result;
+
+        Assert.Equal(5u, resultInterface.AsOk());
+    }
+
     [Fact]
     public void pattern_result_custom_matches()
     {

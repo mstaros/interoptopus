@@ -220,6 +220,7 @@ pub fn inventory() -> RustInventory {
         .register(extra_type!(types::num::EnumNum))
         .register(extra_type!(types::enums::EnumExplicitThenImplicit))
         .register(extra_type!(types::enums::EnumExplicitPayload))
+        .register(extra_type!(types::enums::EnumUnionNameCollision))
         .register(extra_type!(types::num::IVec3))
         .register(extra_type!(types::num::TransparentNum))
         // Services

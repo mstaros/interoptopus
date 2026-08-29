@@ -62,3 +62,15 @@ pub enum EnumExplicitPayload {
     C(Vec3f32),
     D = 20,
 }
+
+/// Test-only generated-binding fixture for managed union member-name collisions.
+///
+/// Registered as an extra type so the real C# consumer project compiles every resolved family
+/// without adding a native entry point. See `docs/csharp-unions.md`, item 5c.
+#[ffi]
+pub enum EnumUnionNameCollision {
+    Value(u32),
+    B(u32),
+    BCase(u32),
+    IsB(u32),
+}

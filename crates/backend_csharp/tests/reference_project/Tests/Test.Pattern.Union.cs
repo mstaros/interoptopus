@@ -119,6 +119,35 @@ public partial class TestPatternUnion
         Assert.Equal(new ResultUintError.OkCase(7), ok.Value);
     }
 
+    /// Item 5c's managed-only collisions must pass through the real generated consumer project,
+    /// not only the resolver's Rust unit tests. The exact moved names are the public contract.
+    [Fact]
+    public void managed_union_name_collisions_compile_and_select_the_expected_cases()
+    {
+        var value = EnumUnionNameCollision.ValueVariant(1);
+        var b = EnumUnionNameCollision.B(2);
+        var bCase = EnumUnionNameCollision.BCase(3);
+        var isB = EnumUnionNameCollision.IsBVariant(4);
+
+        Assert.Equal(new EnumUnionNameCollision.ValueVariantCase(1), value.Value);
+        Assert.Equal(new EnumUnionNameCollision.BCase2(2), b.Value);
+        Assert.Equal(new EnumUnionNameCollision.BCaseCase(3), bCase.Value);
+        Assert.Equal(new EnumUnionNameCollision.IsBVariantCase(4), isB.Value);
+    }
+
+    /// Item 5g's original fixture cannot exist under the current model. ManagedConversion::Into
+    /// simultaneously selects class backing and IDisposable; AsIs/To select struct backing and
+    /// non-disposable output. Assert that invariant through the compiled generated surface.
+    [Fact]
+    public void disposable_unions_are_class_backed_and_struct_unions_are_not_disposable()
+    {
+        Assert.True(typeof(ResultUintError).IsValueType);
+        Assert.False(typeof(IDisposable).IsAssignableFrom(typeof(ResultUintError)));
+
+        Assert.True(typeof(OptionUtf8String).IsClass);
+        Assert.True(typeof(IDisposable).IsAssignableFrom(typeof(OptionUtf8String)));
+    }
+
     /// `TryGetValue` is the non-boxing access pattern. It must agree with `Value`, and must return
     /// false for a case that is not active rather than yielding a defaulted payload.
     [Fact]
