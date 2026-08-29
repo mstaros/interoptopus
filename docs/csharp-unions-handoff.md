@@ -741,14 +741,25 @@ in a CRLF repository — six consecutive edit attempts returned zero matches bef
 found. Use `\r?\n` in any multi-line regex that might run outside this repo.
 
 The diagnostic signature matters: if `str_replace` returns zero matches on a pattern containing
-**no comments and no string literals**, the category rule below is not the explanation — suspect
-line endings, or a root that resolves to a different Cargo workspace.
+**no comments and no string literals**, the category rule below is not the explanation — it is
+almost certainly line endings. An earlier version of this note also blamed "a root that resolves
+to a different Cargo workspace"; that was a guess and it was wrong. `str_replace` works fine in
+`rust-mcp-transform` once patterns carry `\r\n`, and most of a multi-file change there was made
+with it.
 
 **`search_and_replace` cannot emit newlines**, restated because it was reached for reflexively
 four times on multi-line C#. A `\n` in the replacement lands as the two characters `\` and `n`; a
-multi-line replacement collapses onto one line and stays *syntactically valid*, which is why it
+multi-line replacement collapses onto one line and stays syntactically valid, which is why it
 survives review. For multi-line edits to a `.cs` file, `FileMcp:write_file` is the only reliable
 route — `RustEditor:str_replace` is Rust-parser-aware and cannot parse C#.
+
+**For Rust, though, prefer `str_replace` whenever the replacement contains a `$`.** It replaces
+*literally*, with no capture expansion, so `$1` and `${digits}` survive intact. `search_and_replace`
+expands them: writing this very section's fix, it silently ate `$2contains` and `${digits}` out of
+a `format!` string and reported success. `search_and_replace` now **rejects** a replacement
+referencing a capture group the pattern does not define (`rust-mcp-transform` `665f31c`), and when
+the unknown name starts with digits the error names the braces fix — but literal replacement
+avoids the question entirely.
 
 **`str_replace` patterns must lie entirely within one category.** The 08-27 note covers
 comment/code; the same applies to **string literals**. A pattern containing `"…"` — an
