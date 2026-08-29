@@ -1131,13 +1131,13 @@ behind `09b82d44` and `c928d53e`.
 The `IsX`/`AsX` objection recorded earlier is *not* among the reasons; it rested on preserving
 public API, which is a weaker constraint where the consumers are owned.
 
-## nullable.rs classifies only class delegates as nullable, so every other reference type gets an unguarded conversion
+~~nullable.rs classifies only class delegates as nullable, so every other reference type gets an unguarded conversion~~ — fixed in `c56f941`
 
 ```issue
 id: b4e07f12
 kind: bug
 severity: medium
-status: open
+status: fixed
 ```
 
 ### Symptom
@@ -1180,22 +1180,44 @@ test yet reproduces a runtime `NullReferenceException` on a null class-backed fi
 different vocabulary — "is this a reference type" — and it is stale in the same way.
 `struct_class::is_class` already exists at `struct_class.rs:55` and is the authoritative answer.
 
-### Do not close this before `docs/csharp-unions.md` open item 1
+~~Do not close this before `docs/csharp-unions.md` open item 1~~ — satisfied, fixed in `c56f941`
 
-The obvious fix — delegate to `struct_class::is_class` — puts class-backed unions on the
-`?? default` branch, emitting `?.AsUnmanaged() ?? default`. For a union that yields a zeroed
-`Unmanaged`: discriminant 0, a fabricated variant crossing FFI, silently. That is precisely what
-3a's private constructor exists to prevent, and it is worse than the exception it replaces.
+The warning existed because the obvious fix — delegate to `struct_class::is_class` — would have
+put class-backed unions on the `?? default` branch, yielding a zeroed `Unmanaged`: discriminant 0,
+a fabricated variant crossing FFI, silently. Deciding that by accident is what it guarded against.
 
-Open item 1 decides what null at marshal-out should do. Widening `is_nullable` before that
-decision exists would pre-empt it by accident. Whichever way item 1 goes, class-backed unions
-must be excluded from the `?? default` path explicitly rather than by omission.
+**It was satisfied rather than waived.** Open item 1 closed with `InvalidOperationException`, and
+class-backed unions are now excluded from `?? default` **explicitly**, via `NullPolicy::Throw`.
+`nullable.rs` therefore asks `struct_class` instead of re-deriving reference-ness from `TypeKind`,
+ending the duplication `31248473` closed in `wire`'s `is_cs_value_type`.
 
-### Adjacent, unargued
+**A measurement in this issue was wrong, and the fix disproved it.** Before implementing, the
+class-backed *composite* population was reported empty: a truncated search over
+`^public partial class X$` returned fifteen hits, all unions and delegates. That was an artefact
+of the truncation. `Layer1String` and `Layer2String` carry `Utf8String`, so their managed
+conversion is `Into` and `struct_class` emits them as classes; they appear as `Layer3String`'s
+payloads and are now guarded. The snapshot moved, which is how the error surfaced.
 
-Whether `?? default` is right even for the types it already covers. Substituting a zeroed
-`Unmanaged` for a null class delegate has the same shape of problem; the file asserts the policy
-in a doc-comment and never argues it.
+**The delegate arm was left byte-for-byte identical**, still
+`TypeKind::Delegate(d) if d.kind == DelegateKind::Class` rather than `struct_class::is_class`.
+Those are *different predicates*, and swapping them would have changed delegate behaviour as a
+side effect of a classification cleanup.
+
+
+
+Adjacent, unargued — split out, still open
+
+Whether `?? default` is right even for the types it already covers. A zeroed `Unmanaged` for a
+class delegate is a **null function pointer**; Rust invoking it is no better than reading a
+fabricated variant, which is the reasoning that decided open item 1 the other way. The file
+asserts the policy in a doc-comment and never argues it.
+
+Not folded into `c56f941`: it is a behaviour change to working code, with eight delegate fields
+emitting `?? default` in the reference project alone. **Nobody has run it** — what a null callback
+actually does at the boundary is unmeasured. So the next step is the same as open item 1's was:
+measure first, then decide. `nullable.rs`'s `SubstituteDefault` variant carries a pointer here.
+
+
 
 ## Enum emission is gated on TypeKind::DataEnum in ten output passes, not on managed_conversion
 
@@ -1427,3 +1449,118 @@ Scope honestly: the fixtures are all **plugin-mode** (`DotnetLibrary`). Library-
 (`RustLibrary` → `Bindings/`, `benches/dotnet/`) is what real consumers use, and neither of those
 compiles. Shared passes like `definition.cs` are covered either way, which is why this defect was
 catchable — but anything emitted only in library mode stays unguarded until item 5.
+## AsUnmanaged has no entry point in either generated pipeline, so its empty-state guard cannot fire
+
+```issue
+id: 5e2a319c
+kind: bug
+severity: medium
+status: open
+```
+
+`AsUnmanaged()` is emitted for composites and for struct-backed unions, and for the latter it carries the empty-state guard from `templates/common/types/enums/body_as_unmanaged.cs`. Nothing calls it. There are two parallel conversion cascades and only one of them is rooted.
+
+### The two cascades
+
+Marshallers root the **owning** conversion, by two different names depending on backing:
+
+```csharp
+public Unmanaged ToUnmanaged() { return _managed.ToUnmanaged(); }    // struct-backed, Interop.cs:9949
+public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }  // class-backed,  Interop.cs:3070
+```
+
+A composite's owning conversion then calls its fields' owning conversions — `Layer2String.IntoUnmanaged()` calls `the_enum.ToUnmanaged()` (Interop.cs:11159). A composite's `AsUnmanaged()` calls its fields' `AsUnmanaged()` (11173). The second cascade is complete, self-consistent, and entered from nowhere.
+
+### Evidence
+
+Semantic caller queries (Roslyn, not text search), against `tests/reference_project/Bindings/Interop.cs`:
+
+| Method | Callers |
+|---|---|
+| `ResultUintError.ToUnmanaged()` | `Marshaller.ToUnmanaged()` |
+| `Layer3String.IntoUnmanaged()` | `Marshaller.ToUnmanaged()` |
+| `ResultUintError.AsUnmanaged()` | none |
+| `ResultOptionEnumPayloadError.AsUnmanaged()` | none |
+| `Layer3String.AsUnmanaged()` | none |
+| `OptionEnumPayload.AsUnmanaged()` | `ResultOptionEnumPayloadError.AsUnmanaged()` |
+| `Layer2String.AsUnmanaged()` | `Layer3String.AsUnmanaged()` |
+
+Plus, across `tests/reference_plugins/**` excluding `bin`/`obj`, `\.AsUnmanaged\(\)` returns 6 matches with `truncated: false`, every one inside another `AsUnmanaged`. The `DotnetLibrary` (plugin) pipeline has the same shape as `RustLibrary`, so this is not a forward-interop-only artefact.
+
+### Why this is not a missing reference-project fixture
+
+The obvious remedy is a composite carrying a union-typed field, so the composite's conversion reaches the union's `AsUnmanaged`. That fixture already exists: `Layer2String` has `the_enum` and its `AsUnmanaged` calls `the_enum.AsUnmanaged()`. Still unreachable, because nothing calls `Layer2String.AsUnmanaged()` either. Adding another composite would add unreachable code, not coverage.
+
+### Consequences
+
+- The empty-state guard in `enums/body_as_unmanaged.cs` cannot fire and no test can make it fire. `docs/csharp-unions.md` §413 specifies the contract as `ToUnmanaged()` / `AsUnmanaged()` → throws; only the first is reachable.
+- The `2e172709` CHANGELOG entry documents a breaking guard on both methods. Only the `ToUnmanaged` half can affect a consumer.
+- Item 4's note "No test asserts that the guard fires — that is 5d" is satisfiable only for `ToUnmanaged`. `Test.Pattern.Union.cs` does that half.
+
+### Open question, not a proposed fix
+
+Whether `AsUnmanaged` is the borrow-side conversion for a marshaller mode that is not currently emitted (`in`/`ref` parameters, pinned slice elements), or whether it is vestigial and should be removed along with its guard. `unmanaged_conversion.rs:78` maps both `ManagedConversion::To` and `::Into` to `.AsUnmanaged()`, which suggests the former. This needs the emitter author, not another search.
+
+### Correction to `docs/csharp-unions.md` Open item 1
+
+Open item 1 states that a class-backed union stored as a composite field "gets an unguarded `.AsUnmanaged()`, so the NRE fires inside the enclosing composite's conversion, not in a marshaller."
+
+The mechanism is right and the measurement is not in doubt — but the method named is the dead one. In the live path the composite calls the field's `.ToUnmanaged()` / `.IntoUnmanaged()`. The NRE fires there.
+
+**This makes Open item 1 more urgent, not less.** The item itself cites both passes emitting the `?... ?? default` form — `body_as_unmanaged.rs:47` *and* `body_to_unmanaged.rs:48` — so the nullability gap is identical in the cascade that actually executes. A reader who checks only the named method finds unreachable code and may conclude the defect is theoretical. It is not.
+
+An earlier revision of this issue claimed the NRE "cannot have been observed through this path" and suggested it may have been derived rather than run. That was wrong: it was found by searching only for `_managed.AsUnmanaged()`, which misses `_managed.IntoUnmanaged()`, the class-backed root. The negative was real but partial.
+## Custom-marshalled types are unusable in a consumer's own LibraryImport because Unmanaged and Marshaller are internal
+
+```issue
+id: e5f03dbe
+kind: bug
+severity: medium
+status: open
+```
+
+`Unmanaged` and `Marshaller` are emitted `internal`. The `LibraryImport` source generator emits code that references both directly, so it can only wire a custom-marshalled type from inside the assembly that declares it. A consumer who puts generated bindings in one project and writes their own `LibraryImport` in another cannot use any custom-marshalled type in their own P/Invoke signatures.
+
+### Measured 2026-08-28
+
+The same declaration, differing only in which project holds it:
+
+    [LibraryImport("reference_project", EntryPoint = "reference_malformed_result_tag")]
+    public static partial ResultUintError MalformedResultTag();
+
+- In `Bindings` (the assembly that declares `ResultUintError`) — compiles, runs, marshals correctly.
+- In `Tests` (a referencing assembly) — fails.
+
+The failure presents two different ways depending on an unrelated attribute, which is what makes it hard to diagnose:
+
+- Without `[assembly: DisableRuntimeMarshalling]`: **SYSLIB1051**, "Runtime marshalling must be disabled in this project ... to enable marshalling this type." The generator silently falls back to runtime marshalling and reports the fallback, not the cause.
+- With it: the fallback is refused and the real cause surfaces as five **CS0122** in `LibraryImports.g.cs` — `ResultUintError.Unmanaged`, `.Marshaller`, `.Marshaller.FromUnmanaged`, `.Marshaller.ToManaged`, `.Marshaller.Free`, each "inaccessible due to its protection level".
+
+Neither message names accessibility as the problem unless the attribute is set, and the attribute is unrelated to the actual defect.
+
+### What this is not
+
+Return-by-value of a union-projected enum is **not** the trigger. `Interop.cs:717-719` declares
+
+    [LibraryImport(NativeLib, EntryPoint = "pattern_result_1")]
+    public static partial ResultUintError pattern_result_1(ResultUintError x);
+
+which returns the same custom-marshalled type by value, from the declaring assembly, and has always compiled. An earlier reading of this defect blamed return-by-value and then blamed cross-assembly `[NativeMarshalling]` resolution; both were wrong. The variable is accessibility of the generated helper types.
+
+### Scope
+
+Affects any consumer whose call sites live outside the bindings project — a normal layout, not an exotic one. It does not affect calls made *through* the generated `Interop` class, which is how every existing consumer and every test in this repo works; that is why it has gone unnoticed.
+
+### Options, none taken
+
+- Emit `Unmanaged` and `Marshaller` as `public`. Straightforward, and enlarges the public API surface with types whose members already carry `[Obsolete("intended for use by generated code only")]` and `[EditorBrowsable(Never)]`.
+- Emit `[assembly: InternalsVisibleTo(...)]`. Needs a consumer assembly name the generator has no way to know.
+- Document the constraint and leave it. Cheapest, and consumers hit SYSLIB1051 with no path to the cause.
+
+### Related, and separate
+
+`DisableRuntimeMarshalling` cannot currently be set on the Bindings assembly at all: it emits `[MarshalAs(UnmanagedType.LPStr)] string` parameters and returns — at least ten sites, result set truncated — which the attribute forbids. That blocks the attribute for AOT reasons independently of this issue, and would need the ASCII-pointer and CStr paths moved to source-generated marshallers first. `Bindings.csproj` already sets `IsAotCompatible` and `Tests.csproj` sets `PublishAot` for Release, so the AOT story otherwise appears to hold; no concrete AOT or trimming failure has been observed, and none of that work should start without one.
+
+### Worked around in-repo
+
+`crates/backend_csharp/tests/reference_project/Bindings/MalformedFixture.cs` — a hand-written, non-generated file placed in the Bindings project precisely because it cannot live in Tests. It exists for item 5f (`1e14d2c6`), which asserts the invalid-tag arm of `Unmanaged.ToManaged()`. `Bindings/` gitignores only `Interop*.cs`, so a hand-written file there is tracked normally.
