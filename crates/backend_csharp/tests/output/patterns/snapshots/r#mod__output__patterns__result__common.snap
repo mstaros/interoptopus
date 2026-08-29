@@ -233,6 +233,7 @@ public partial struct ResultUintVoid : IUnion, IResult<uint, Unit>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public override string ToString()
     {
+        if (!_hasValue) return "<empty>";
         if (_variant == 0) return "Ok(...)";
         if (_variant == 1) return "Err";
         if (_variant == 2) return "Panic";

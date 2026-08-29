@@ -316,6 +316,11 @@ fn a_default_struct_backed_union_does_not_read_as_variant_zero() {
     let cs = generated_interop();
 
     assert!(
+        cs.contains("if (!_hasValue) return \"<empty>\";"),
+        "default struct-backed unions must render as empty before variant zero is considered"
+    );
+
+    assert!(
         cs.contains("public bool IsNothing => _hasValue && _variant == 0;"),
         "a struct-backed check must consult the empty-state flag, or `default(Meter).IsNothing` is \
          true while `default(Meter).HasValue` is false"

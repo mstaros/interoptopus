@@ -231,6 +231,8 @@ public partial class TestPatternUnion
 
         Assert.False(option.HasValue);
         Assert.Null(option.Value);
+        Assert.Equal("<empty>", option.ToString());
+        Assert.Equal("Some(...)", OptionUint.Some(42).ToString());
     }
 
     /// Item 5h: a union that never crosses the FFI boundary still gets the whole union surface.

@@ -396,6 +396,7 @@ public partial struct OptionUint : IUnion
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public override string ToString()
     {
+        if (!_hasValue) return "<empty>";
         if (_variant == 0) return "Some(...)";
         if (_variant == 1) return "None";
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
@@ -585,6 +586,7 @@ public partial struct OptionVec : IUnion
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public override string ToString()
     {
+        if (!_hasValue) return "<empty>";
         if (_variant == 0) return "Some(...)";
         if (_variant == 1) return "None";
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
@@ -807,6 +809,7 @@ public partial struct ResultVoidVoid : IUnion, IResult<Unit, Unit>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public override string ToString()
     {
+        if (!_hasValue) return "<empty>";
         if (_variant == 0) return "Ok";
         if (_variant == 1) return "Err";
         if (_variant == 2) return "Panic";
@@ -10608,6 +10611,7 @@ public partial struct EnumExplicitPayload : IUnion
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public override string ToString()
     {
+        if (!_hasValue) return "<empty>";
         if (_variant == 10) return "A";
         if (_variant == 11) return "B(...)";
         if (_variant == 12) return "C(...)";
@@ -11205,6 +11209,7 @@ public partial struct OptionEnumPayload : IUnion
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public override string ToString()
     {
+        if (!_hasValue) return "<empty>";
         if (_variant == 0) return "Some(...)";
         if (_variant == 1) return "None";
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
@@ -11394,6 +11399,7 @@ public partial struct OptionInner : IUnion
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public override string ToString()
     {
+        if (!_hasValue) return "<empty>";
         if (_variant == 0) return "Some(...)";
         if (_variant == 1) return "None";
         throw new InteropException("Illegal enum state detected. This is a severe error and should never happen.");
@@ -17214,6 +17220,7 @@ public partial struct ResultNestedArrayError : IUnion, IResult<NestedArray, Erro
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public override string ToString()
     {
+        if (!_hasValue) return "<empty>";
         if (_variant == 0) return "Ok(...)";
         if (_variant == 1) return "Err(...)";
         if (_variant == 2) return "Panic";
@@ -17466,6 +17473,7 @@ public partial struct ResultOptionEnumPayloadError : IUnion, IResult<OptionEnumP
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public override string ToString()
     {
+        if (!_hasValue) return "<empty>";
         if (_variant == 0) return "Ok(...)";
         if (_variant == 1) return "Err(...)";
         if (_variant == 2) return "Panic";
@@ -17718,6 +17726,7 @@ public partial struct ResultUintError : IUnion, IResult<uint, Error>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public override string ToString()
     {
+        if (!_hasValue) return "<empty>";
         if (_variant == 0) return "Ok(...)";
         if (_variant == 1) return "Err(...)";
         if (_variant == 2) return "Panic";
@@ -17970,6 +17979,7 @@ public partial struct ResultUlongError : IUnion, IResult<ulong, Error>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public override string ToString()
     {
+        if (!_hasValue) return "<empty>";
         if (_variant == 0) return "Ok(...)";
         if (_variant == 1) return "Err(...)";
         if (_variant == 2) return "Panic";
@@ -18208,6 +18218,7 @@ public partial struct ResultVoidError : IUnion, IResult<Unit, Error>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public override string ToString()
     {
+        if (!_hasValue) return "<empty>";
         if (_variant == 0) return "Ok";
         if (_variant == 1) return "Err(...)";
         if (_variant == 2) return "Panic";
@@ -18482,6 +18493,7 @@ public partial struct EnumUnionNameCollision : IUnion
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public override string ToString()
     {
+        if (!_hasValue) return "<empty>";
         if (_variant == 0) return "ValueVariant(...)";
         if (_variant == 1) return "B(...)";
         if (_variant == 2) return "BCase(...)";
@@ -18738,6 +18750,7 @@ public partial struct EnumNum : IUnion
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public override string ToString()
     {
+        if (!_hasValue) return "<empty>";
         if (_variant == 0) return "A(...)";
         if (_variant == 1) return "B";
         if (_variant == 2) return "C(...)";
@@ -18957,6 +18970,7 @@ public partial struct EnumPayload : IUnion
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public override string ToString()
     {
+        if (!_hasValue) return "<empty>";
         if (_variant == 0) return "A";
         if (_variant == 1) return "B(...)";
         if (_variant == 2) return "C(...)";

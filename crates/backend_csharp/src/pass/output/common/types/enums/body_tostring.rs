@@ -25,6 +25,8 @@ impl Pass {
         _pass_meta: &mut crate::pass::PassMeta,
         output_master: &output::common::master::Pass,
         types: &model::common::types::all::Pass,
+        struct_class: &model::common::types::info::struct_class::Pass,
+        projection: &model::common::types::info::projection::Pass,
     ) -> OutputResult {
         let templates = output_master.templates();
 
@@ -44,7 +46,10 @@ impl Pass {
                 })
                 .collect();
 
+            let writes_has_value = struct_class.is_struct(*type_id) && projection.is_union(*type_id);
+
             let mut context = Context::new();
+            context.insert("writes_has_value", &writes_has_value);
             context.insert("variants", &variants);
 
             let rendered = templates.render("common/types/enums/body_tostring.cs", &context)?;
