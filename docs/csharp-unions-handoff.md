@@ -2,8 +2,8 @@
 
 Written 2026-08-25. Context for whoever picks this up next.
 
-Design lives in `docs/csharp-unions.md`. Bugs live in `Issues.md`. This file covers what is
-done, what is next, and the things that cost time to discover.
+Design lives in `docs/csharp-unions.md`. Bugs live in `Issues.md`. This file covers what
+landed and the things that cost time to discover.
 
 ---
 
@@ -22,29 +22,15 @@ was built by listing, 2026-08-27.
 `11.0.100-preview.7.26381.103`. `rt/dynamic.rs` pins hostfxr at `11.0.0-preview.1`, deliberately a
 pre-release; leave it. `LangVersion=preview` is set in `Directory.Build.props`.
 
-**There are two tracks, and the plan's front is not the objective. Read this before picking one.**
+**All implementation tracks described by this handoff are complete.** Payload-carrying enums
+project as C# 15 unions, eligible unit-only enums project as plain C# enums, marshal-out rejects
+empty or null unions before native entry, and `ToString()` reports an empty struct-backed union
+honestly. The step-by-step imperatives later in this file are historical implementation records,
+not a queue of work.
 
-| | Track A — the plan's front | Track B — the objective |
-|---|---|---|
-| What | Item 4, then 4a: reject the empty struct state in `ToUnmanaged`/`AsUnmanaged`, then rebuild `ToManaged` on the case constructors | The projection pass, steps two and three: give the model a notion of *how a type is projected*, then route unit-only enums to a plain C# `enum` |
-| Why it is listed first | It is the next unstarted row of `csharp-unions.md` § Todo/Remaining | It is what the repository owner asked for and it has **not happened** |
-| Where specified | `csharp-unions.md` § Step 4 \(**not** §5 of this document, which only names it\) | §9 of this document |
-| Gate | none | step one landed in `1429746b` |
-
-**If you do only one thing, do Track B.** Every `#[ffi]` enum is still emitted as a ~120-line
-struct; `Color { Red, Green, Blue }` produces a discriminant field, an `Unmanaged` mirror and a
-marshaller, exactly as before any of this work began. Union projection for payload-carrying enums
-is finished and is the part that shows up in the landing log. **Plain enums are the part that was
-asked for and is missing**, and a reader who takes "the front item is 4" at face value will plan a
-week of marshalling work without noticing. That sentence used to be all this section said; it is
-recorded here because it actually misled a fresh reader.
-
-Track A is not wrong and is not blocked — it is the correct next row if you are working the plan
-in order. It just is not the thing anyone is waiting for.
-
-**Status is `csharp-unions.md` § Todo/Remaining, and only there.** Where this document and that
-table disagree, the table wins. Note that the table orders by dependency, not by priority, which
-is the whole reason for the two-track note above.
+**Status lives in `csharp-unions.md` § Todo/Remaining, and every row there is closed.** The final
+contract landed in `1abae12a`: `default(struct-backed union).ToString()` returns `"<empty>"` and
+is covered by both generator-output and executed C# tests.
 
 **File map.** Everything below is under `crates/backend_csharp/`:
 
@@ -194,10 +180,9 @@ through item 6 is complete, including the real C# consumer gates. Item 3e is ver
 the compiler-synthesised conversion from a public single-parameter case constructor. The
 unit-only plain-enum track is also complete; it is not a separate open front.
 
-One pre-existing contract is still unresolved and is now tracked instead of being left in prose:
-the design table says `default(E).ToString()` returns `"<empty>"`, but the generator contains no
-such branch or test. §6 records the choice that remains; it is separate from `79be256e` and the
-discriminant fixture.
+The final pre-existing contract is resolved: `default(E).ToString()` returns `"<empty>"` for a
+struct-backed union. §6 records the implementation and executed coverage; class-backed unions,
+valid variants and plain enums are unchanged.
 
 Landing log — a record of the main structural changes, not a second status table:
 
@@ -212,6 +197,7 @@ Landing log — a record of the main structural changes, not a second status tab
 | — | `1429746b` | Projection moved into the shared model |
 | option C | `ca6aafa` | Eligible unit-only enums become plain C# enums |
 | discriminant fixture | `d29fa975` | Exhaustive primitive mapping and the pointer-sized manual-inventory guard |
+| empty `ToString()` | `1abae12a` | Empty struct-backed unions render as `"<empty>"`, with generator and runtime coverage |
 
 Two corrections remain worth retaining. The gate for 3d was the case constructors, not 3c; without
 a public single-parameter constructor the compiler reports CS9385. And `IUnion` resolves from the
@@ -474,7 +460,7 @@ case; the generator branch is nevertheless covered directly.
 
 ---
 
-## 6. One unresolved contract
+## 6. Final empty-union contract
 
 The null and exception questions previously listed here are closed:
 
@@ -484,11 +470,12 @@ The null and exception questions previously listed here are closed:
 - an empty struct-backed union throws `InvalidOperationException`, while an unknown native tag
   throws `InteropException`.
 
-**One choice remains.** The design table says `ToString()` on an empty struct-backed union returns
-`"<empty>"`, but no generator branch or test implements it. This is now an open row in
-`docs/csharp-unions.md` § Todo/Remaining. The implementation must either add and execute that
-behavior or remove the promise from the representation contract; this handoff does not choose
-between them.
+The final display choice is closed too. `ToString()` on an empty struct-backed union returns
+`"<empty>"`. Commit `1abae12a` passes the existing `writes_has_value` fact into the `ToString`
+renderer and emits the guard before discriminant matching. The existing `OptionUint` fixture
+pins both sides: `default(OptionUint).ToString()` is `"<empty>"`, while `Some(42)` keeps its
+normal variant formatting. Generator-output coverage, all 223 C# tests and the complete
+`backend_csharp` test package pass.
 
 ---
 

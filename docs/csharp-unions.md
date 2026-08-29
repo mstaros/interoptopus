@@ -1,10 +1,10 @@
 # C# 15 union projection for Rust enums
 
-Status: **the numbered implementation is complete; one documented edge contract remains open.**
-§ Todo/Remaining below is the execution ledger. The only open row is the pre-existing
-`default(E).ToString()` promise, which must either be implemented and executed or removed from
-the representation table. See `docs/csharp-unions-handoff.md` for the historical handoff and
-traps; this file is the design record.
+Status: **complete.**
+§ Todo/Remaining below is the execution ledger. Every row is closed, including the pre-existing
+`default(E).ToString()` promise, implemented and executed in `1abae12a`. See
+`docs/csharp-unions-handoff.md` for the historical handoff and traps; this file is the design
+record.
 
 Scope: project every Rust `DataEnum` reaching the C# backend as a C# 15 custom union, subject to
 the eligibility rule below. Native ABI unchanged. Not opt-in — the repository targets net11
@@ -681,9 +681,10 @@ Items 0–1c, R, 1d, 3a–3f, 4–4d, 5 and 6 are complete. **Open items #1 is c
 unblocked. Composite fields, nested payloads, direct and borrowed marshallers, collections and
 empty structs use the decided `InvalidOperationException` contract before native entry.
 
-One unnumbered representation contract remains open: whether
-`default(struct-backed union).ToString()` must return `"<empty>"` or whether that promise should
-be removed. It is tracked in the table below rather than left as an unowned sentence.
+The final unnumbered representation contract is complete too: as documented in the
+representation table, `default(struct-backed union).ToString()` returns `"<empty>"`.
+`1abae12a` adds the `_hasValue`-gated generator branch, a generator-output assertion and an
+executed C# assertion; valid variants, class-backed unions and plain enums remain unchanged.
 
 **Step 5 is closed.** `3e` and `5c` now pass through the real C# consumer; `5d`, `5e`, `5f`,
 `5h` and `5i` remain executed runtime guards. `5g` was corrected rather than faked: the two model
@@ -759,7 +760,7 @@ The table below is the status record for those subitems.
 | 5h | **done** `8bf658c` | ~~Managed-only `DataEnum` case~~ `Test.Pattern.Union.cs::a_managed_only_union_is_still_projected_as_a_union`. **The load-bearing assertion is an absence:** `DataEnum` has `IUnion`, case types and a working `Value`/`TryGetValue`, but **no nested `Unmanaged` mirror**, because there is nothing to marshal it to. That is the only check anywhere that union projection and the FFI crossing are independent — the distinction 3d had to get right when it placed `[Union]` *outside* the `is_managed_only` guard. Without the absence assertion this is just another union test | 3c ✔ |
 | 5i | **done** `8bf658c` | ~~`default(ResultX)`/`default(OptionX)` tests; `AsOk()` on default~~ `Test.Pattern.Union.cs`: `a_default_struct_union_does_not_read_as_its_variant_zero_case` asserts `IsOk` is false on a default and `AsOk()` throws — the behaviour 4c changed, which until now nothing executed. **The exception type is now pinned by 4b.** `ExceptionForVariant()` checks `_hasValue` before `_variant`, and this test now asserts `InvalidOperationException` plus the type and "no Rust variant" message. The contract 4c established is "throws rather than returning a fabricated value", and that is what is asserted. `a_default_option_is_empty_rather_than_none` covers the `Option` half through `HasValue`/`Value` rather than `IsNone`, so it does not depend on which variant is tag zero — the distinction 4c exists to preserve | 4c |
 | 6 | **done** | `Result` leftovers: `IResult<T,E>` coexistence, `body_from_call` factory names | Step 5 and Step 6 consumer gates green |
-| — | **open** | Decide the documented empty-union `ToString()` contract: implement and execute `"<empty>"`, or remove that promise from the representation table | — |
+| — | **done** `1abae12a` | Empty struct-backed union `ToString()` returns `"<empty>"`; generator-output and executed C# coverage pin the contract | — |
 
 **Two lists number separately, and the gate column names which.** `1` in the Done table above is
 the `union_names` model pass, and it is done. `Open items #1` is the now-closed class-union

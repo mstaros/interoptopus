@@ -58,6 +58,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🐛 Bug Fixes
 
+- **`ToString()` on a default struct-backed union now returns `"<empty>"`.**
+  The all-zero managed value has no Rust variant; it previously fell through the discriminant-only
+  formatter and appeared as variant zero. The generated guard now checks `_hasValue` before variant
+  matching. Valid variants, class-backed unions and plain enums retain their existing formatting.
+
 - **Pointer-sized discriminants in manual enum inventories now retain native width.**
   `Layout::Primitive(Isize)` and `Usize` map to C# `nint` and `nuint` instead of silently
   falling back to `int`. Unit-only enums with those discriminants remain struct-backed with an
