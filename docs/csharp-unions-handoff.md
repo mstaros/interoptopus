@@ -723,18 +723,38 @@ reported **77** locally and **78** under Guarded validation, same worktree, minu
 
 ### MCP tooling notes, 2026-08-28
 
-**`file_glob` matches by filename across the whole tree, and `path` does not scope it.** This bit
-four times in one session and only the dry run caught each. `body.cs` matches both
-`templates/common/types/enums/` and `templates/common/types/composite/`; `body_to_unmanaged.cs`
-likewise. `mod.rs` matched **fifty files**. Passing `path` as the exact file does not help — the
-tool still reports `expected_files must exactly match final changed files, missing [the sibling]`.
-Disambiguate in the *pattern* by including a line unique to the intended file, or write the file
-whole with `FileMcp:write_file`.
+**`file_glob` matches by file *name*, across everything under the root — this is the contract, not
+a defect.** An earlier version of this note called it a bug; the parameter is documented
+`/// File-name glob; a path separator is rejected`, and the `file`/`path` argument is the *search
+root*, not a scope. Scoping to one directory was never on offer.
 
-**A `file_glob` containing `%23` matches nothing, silently.** `insta` snapshots are named
-`r#mod__…snap`, and URL-encoding the `#` returns zero results with no error — indistinguishable
-from "no matches exist". Three separate conclusions were drawn from that empty result before it
-was noticed. Use `*.snap` and filter by pattern.
+It still surprises. `body.cs` matches both `templates/common/types/enums/` and
+`templates/common/types/composite/`; `body_to_unmanaged.cs` likewise; `mod.rs` matched **fifty
+files**. Passing `path` as the exact file does not narrow it — the tool still reports
+`expected_files must exactly match final changed files, missing [the sibling]`. Disambiguate in
+the **pattern**, by including a line unique to the intended file, or write the file whole with
+`FileMcp:write_file`. The dry run catches this every time; it is only dangerous if skipped.
+
+**A `file_glob` containing `%23` matches no file — and that is a correct answer to the wrong
+question.** `insta` snapshots are named `r#mod__…snap`. URL-encoding the `#` produces a *valid*
+file-name glob that simply matches nothing, so there is no error to raise. Three separate
+conclusions were drawn from the resulting empty list before it was noticed, including reporting a
+commit as absent from the repository when it was `HEAD`. Use `*.snap` and filter by pattern.
+
+The real gap was that an empty result could not be told apart from a glob that matched no files.
+`search_and_replace` reports `files_searched`; `search_regex` did not, so both cases returned an
+identical empty `matches` array. A `files_searched` field was added to `SearchRegexResult` in
+`rust-mcp-transform` for exactly this: **zero means look at the glob, non-zero with
+`total_matches: 0` means the pattern is genuinely absent.**
+
+**Line endings, and this one cost more than any trap above.** `interoptopus` is LF;
+`rust-mcp-transform` is **CRLF**. A multi-line pattern written with `\n` silently matches nothing
+in a CRLF repository — six consecutive edit attempts returned zero matches before the cause was
+found. Use `\r?\n` in any multi-line regex that might run outside this repo.
+
+The diagnostic signature matters: if `str_replace` returns zero matches on a pattern containing
+**no comments and no string literals**, the category rule below is not the explanation — suspect
+line endings, or a root that resolves to a different Cargo workspace.
 
 **`search_and_replace` cannot emit newlines**, restated because it was reached for reflexively
 four times on multi-line C#. A `\n` in the replacement lands as the two characters `\` and `n`; a
