@@ -35,22 +35,17 @@ use std::collections::HashMap;
 pub enum Projection {
     /// A C# 15 custom union: `[Union]`, `IUnion`, nested case types, case constructors.
     Union,
-    /// A struct (or class) carrying a discriminant field and per-variant payload fields.
+    /// A C# struct projection retained for a unit-only enum whose discriminant type C# will not
+    /// accept as an `enum` base.
     ///
-    /// Reached by a unit-only enum whose discriminant type C# will not accept as an `enum` base
-    /// — `float`, `bool`, `nint` and so on. No payload to justify a union, no legal underlying
-    /// type to become a plain enum, so it keeps the struct. This is the exclusion that earns the
-    /// third value; without it `Projection` would collapse to a bool.
+    /// Ordinary `#[ffi]` enums choose fixed-width legal bases. Public or manually assembled
+    /// inventory metadata can still use pointer-sized discriminants, which map to `nint` or
+    /// `nuint`; C# forbids both as enum bases, so this path keeps the managed struct, unmanaged
+    /// mirror, and marshaller.
     Discriminant,
-    /// A plain C# `enum`. **Declared, never constructed** — step three of the projection pass
-    /// is what starts producing it. Present now so that step is a routing change rather than an
-    /// arity change to this type; see `docs/csharp-unions-handoff.md` §9.
+    /// A unit-only enum whose discriminant maps to a legal C# enum base.
     ///
-    /// Note that `Discriminant` is expected to *empty out* when that lands rather than shrink:
-    /// not-union is exactly `no variant can carry a payload`, which is exactly the unit-only
-    /// population, which is exactly the plain-enum population. If nothing ends up forcing a
-    /// unit-only enum to stay a struct, delete `Discriminant` rather than leaving a value
-    /// nothing produces.
+    /// It crosses as `ManagedConversion::AsIs` and emits no struct mirror or marshaller.
     PlainEnum,
 }
 
