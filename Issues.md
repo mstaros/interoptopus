@@ -864,18 +864,19 @@ around it.
 
 Those six, and a later run of nineteen, turned out to be two further and entirely separate
 defects — neither in interoptopus. See the transaction that closed this issue.
-## Unit-only enums carry full union machinery; plain enum plus extension block would reclaim it
+
+## Unit-only enums carried full union machinery; eligible cases now emit plain enums
 
 ```issue
 id: 79be256e
 kind: issue
 severity: medium
-status: open
+status: fixed
 ```
 
 ### The shape
 
-A Rust enum with no payload-carrying variant is projected as a C# **struct** with a discriminant field, a custom marshaller and an `Unmanaged` mirror. Measured, from the reference snapshot, for `EnumDocumented { A, B, C }` — three symbols, no data:
+**Before option C landed**, a Rust enum with no payload-carrying variant was projected as a C# **struct** with a discriminant field, a custom marshaller and an `Unmanaged` mirror. The following snapshot from `EnumDocumented { A, B, C }` records the old shape — three symbols, no data:
 
 ```csharp
 public partial struct EnumDocumented { byte _variant; bool _hasValue; }
@@ -938,21 +939,22 @@ Caveat on scope: this is the `gix` porcelain crate only, not the `gix-*` plumbin
 projection of what binding it would produce, not a count of what is bound. A count over another
 wrapped crate would change the payoff. It would not change the rule.
 
-### The public surface is preservable
+### The public surface changed deliberately
 
-Everything consumer-facing survives a plain `enum` plus a C# 14 extension block. Extension *properties* are what make this work — classic extension methods could not give back `IsA` as a property.
+The landed design is a plain C# enum, **without** an extension block that recreates the old
+struct API. That is the breaking surface recorded in the backend changelog:
 
-| today | plain enum + extension block |
+| old struct API | plain-enum API |
 |---|---|
-| `A`, `B`, `C` static properties | enum members |
-| `IsA` bool property | extension property |
-| `AsA()` — `public void`, throws on mismatch | extension method |
-| `ExceptionForVariant()` | extension method |
-| `ToString()` returning `"A"` | free — enum's built-in returns the member name |
+| `x.IsA` | `x == E.A` |
+| `x.AsA()` | compare or switch on the enum member |
+| static factory property | enum member |
+| custom `ToString()` | the enum's built-in member name |
 
-Everything removed is `private`, `internal`, or `[EditorBrowsable(Never)]`: `_variant`, `_hasValue`, `Unmanaged`, `ToUnmanaged`, `AsUnmanaged`, `Marshaller`, `MarshallerMeta`, `ToManaged`.
-
-One behaviour change: `ToString()` today throws `InteropException` on an out-of-range discriminant; a plain enum returns the number as a string. Benign, arguably better.
+The removed mirror, marshaller and conversion helpers were private, internal or hidden from
+IntelliSense. The public `IsX` / `AsX` surface was not preserved; consumers migrate to ordinary
+enum operations. Out-of-range values now stringify numerically instead of throwing from the old
+custom `ToString()`, consistent with ordinary C# enum behavior.
 
 ### THE VALIDATION ARGUMENT IS FALSE — correcting the record
 
@@ -964,7 +966,7 @@ _managed._variant = _variant;
 return _managed;
 ```
 
-The tag is copied blind. The only `InteropException("Illegal enum state detected")` is in `ExceptionForVariant()` and `ToString()` — the error-mapping and display paths, not marshalling. Validation is **item 4a, still open**. So switching to a plain enum forfeits nothing that exists today; it forfeits something planned.
+The tag was copied blind. The only `InteropException("Illegal enum state detected")` was in `ExceptionForVariant()` and `ToString()` — the error-mapping and display paths, not marshalling. Item 4a has since landed for union-projected structs. Plain enums still perform no tag validation, which is the documented exhaustiveness trade-off accepted by option C.
 
 ### The lever — DISPROVED, see `5d1ae4c7`
 
@@ -985,150 +987,82 @@ is the wrong predicate to extend, since it means *never crosses FFI* and a plain
 crosses FFI precisely because it is blittable. See `5d1ae4c7` for the third-category question that
 follows.
 
-**Site count is unreconciled.** This issue and `5d1ae4c7` both say ten; `docs/csharp-unions-handoff.md`
-§3 says eleven and records that two more copies were added on 2026-08-26. If that is right, both
-issue counts are stale and the next pass added makes it twelve. Not reconciled here.
+**Historical note:** those inline site counts were snapshots taken before the projection pass.
+The shared projection model and the later plain-enum implementation replaced the need to infer
+representation by counting output-pass matches; the old ten/eleven/twelve figures are not current
+architecture.
 
-### Open, and deliberately not guessed at
+### Historical open questions — resolved or separated
 
-- ~~**What `managed_conversion` returns for a unit-only `DataEnum` today.**~~ **Traced —
-  `5d1ae4c7`.** The observation that these are already `AsIs` or `To` yet still get an `Unmanaged`
-  mirror and a marshaller was correct, and the explanation is that nothing in the enum output
-  passes consults the classification at all. Emission is gated on `TypeKind::DataEnum`, in ten
-  places.
-- **Whether wire's emitted `value.IsA` resolves against an extension property.** `emit_enum_serialize` and `emit_enum_deserialize` emit `Is{stem}`, `As{stem}()` and the factory against the value. These survive as extension members, but that resolution is unverified.
-- **Whether `union_names` can allocate a reduced name family per variant.** It currently allocates
-  all seven — stem, factory, is_check, accessor, field, unmanaged, case_type — unconditionally,
-  with no unit/tuple distinction.
+The questions below were useful before the implementation, but they are no longer blockers:
 
-  **The preservation policy argues *for* reducing the family, not against it.** Step 1 records
-  that every emitted member derives from the stem — `{stem}`, `Is{stem}`, `As{stem}`, `_{stem}`,
-  `Unmanaged{stem}`, `{case_type}` — and they share one declaration space, so a stem is usable
-  only when *all* of them are free. Three exist only for payload-carrying variants: a unit variant
-  has nothing to store in `_{stem}`, nothing to place in `Unmanaged{stem}`, and an empty
-  `{case_type}`. Step 1 confirms the asymmetry is already real downstream — `body_as_unmanaged`
-  keeps only payload-carrying variants.
+- The representation seam is the shared projection model, not a local `managed_conversion` guess
+  or a count of enum emitters.
+- The full generated C# consumer gate proves the landed plain-enum route compiles through Wire,
+  composites and slices; the abandoned extension-block design is no longer relevant.
+- Reducing `union_names`' reserved family for unit variants remains a separate naming/API-stability
+  trade-off. It was not required for option B or C and is not part of this closed issue.
 
-  So reserving those three for a unit variant lets a collision on a member that is **never
-  emitted** force the stem to move, renaming `Is{stem}`, `As{stem}` and the factory — all public
-  API — to protect something that does not exist. That is the same failure the Rejected
-  alternatives table names for unconditional PascalCase stems: silently renaming public members on
-  non-colliding enums. Fewer reserved names means fewer constraints means fewer forced renames.
+### Three options — final status
 
-  **The counter, which was not previously written down: unconditional allocation is
-  forward-compatible.** If a Rust variant later gains a payload, `_{stem}` and `{case_type}` are
-  already reserved and nothing renames. Reduce the family and adding a payload can force a stem
-  move — public API churning on an otherwise unrelated upstream change. Where the consumers are
-  owned this weighs less, but it means the current behaviour may be deliberate rather than an
-  oversight, and it is the reason this stays an open question rather than becoming a defect.
+**A. Status quo — superseded.** It kept the full struct and union machinery for every
+`DataEnum`.
 
-  **Verify before reducing.** Step 1 closes by saying to treat any claim that a field is unused as
-  a claim to verify, not to repeat — written after `Variant::name` was assumed diagnostics-only and
-  turned out to be emitted directly at six wire sites (`4e9a17c3`, item 1d). *"Unit variants do not
-  need `_{stem}`"* is exactly such a claim. Check it at the emission sites first.
+**B. Skip union machinery for unit-only enums, keep the struct — landed.** The payload-capability
+gate removed case types, `Value`, `HasValue` and `TryGetValue` before the representation
+change.
 
-  Inferred from the emission asymmetry Step 1 describes. **Not verified at the emission sites.**
+**C. Emit a plain C# enum when its discriminant is a legal enum base — landed in `ca6aafa`.**
+This removed the old struct surface, mirror and marshaller for the eligible population. Commit
+`d29fa975` pins the exception: manual inventory metadata with an `isize` / `usize`
+discriminant maps to `nint` / `nuint` and remains a discriminant struct because C# forbids
+native integers as enum bases.
 
-### Three options
+### Closed enums were not a prerequisite
 
-**A. Status quo.** Uniform union projection over every `DataEnum`. No break. Keeps ~120 lines per unit-only enum and adds case types, `Value`, `HasValue`, `TryGetValue` on top. **Superseded — B landed, see below.**
+Closed enums would restore compile-time exhaustiveness and reject arbitrary integral casts, but
+they did not ship in C# 15. The implementation did not wait for them: it accepted the ordinary C#
+enum trade-off, documented the breaking API migration, and kept runtime/native layout exact.
+A future closed-enum feature may improve the managed surface; it is not a gate for the landed
+projection.
 
-**B. Skip union machinery for unit-only enums, keep the struct. — LANDED 2026-08-26, see below.** Costs nothing and breaks nothing — the case types are not yet emitted, so declining to emit them is not a removal. Does not reclaim the existing 120 lines. Available now, independent of any language feature. Also removes the CS0169 `_hasValue` warnings honestly rather than by consuming a field with no meaning for a payload-free type.
+### Two rules, now measured
 
-**C. Plain `enum` plus extension block.** Reclaims the whole 120 lines and the marshaller. Breaking change to the generated surface, comparable to item 3a's private constructor which the plan already accepts unconditionally. Consumer-facing members are preservable per the table above. **The only option still open.**
+Option B follows the anti-bloat rule: a type with no payload-capable variant receives no union
+machinery.
 
-### The trigger
+Option C rests on a separate ABI rule: a unit-only enum may become a plain C# enum only when its
+inventory discriminant maps to a legal C# enum base. The supporting claims are now measured:
 
-C# **closed enums** — same enums with a `closed` modifier, strictly typed (no conversion from `int`) and exhaustive — restore what a plain enum lacks: no arbitrary casts, exhaustive matching without a default arm. That closes the gap option C opens, and it is what makes C the right destination rather than a regression.
+- the old unit-only `Unmanaged` mirror contained only the discriminant at offset zero;
+- `#[ffi]` derives Rust repr and inventory layout from the same fixed-width choice;
+- pinned arrays of the generated plain enum survive the boundary;
+- manual `Isize` / `Usize` inventory metadata maps to `nint` / `nuint` and therefore keeps
+  `Projection::Discriminant`.
 
-**Checked 2026-08-26: closed enums did not ship in C# 15.** Unions and closed hierarchies are both
-in .NET 11 preview 7 and ship with C# 15 in November 2026; closed enums are still described by
-Microsoft as *planned* and are listed as a proposal alongside closed hierarchies, which have since
-advanced while closed enums have not. The earlier "C# 16 preview, 6-8 months out" figure in this
-issue had no source and looks optimistic: a feature still labelled planned three months before the
-adjacent release ships is not obviously in the next one.
+The last point is generator-level coverage rather than a reference-project runtime fixture:
+`#[ffi]` deliberately normalises enum reprs to fixed widths.
 
-Two mechanical limits on closed enums that survive whenever they arrive:
+### B and C landed — issue closed
 
-- **A closed enum must declare a member for the integral value `0`.** `EnumExplicitThenImplicit
-  { A = 5, B, C }` yields 5, 6, 7 and therefore **can never be closed**. `EnumNegative
-  { A = -1, B = -0, C = 1 }` is fine — negatives are permitted, only the zero member is required.
-  So C is per-enum eligible, not uniform, and ineligible enums get a plain enum with neither
-  exhaustiveness nor today's type safety.
-- **Explicit conversion to a closed enum from a non-constant is an error.** This does not block
-  item 4a — it *mandates* it: the only legal path from a runtime discriminant to a closed enum is a
-  switch with constant arms and a throwing default, which is exactly 4a's validated switch.
+The payload-capability gate for B landed in `4a19b0e3` and `bdd13b53`, consolidated through
+`DataEnum::is_union_projected()` in `98f7ffd7`.
 
-A Roslyn analyzer is the interim substitute for the exhaustiveness half — it can flag a
-non-exhaustive switch over a plain `enum`, which is what closed enums would give. It cannot
-substitute for the runtime half, but per the correction above there is no runtime check today
-to lose. Where such an analyzer would live — shipped alongside the generated bindings, or in the
-consumer repository — is undecided and materially changes C's size.
+Option C landed in `ca6aafa`: eligible unit-only enums are ordinary C# enums with the matching
+underlying type, and no longer expose the prior struct accessors or custom marshaller.
 
-Option B was available immediately and is on the path to C rather than away from it.
+Commit `d29fa975` closed the remaining generator-coverage gap. Its test-only
+`PointerSizedFlag` is registered directly as manual inventory metadata with
+`Layout::Primitive(Isize)`; the focused test asserts the managed struct, `nint` unmanaged
+discriminant and marshaller remain, while plain-enum and union machinery do not appear. Direct
+registration is intentional because ordinary `#[ffi]` enums cannot produce pointer-sized reprs.
 
-### Two rules, not one — they rest on different claims
+Validation at `d29fa975`: the focused fixture passed; the complete
+`interoptopus_csharp` Cargo test package passed **63 tests** with **2 intentional ignores**; the
+embedded .NET suite passed **223/223**.
 
-Anti-bloat gets to **B and no further**. "Do not emit union machinery for a type with no payload"
-is self-justifying and needs nothing measured.
-
-It does **not** reach C. The struct's `Unmanaged` mirror and marshaller are not bloat in the same
-sense — they exist so the value can cross FFI. Removing them requires a separate claim: that a
-plain C# `enum` is blittable and crosses without translation, needing no mirror *because* it is
-blittable. That claim is probably true and is **not verified**. Three things are open:
-
-- What `Unmanaged` actually contains for a unit-only enum. If it is only the discriminant field,
-  the claim holds trivially. Not read.
-- How the Rust `#[repr]` maps to the C# underlying type. A plain C# enum defaults to `int`; a
-  `#[repr(u8)]` enum must be emitted as `: byte` or the widths disagree. `definition.rs` already
-  passes `discriminant_type.cs_name()`, so the information exists, but the mapping is unchecked.
-  `EnumNegative` additionally requires a signed underlying type.
-- **Which marshalling mode the generated bindings run under.** A C# enum is layout-compatible
-  with its backing integer, but the classic marshaller does not universally classify enums as
-  blittable — enum arrays and pinning are the cases that fail (`dotnet/runtime#48907`). With
-  runtime marshalling disabled, every C# unmanaged type including enums is blittable and the
-  caveat is moot. **`DisableRuntimeMarshalling` is not emitted:** `templates/rust/header.cs` is a
-  ten-line comment banner carrying library, hash, namespace and builder, and no assembly
-  attributes. So the deciding question is whether a unit-only enum can reach a slice element or
-  a pinned array — inside a sequential or explicit struct passed by value it is unaffected
-  either way. Not checked.
-
-So B is safe on the rule alone. C depends on the above, and separately on closed enums, which
-**did not ship in C# 15** — see the trigger section above.
-
-Recommendation as originally recorded: **B on the anti-bloat rule, now. C once the blittability
-claim is verified**, with closed enums governing only the exhaustiveness half of C, not the
-emission half. Recorded rather than executed — this issue exists so the survey is not repeated.
-
-See also `5d1ae4c7`: this issue's original "single lever" mechanism is disproved, and any version
-of B or C needs the ten-site processing gate addressed first.
-
-### B landed 2026-08-26 — this issue was not updated at the time
-
-**The eligibility rule is in force.** It landed in `4a19b0e3` (nested case types, new pass
-`body_case_types.rs`) and `bdd13b53` (`Value` / `HasValue` / `TryGetValue`), both scoped per enum
-by `variants.iter().any(|v| v.can_carry_payload)`. A `DataEnum` with no payload-**capable**
-variant now receives no union machinery at all: no case types, no `Value`, no `HasValue`, no
-`TryGetValue`. So this issue's recommendation of "B, now" describes shipped behaviour, not
-pending work, and the survey above should be read as the record of why rather than as a proposal.
-
-The predicate is the model-layer field `Variant::can_carry_payload`, read at five sites, not a
-local re-derivation. *Can* carry, not *does*: `fallback.rs::resolve_payload` erases a `()` payload
-to `None`, so `Result<(), ()>` reads as entirely payloadless while `Result<u32, Error>` does not —
-the same shape decided by a type argument. Guard test
-`enum_union_members::eligibility_asks_can_carry_not_does_carry` is the only fixture separating the
-two predicates; reverting it passes the whole rest of the suite.
-
-**Not verified: B's CS0169 claim.** B was also expected to retire the `_hasValue` warnings
-honestly rather than by consuming a meaningless field. That follows automatically *if* `_hasValue`
-is emitted only for union-projected types, and does not if it is emitted for every struct-backed
-enum. `definition.cs` decides it and has not been read. `d477f843` separately added
-`WarningsAsErrors=CS0169;CS0414`, so a regression here fails the build rather than warning.
-
-**Only C remains open**, on the three claims in the section above.
-
-`docs/csharp-unions.md` § Todo/Remaining is the status of record; this note exists because it and
-this issue disagreed for a day.
+`docs/csharp-unions.md` § Todo/Remaining is the status of record and carries the same two-way
+projection rule.
 
 ### Related — folding mixed enums, DROPPED
 

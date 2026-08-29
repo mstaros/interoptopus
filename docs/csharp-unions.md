@@ -1,8 +1,10 @@
 # C# 15 union projection for Rust enums
 
-Status: **complete.** § Todo/Remaining below is the execution ledger and every row is
-closed. See `docs/csharp-unions-handoff.md` for the historical handoff and traps; this file is the
-design record.
+Status: **the numbered implementation is complete; one documented edge contract remains open.**
+§ Todo/Remaining below is the execution ledger. The only open row is the pre-existing
+`default(E).ToString()` promise, which must either be implemented and executed or removed from
+the representation table. See `docs/csharp-unions-handoff.md` for the historical handoff and
+traps; this file is the design record.
 
 Scope: project every Rust `DataEnum` reaching the C# backend as a C# 15 custom union, subject to
 the eligibility rule below. Native ABI unchanged. Not opt-in — the repository targets net11
@@ -43,10 +45,17 @@ empty, its `Value` is nothing and `TryGetValue` has nothing to get. `Issues.md` 
 the rule, the measured cost (about 120 lines per enum: a struct, a discriminant field, an
 `Unmanaged` mirror, a marshaller) and the population it applies to.
 
-**Excluded enums keep their current representation.** Struct, `Unmanaged` mirror and marshaller
-all stay; this rule only declines to *add* union machinery on top. Projecting them as plain C#
-`enum`s instead is **option C in `79be256e` and is deferred** — it rests on a blittability claim
-that is not yet verified, and separately on closed enums, which did not ship in C# 15.
+**Unit-only enums now split on the C# enum-base rule.** When the inventory discriminant maps to
+one of C#'s eight legal enum bases (`byte`, `sbyte`, `short`, `ushort`, `int`, `uint`,
+`long`, `ulong`), the type is emitted as a plain C# `enum` and crosses `AsIs`; the struct,
+`Unmanaged` mirror and custom marshaller are omitted.
+
+A manual inventory can instead declare `Layout::Primitive(Isize)` or `Usize`. Those map to
+`nint` / `nuint`, which C# does not permit as enum bases, so the type remains
+`Projection::Discriminant`: a managed struct with an unmanaged mirror and custom marshaller, but
+without union machinery. Ordinary `#[ffi]` enums choose fixed-width discriminants and therefore
+cannot produce this branch. Commit `d29fa975` makes the primitive mapping exhaustive and pins the
+exception with a test-only manual-inventory fixture.
 
 **This document decides from the C# specification and the Rust inventory, and from nothing else.**
 A downstream consumer may *motivate* a shape by demonstrating that it occurs in practice; it never
@@ -655,24 +664,26 @@ Execution state. Rationale lives in the step sections above; this tracks only wh
 | 1c | All **nine** name-deriving sites emit from `v.stem`; output byte-identical | `2bdbf054` |
 | 3 | Struct-backed data enums emit `_hasValue` in the managed partial | `8c70868d` |
 
-`Issues.md` `09b82d44` and `7c8cb22e` are closed; `2a6da76a`, `ccb105a2` and `1383b84b` remain open.
-`7c8cb22e` closed as non-reproducible: the proc macro rejects every reserved C# keyword before inventory construction, so the reported `#[ffi]` enum never reaches this backend.
+The issue-status list previously here was a point-in-time snapshot and drifted. Consult
+`Issues.md` for live status; `79be256e` is now fixed, with its final representation rule and
+validation recorded there.
 
-Item 3 emits the field but nothing reads it yet, so every generated carrier currently warns
-**CS0169: the field `_hasValue` is never used** — eight types across five reference plugins at
-the time of writing. That is expected and clears with item 3c, which is what consumes it.
+`_hasValue` is now consumed by the union members and empty-state guards. The earlier CS0169
+warnings cleared with item 3c, and `WarningsAsErrors=CS0169;CS0414` keeps that regression
+observable.
 
 Earlier drafts named item 1 `union_projection` and gave it an eligibility gate. Both are stale:
 the pass is `union_names`, it owns naming only, and there is no gate — see Decided and Step 1.
 
 ### Remaining
 
-Items 0–1c, R, 1d, 3a–3f, 4–4d, 5 and 6 are complete. **Open items #1 is
-closed**, not merely unblocked. The composite-field (`a79ec28`), nested-payload (`b9b93a2`),
-direct-marshaller (`4a8d3bc`), collection, borrowed-marshaller and empty-struct paths all use
-the decided `InvalidOperationException` contract before native entry. Step 5 closes the complete
-union surface through the real consumer; Step 6 confirms `IResult<T,E>` coexistence and every
-`body_from_call` factory branch without requiring a generator change.
+Items 0–1c, R, 1d, 3a–3f, 4–4d, 5 and 6 are complete. **Open items #1 is closed**, not merely
+unblocked. Composite fields, nested payloads, direct and borrowed marshallers, collections and
+empty structs use the decided `InvalidOperationException` contract before native entry.
+
+One unnumbered representation contract remains open: whether
+`default(struct-backed union).ToString()` must return `"<empty>"` or whether that promise should
+be removed. It is tracked in the table below rather than left as an unowned sentence.
 
 **Step 5 is closed.** `3e` and `5c` now pass through the real C# consumer; `5d`, `5e`, `5f`,
 `5h` and `5i` remain executed runtime guards. `5g` was corrected rather than faked: the two model
@@ -720,9 +731,8 @@ the guard was inverted and the test observed to fail before being restored byte-
 because 3b introduces `{case_type}`, a new collision class, and every collision it resolves moves
 a stem — which was a place `wire` and `body.cs` disagreed until 1d closed it.
 
-**Unresolved in this line:** the claim that item "3" is done sits alongside 3a–3f listed open
-below. Either "3" is a superseded coarse item that 3a–3f replaced, or the claim is wrong. It was
-not determinable from this document and has not been guessed at.
+Item 3 is the superseded coarse field-introduction item; 3a–3f are its completed refinements.
+The table below is the status record for those subitems.
 
 | # | Status | Item | Gate |
 |---|---|---|---|
@@ -734,8 +744,9 @@ not determinable from this document and has not been guessed at.
 | 3d | **done** `da741fa9` | ~~`[Union]` + `IUnion` via joined interface list~~ Both emitted, gated on `is_union_projected`, placed *outside* the `is_managed_only` guard — that guard governs the `Unmanaged` mirror and the marshaller, and a managed-only enum can still be a union (`DataEnum` is exactly that case). `IUnion` joins the existing list ahead of `IResult` and `IDisposable`. **`System.Runtime.CompilerServices.UnionAttribute`** confirmed against a net11 assembly that builds, and **`IUnion` resolves from the framework** — traced in `MpsAgent`: `IMerkleNode.cs:183` declares `IMerkleUnion : IUnion`, and `Tests/Unions.Tests` has several hand-written implementors. An earlier version of this row deferred `IUnion` because the specification leaves its namespace unspecified; **that read the proposal's open questions as live, and the feature has shipped.** `IUnion<TUnion>` stays out — recorded as removed. `using System.Runtime.CompilerServices;` was already emitted | case constructors ✔ (**not 3c, as previously recorded**) |
 | 3e | **done** | ~~decide whether the compiler synthesises it~~ The real net11/preview consumer compiles `ResultUintError result = new ResultUintError.OkCase(5);`, then assigns that value to `IResult<uint, Error>` and reads it through `AsOk()`. The conversion is compiler-synthesised from the public single-parameter case constructor; no generated conversion member is needed | 3b ✔, case constructors ✔ |
 | 3f | **done** `4a19b0e3` | ~~**Case-type accessibility — `public`**~~ Emitted `public` at the site rather than inherited, since a nested type defaults to `private` — unusable, because the case type could not then be named outside the union — and `internal` fails the same way across an assembly boundary. Landed with 3b as planned; asserted by `enum_case_types::case_types_are_public` | 3b ✔ |
+| — | **done** `d29fa975` | **`Projection::Discriminant` fixture.** `PointerSizedFlag` is registered directly as test-only inventory metadata with `Layout::Primitive(Isize)`, because `#[ffi]` normalises enum reprs to fixed widths. `a_unit_only_pointer_sized_enum_keeps_the_discriminant_struct_projection` asserts a managed struct, `internal nint _variant;`, and the custom marshaller, while rejecting a plain C# enum, `IUnion`, and case types | plain-enum projection ✔ |
 | 4 | **done** `2e17270` | ~~`ToUnmanaged` / `AsUnmanaged` empty guard~~ One branch in each of the two templates, rejecting the empty struct state before the copy. **Throws `InvalidOperationException` directly, not through `ExceptionForVariant()`** — that helper ignores `_hasValue` entirely, so for an empty value it matches `_variant == 0` and returns variant zero's `EnumException` as though the value were well-formed. 4b now corrects the helper before variant matching; the direct marshal-out guard remains unchanged. Scoped by `struct_class.is_struct(id) && projection.is_union(id)` — the same conjunction `body_unmanaged` and `body_ctors` use — because a class-backed union has no `_hasValue` to read and its `default` is a null reference. Neither pass previously received `struct_class` or `projection`; both were threaded, with four pipeline call sites. Breaking change, changelog entry `e9c39630`. 5d executes the `ToUnmanaged` guard; 4b now pins the matching accessor exception | — |
-| 4a | **done** `056b9e4` | ~~`ToManaged` constructs via case ctors + validates tag~~ A `switch` expression over **every** variant, each arm calling a case constructor — `new E(new XCase(payload))` for payload variants, `new E(new XCase())` for unit ones — with a default arm throwing `InteropException`. **The default arm is the substance:** an unrecognised native tag previously fell through every `if` and returned a value carrying that tag with no payload set, a silently malformed value. 3c's `_managed._hasValue = true;` stopgap is deleted, since constructing through a case constructor establishes the flag implicitly — those constructors already follow `writes_has_value` — and `struct_class` left this pass with it. **The pass needed a second variant list:** the existing one is `filter_map` on `v.ty?`, payload-carrying only, so it cannot supply an arm per variant; the narrow list still drives the `[FieldOffset]` helper fields, which genuinely exist only for payload variants. Scoped to union-projected enums — a `Projection::Discriminant` enum has no case types emitted, so it keeps the mutation path. A test asserting the deleted line was **rewritten, not removed**: it now asserts construction through the case constructor and the presence of the throw arm, renamed `a_well_formed_value_gets_the_flag_however_it_is_constructed`| 3c ✔, case constructors ✔ |
+| 4a | **done** `056b9e4` | ~~`ToManaged` constructs via case ctors + validates tag~~ A `switch` expression over **every** variant, each arm calling a case constructor — `new E(new XCase(payload))` for payload variants, `new E(new XCase())` for unit ones — with a default arm throwing `InteropException`. **The default arm is the substance:** an unrecognised native tag previously fell through every `if` and returned a value carrying that tag with no payload set, a silently malformed value. 3c's `_managed._hasValue = true;` stopgap is deleted, since constructing through a case constructor establishes the flag implicitly — those constructors already follow `writes_has_value` — and `struct_class` left this pass with it. **The pass needed a second variant list:** the existing one is `filter_map` on `v.ty?`, payload-carrying only, so it cannot supply an arm per variant; the narrow list still drives the `[FieldOffset]` helper fields, which genuinely exist only for payload variants. Scoped to union-projected enums — a `Projection::Discriminant` enum has no case types emitted, so it keeps the mutation path; `a_unit_only_pointer_sized_enum_keeps_the_discriminant_struct_projection` now pins that branch. A test asserting the deleted line was **rewritten, not removed**: it now asserts construction through the case constructor and the presence of the throw arm, renamed `a_well_formed_value_gets_the_flag_however_it_is_constructed`| 3c ✔, case constructors ✔ |
 | 4b | **done** | ~~Exception split~~ `InvalidOperationException` now covers empty struct accessors and null class-backed unions at both marshaller forms, composite fields, nested payloads and slice elements. Slice rejection occurs before `AllocHGlobal`; generic post-allocation cleanup remains separate | 4 ✔, 4a ✔, **Open items #1** ✔ |
 | 4c | **done** `6780d64` | ~~`default(ResultX)` empty not `Ok`; `default(OptionX)` ≠ `NoneCase`~~ **A soundness obligation, not a preference** — specification § Well-formedness, *Soundness*: `Value` always evaluates to null or to a value of a case type, expressly including the default value of the union type. The side state is **forced, not chosen**: `Ok` is tag 0 and `default` is all-zero, so given tag preservation — settled, and load-bearing because it keeps the crossing a memcpy rather than an N-way translation — the discriminant cannot distinguish them, and `_hasValue` is the only remedy. **Measured before implementing, and this row's own wording undersold it.** The `Option` half and the C# 15 surface were already satisfied by `8c70868d` plus 3c. What was broken was the *older* accessor surface: `IsOk` read `_variant == 0` and `AsOk()` tested only the variant, so a default struct-backed `Result` reported `HasValue == false` and `IsOk == true` at once, and **`AsOk()` returned a zeroed payload out of uninitialised memory instead of throwing** — a wrong value reaching a consumer, not merely a mislabelled one. Both widened by `_hasValue`, scoped by `writes_has_value`; `ExceptionForVariant()` now checks `_hasValue` first under 4b. Consequence recorded nowhere else: a `Value` that can be null makes a consumer's otherwise-exhaustive `switch` warn on unhandled null. Breaking change, changelog entry landed with it | 3c ✔, 4a |
 | 4d | **done** | ~~Wire exception alignment~~ Serializer fallback now throws the managed union's `ExceptionForVariant()`: an empty struct-backed union gets 4b's `InvalidOperationException`, while an illegal managed state remains `InteropException`. Deserializer unknown native tags remain `InteropException`. `wire::collision::wire_serializer_delegates_an_empty_struct_union_to_its_classifier` pins the Wire-reachable struct-backed shape and rejects the old hand-written message | 1d ✔, 4b ✔ |
@@ -748,6 +759,7 @@ not determinable from this document and has not been guessed at.
 | 5h | **done** `8bf658c` | ~~Managed-only `DataEnum` case~~ `Test.Pattern.Union.cs::a_managed_only_union_is_still_projected_as_a_union`. **The load-bearing assertion is an absence:** `DataEnum` has `IUnion`, case types and a working `Value`/`TryGetValue`, but **no nested `Unmanaged` mirror**, because there is nothing to marshal it to. That is the only check anywhere that union projection and the FFI crossing are independent — the distinction 3d had to get right when it placed `[Union]` *outside* the `is_managed_only` guard. Without the absence assertion this is just another union test | 3c ✔ |
 | 5i | **done** `8bf658c` | ~~`default(ResultX)`/`default(OptionX)` tests; `AsOk()` on default~~ `Test.Pattern.Union.cs`: `a_default_struct_union_does_not_read_as_its_variant_zero_case` asserts `IsOk` is false on a default and `AsOk()` throws — the behaviour 4c changed, which until now nothing executed. **The exception type is now pinned by 4b.** `ExceptionForVariant()` checks `_hasValue` before `_variant`, and this test now asserts `InvalidOperationException` plus the type and "no Rust variant" message. The contract 4c established is "throws rather than returning a fabricated value", and that is what is asserted. `a_default_option_is_empty_rather_than_none` covers the `Option` half through `HasValue`/`Value` rather than `IsNone`, so it does not depend on which variant is tag zero — the distinction 4c exists to preserve | 4c |
 | 6 | **done** | `Result` leftovers: `IResult<T,E>` coexistence, `body_from_call` factory names | Step 5 and Step 6 consumer gates green |
+| — | **open** | Decide the documented empty-union `ToString()` contract: implement and execute `"<empty>"`, or remove that promise from the representation table | — |
 
 **Two lists number separately, and the gate column names which.** `1` in the Done table above is
 the `union_names` model pass, and it is done. `Open items #1` is the now-closed class-union

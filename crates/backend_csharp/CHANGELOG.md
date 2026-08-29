@@ -56,6 +56,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   admit. The constructor is now `private`; construct through the generated factories instead.
   Struct-backed enums are unaffected, since their empty state is carried by `_hasValue`.
 
+### 🐛 Bug Fixes
+
+- **Pointer-sized discriminants in manual enum inventories now retain native width.**
+  `Layout::Primitive(Isize)` and `Usize` map to C# `nint` and `nuint` instead of silently
+  falling back to `int`. Unit-only enums with those discriminants remain struct-backed with an
+  unmanaged mirror and custom marshaller, because C# does not permit native integers as enum
+  underlying types. Ordinary `#[ffi]` enums are unchanged: the macro selects a fixed-width repr.
+
 ## [0.16.4](https://github.com/ralfbiedert/interoptopus/compare/interoptopus_csharp-v0.16.3...interoptopus_csharp-v0.16.4)
 
 ### 🐛 Bug Fixes

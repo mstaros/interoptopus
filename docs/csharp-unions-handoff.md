@@ -113,24 +113,31 @@ one that does.
 
 ### What is now done, and what that leaves
 
-**Unit-only enums are emitted as plain C# `enum`s.** As of `ca6aafa`, `Color { Red, Green, Blue }`
-produces `public enum Color : byte { Red = 0, Green = 1, Blue = 2, }` instead of ~120 lines of
-struct, discriminant field, `Unmanaged` mirror and marshaller. That is option C in `Issues.md`
-`79be256e`, and it was the objective. **This section previously said the opposite** — it is kept
-under a new heading rather than deleted so the change is visible to anyone who read the old one.
+**Unit-only enums are emitted as plain C# `enum`s.** As of `ca6aafa`,
+`Color { Red, Green, Blue }` produces
+`public enum Color : byte { Red = 0, Green = 1, Blue = 2, }` instead of the managed struct,
+`Unmanaged` mirror and marshaller. That is option C in `Issues.md` `79be256e`.
 
 The rule has two halves and both are required: **no variant can carry a payload**, *and* the
-discriminant is a type C# accepts as an `enum` base. `Primitive` has fifteen members and only
-eight qualify — `nint`, `nuint`, `float`, `bool` and `void` do not — so a unit-only enum with a
-non-integral discriminant keeps the struct. That is `Projection::Discriminant`, and it is the one
-exclusion that stops the three-value enum collapsing to a boolean.
+discriminant must map to one of C#'s eight legal enum bases. A unit-only enum whose inventory
+metadata maps to `nint` or `nuint` keeps the discriminant struct. That is
+`Projection::Discriminant`; it prevents an ABI-changing fallback to `int`.
 
-**What made it work was not the emitter.** `managed_conversion` classified every `DataEnum` as at
-least `To`, never `AsIs`; making the plain-enum population `AsIs` is the lever, and composites,
-slices and the mirror all followed without those emitters being touched. See §9.
+**That exception is now exercised.** Commit `d29fa975` replaced the old six-arm-plus-`int`
+fallback with an exhaustive primitive mapping and added `PointerSizedFlag`, a test-only manual
+inventory type with `Layout::Primitive(Isize)`. Its output is asserted to retain the managed
+struct, `internal nint _variant;` and the custom marshaller, while emitting neither a plain enum
+nor `IUnion` / case types.
 
-**Still open on this front:** the pinning question in §9, and `Discriminant` has no member in the
-reference corpus, so that branch is currently untested by anything.
+**The fixture is intentionally not a reference-project API.** `#[ffi]` chooses a fixed-width enum
+repr and matching inventory layout, so ordinary macro-generated enums cannot reach the
+pointer-sized branch. Direct inventory metadata can, which is why generator-level registration is
+the narrow fixture that tests the public model without inventing a native function.
+
+**What made the plain-enum path work was not the emitter.** `managed_conversion` previously
+classified every `DataEnum` as at least `To`; making the eligible population `AsIs` let
+composites, slices and mirrors follow the model. The pinning question was answered by execution
+(§9), and `79be256e` is now closed.
 
 ---
 
@@ -182,65 +189,37 @@ probably never counted the same tests, which is a better lead than "unexplained"
 
 ### Plan state
 
-**Status lives in `docs/csharp-unions.md` § Todo/Remaining. That table is the single source, and
-this section does not restate it.** An earlier version of this paragraph said exactly that and
-then listed the open items anyway; the list drifted within a day, omitting 4b and 5. Go to the
-table.
+**Status lives in `docs/csharp-unions.md` § Todo/Remaining.** The numbered union-projection plan
+through item 6 is complete, including the real C# consumer gates. Item 3e is verified by compiling
+the compiler-synthesised conversion from a public single-parameter case constructor. The
+unit-only plain-enum track is also complete; it is not a separate open front.
 
-**Step 3 is complete except for one unverified claim.** Rust enums now project as C# 15 unions:
-`[Union]`, `IUnion`, nested case types, public single-parameter case constructors, `Value`,
-`HasValue`, `TryGetValue` — with the explicit layout and the memcpy crossing intact. **3e is
-satisfied but unverified**: nothing is left to emit, but no fixture compiles an implicit
-conversion, so the synthesis claim is untested.
+One pre-existing contract is still unresolved and is now tracked instead of being left in prose:
+the design table says `default(E).ToString()` returns `"<empty>"`, but the generator contains no
+such branch or test. §6 records the choice that remains; it is separate from `79be256e` and the
+discriminant fixture.
 
-**Two tracks — see §0's table before choosing.** Track A is item 4, the plan's next unstarted row.
-**Track B is the objective**: the projection pass, whose step one landed in `1429746b`, ending in
-plain C# `enum`s for unit-only enums — option C, still **not done**, and the thing that was
-actually asked for. §9 specifies Track B; `csharp-unions.md` § Step 4 specifies Track A.
-
-Landing log — a record of what shipped, not a second status table:
+Landing log — a record of the main structural changes, not a second status table:
 
 | Item | Commit | What landed |
 |---|---|---|
-| 1d | `f5057d4b` | Six wire sites emit `v.stem`; `cs_type_name` sanitises |
-| 3b, 3f | `4a19b0e3`, tests `9d6905bd` | Nested case types, `public`, union-projected enums only |
-| 3a | `f630e225` | Private parameterless ctor on class-backed enums; changelog entry |
-| 3c | `bdd13b53` | `HasValue`/`Value`/`TryGetValue`, `_hasValue` writes, `can_carry_payload` |
-| — | `d477f843` | `WarningsAsErrors=CS0169;CS0414` gate in `Directory.Build.props` |
-| — | `98f7ffd7` | Enum gate consolidated onto `union_names::data_enum`; `DataEnum::is_union_projected()` replaces five inline predicates |
-| — | `aa2d550d` | **Case constructors** — the union creation members. Unnumbered in the plan, and the actual gate for 3d |
-| 3d | `da741fa9` | `[Union]` and `IUnion` on union-projected enums |
-| — | `02c12b35` | Docs: 3d recorded done, its gate corrected, the `IUnion` deferral reversed, 3e marked satisfied-unverified |
-| — | `1429746b` | **Projection pass, step one** — `is_managed_only` moved from a render-time local in `body.rs` into `model::…::info::projection` |
+| 1d | `f5057d4b` | Six wire sites use the collision-resolved stem |
+| 3a | `f630e225` | Private parameterless constructor on class-backed enums |
+| 3b, 3f | `4a19b0e3`, tests `9d6905bd` | Public nested case types on union-projected enums |
+| 3c | `bdd13b53` | `HasValue` / `Value` / `TryGetValue` and the payload-capability gate |
+| — | `aa2d550d` | Public case constructors, the actual gate for 3d |
+| 3d | `da741fa9` | `[Union]` and `IUnion` |
+| — | `1429746b` | Projection moved into the shared model |
+| option C | `ca6aafa` | Eligible unit-only enums become plain C# enums |
+| discriminant fixture | `d29fa975` | Exhaustive primitive mapping and the pointer-sized manual-inventory guard |
 
-**Two corrections from 2026-08-27, both from things that were wrong in this document.** 3d's gate
-was recorded as 3c; `[Union]` on a type with no public single-parameter constructor is `CS9385`,
-so the real gate was the case constructors, and no item covered them. And the 3d row deferred
-`IUnion` on the grounds that its namespace is unspecified — that read the proposal's open
-questions as live, when the feature has shipped and `IUnion` resolves from the framework.
+Two corrections remain worth retaining. The gate for 3d was the case constructors, not 3c; without
+a public single-parameter constructor the compiler reports CS9385. And `IUnion` resolves from the
+shipped framework — the proposal's old namespace question was no longer live.
 
-**`Issues.md` is diverged three ways and you must reconcile it before trusting it.** The list
-below is pinned to `d477f843`, several commits behind head; the file is **modified and unstaged**
-in the working tree; and some of its content is corrected here rather than there. Reconcile in
-that order — commit or discard the working-tree change first, then re-read, then fix the content.
-
-Open — `2a6da76a`, `4e9a17c3`, `7c8cb22e`, `79be256e`, `b4e07f12`, `5d1ae4c7`. Closed —
-`09b82d44`, `ccb105a2`, `1383b84b`, `31248473`, `c33b9cf5`, `e235bc7d`, `8f4c1e2a`.
-
-**Uncommitted working-tree state you will find.** None of it went through a transaction, because
-`Issues.md` and repo-root files cannot be scoped into a FileMcp one:
-
-- **`Issues.md` — modified, unstaged.** `79be256e` gained a marshalling-mode sub-question and a
-  note that option B landed. Written via `FileMcp:update_issue`, which edits the working tree
-  directly.
-- **`baseline-nextest.txt` — staged, uncommitted.** Carries a placeholder header
-  (`# at <commit>, <date>, <machine>`) never filled in. Fill it or drop the file; a pass count
-  with no command and no commit is the defect the header exists to prevent.
-- **`.gitignore` — still no `build.txt` entry.**
-
-**Still wrong in `Issues.md`, corrected here but not there:** `5d1ae4c7`'s site count and its claim
-that nothing calls the helper — see the counting table below — and `79be256e`'s site-count
-paragraph, which says "not reconciled here" and now is.
+`Issues.md` `79be256e` is reconciled and closed with the same two-way projection rule. Older
+working-tree warnings and open-item lists in this handoff were snapshots of 2026-08-27, not current
+instructions.
 
 ### Four things worth knowing before you start
 
@@ -409,25 +388,18 @@ not converge.
 
 ---
 
-## 5. Next: 4, then 4a
+## 5. Managed representation and eligibility record
 
-**3d and 3e are no longer next.** `[Union]` and `IUnion` landed in `da741fa9`; the case
-constructors that 3e's claim rests on landed in `aa2d550d`. What remains of 3e is a fixture that
-compiles an implicit conversion — there is nothing left to emit.
+**Items 3d through 4a are complete.** `[Union]`, `IUnion`, case constructors, the
+compiler-synthesised case conversion, empty-state guards and validated native-tag conversion all
+landed and are executed through the C# consumer suite.
 
-**This section covers Track A only — the plan's next row, which is not the objective.** Item 4
-(`ToUnmanaged`/`AsUnmanaged` empty guard, no gate), then 4a. **If you arrived here from a pointer
-saying "the front is 4", read §0's two-track table first**: plain C# enums are the thing that was
-asked for and is missing, and that work is Track B in §9. Item 4 is correct if you are working the
-plan in dependency order; it is not what anyone is waiting for.
+**The unit-only objective is also complete.** Eligible discriminants take
+`Projection::PlainEnum`; illegal C# enum bases take `Projection::Discriminant`. Commit
+`d29fa975` supplies the generator fixture for the latter.
 
-**4a is now unblocked in a way it was not before.** It constructs via case constructors, and those
-exist as of `aa2d550d`. It also deletes the stopgap 3c left behind — `_managed._hasValue = true;`
-immediately after the `_variant` copy in `ToManaged` — because 4a's validated switch establishes
-the flag implicitly. Delete the stopgap rather than keeping both.
-
-The rest of this section is the record of how 3d and 3e were decided, kept because the reasoning
-is load-bearing for Step 4, not because the work is pending.
+The rest of this section is the decision and failure record for those steps. Imperative wording in
+that record describes the sequence used to land them, not pending work.
 
 **3d — `[Union]` and `IUnion`, landed `da741fa9`.** Both are gated on `is_union_projected` and
 placed *outside* the `is_managed_only` guard: that guard governs the `Unmanaged` mirror and the
@@ -481,39 +453,42 @@ on every boundary crossing. `TryGetValue` does not allocate.
 
 ### The eligibility rule, and the predicate that implements it
 
-A `DataEnum` with no payload-**capable** variant receives no union machinery — no case types, no
-`Value`/`HasValue`/`TryGetValue`, and since 3c, no `_hasValue` field either. The rule is per
-*enum*, not per variant: within a union-projected enum, **every** variant gets a case type,
-unit variants included, because an empty case type is what keeps a mixed enum exhaustive.
+A `DataEnum` with no payload-**capable** variant receives no union machinery — no case types,
+`Value` / `HasValue` / `TryGetValue`, or `IUnion`. The rule is per *enum*, not per variant:
+within a union-projected enum, every variant gets a case type, including unit variants, because the
+empty case type keeps a mixed enum exhaustive.
 
-The predicate is `v.can_carry_payload`, a field on the C# `Variant`. **It is not `v.ty.is_some()`,
-and the difference is not cosmetic** — see §8.
+The predicate is `v.can_carry_payload`, exposed through `DataEnum::is_union_projected()`. It is
+not `v.ty.is_some()`: `fallback.rs::resolve_payload` can erase a `()` payload to `None`, while
+the declaration remains payload-capable.
 
-Unit-only enums keep their struct, `Unmanaged` mirror and marshaller. Projecting them as plain C#
-`enum`s is option C in `79be256e`, still deferred: it needs an unverified blittability claim and
-closed enums, which did not ship in C# 15.
+A unit-only enum then takes one of two representations:
+
+- a legal C# enum base → `Projection::PlainEnum`, emitted as a plain C# enum;
+- an illegal base such as `nint` / `nuint` → `Projection::Discriminant`, retaining the struct,
+  mirror and marshaller without union machinery.
+
+Commit `d29fa975` pins the second route with manual inventory metadata. Normal `#[ffi]` enums
+choose fixed-width discriminants, so the reference corpus still has no runtime member for this
+case; the generator branch is nevertheless covered directly.
 
 ---
 
-## 6. Open decisions
+## 6. One unresolved contract
 
-**Only one thing here is actually undecided.** The two entries that used to sit alongside it were
-settled and are recorded where the work is tracked, not here — listing a settled call as open
-invites someone to re-litigate it.
+The null and exception questions previously listed here are closed:
 
-**Null reaching the marshaller for a class union — undecided.** Today it is a
-`NullReferenceException`; the alternatives are a deliberate `ArgumentNullException` or an
-`InteropException`. This is `Open items #1` in `csharp-unions.md`, it gates item 4b, and two of
-its three positions have never been reproduced. See §1.
+- a null class-backed union throws `InvalidOperationException` at direct, borrowed, composite,
+  nested-payload and slice-element marshal-out positions;
+- slice rejection happens before `Marshal.AllocHGlobal`;
+- an empty struct-backed union throws `InvalidOperationException`, while an unknown native tag
+  throws `InteropException`.
 
-**Settled, listed here only so you do not go looking:**
-
-- **The exception split** — `InvalidOperationException` for a default struct union versus
-  `InteropException` for a corrupt native tag — is **decided**. `csharp-unions.md` § Step 4 says
-  so, and the Todo table's 4b row reads "decided in Step 4; implementation only." Route it through
-  `ExceptionForVariant()` so there is one helper. Not implemented.
-- **`ToString()` on empty returns `<empty>`.** Decided, not implemented, and **not tracked by any
-  row of the Remaining table** — so it is untracked rather than open. Add a row for it or drop it.
+**One choice remains.** The design table says `ToString()` on an empty struct-backed union returns
+`"<empty>"`, but no generator branch or test implements it. This is now an open row in
+`docs/csharp-unions.md` § Todo/Remaining. The implementation must either add and execute that
+behavior or remove the promise from the representation contract; this handoff does not choose
+between them.
 
 ---
 
@@ -917,14 +892,16 @@ pass a `project` inside the repo you mean.
 
 ---
 
-## 9. The projection pass — step one of three landed
+## 9. Projection pass and plain-enum implementation record
 
-**Why this exists.** The model has no notion of *how a type is projected*. It knows what kind a
-type is (`struct_class`, `managed_conversion`, `disposable`), but not whether it should get union
-machinery, plain-enum treatment, or an `Unmanaged` mirror. That decision is currently emergent —
-it falls out of which output passes happen to fire — which is why you cannot say "emit this enum
-as a plain C# `enum`" without editing four passes that never ask. `Issues.md` `5d1ae4c7` names
-this as a missing "third category" and deliberately declines to design it.
+**Status: all projection stages landed.** The material below is the implementation record; its
+step-by-step imperatives are historical.
+
+**Why the pass was needed.** Before `projection`, the model had no shared answer for how a type
+was represented. It knew `struct_class`, `managed_conversion` and `disposable`, but union
+machinery, plain-enum treatment and `Unmanaged` emission emerged from whichever output passes
+happened to fire. The shared pass made that decision explicit and let option C change one model
+classification instead of four unrelated emitters.
 
 **Step one landed in `1429746b`.** `model::common::types::info::projection` now answers two
 questions that were previously computed inline in `output/…/enums/body.rs` at render time and
@@ -1218,48 +1195,24 @@ One unrelated defect visible in that output, pre-existing and not caused by the 
 and the following `partial`. It affects every marshalling-path slice, not just the new one. It
 compiles; it is merely ugly.
 
-Open questions `79be256e` lists, plus one this work added:
+Questions raised by `79be256e`, now answered:
 
-- What `Unmanaged` contains for a unit-only enum — **read, 2026-08-27, and it is a green light on
-  layout.** `body_unmanaged.rs` builds its `variants` list with `filter_map` on `v.ty?`, so for a
-  unit-only enum the list is empty and `body_unmanaged.cs` renders nothing but
-  `[FieldOffset(0)] internal {discriminant} _variant;` plus a `ToManaged` that copies the tag and
-  returns. `writes_has_value` is `is_struct && is_union_projected`, so it is false and no
-  `_hasValue` write appears either. **The mirror is layout-identical to the discriminant primitive
-  itself**, which means replacing struct, mirror and marshaller with a plain C# `enum` of the same
-  underlying type changes nothing the native side can observe. What remains unanswered is the
-  marshalling-mode bullet below, which is about blittability, not layout.
-- How Rust `#[repr]` maps to the C# underlying type — **closed structurally, 2026-08-27, and the
-  answer is stronger than any empirical check.** `EnumDocumented` and friends carry no `#[repr]`
-  in source; the `#[ffi]` macro generates it. In `proc_macros_impl/src/types/emit.rs`,
-  `generate_repr` for `TypeData::Enum` always routes to `layout_tokens`, and
-  `discriminant.rs::optimal_discriminant` computes **one** `DiscriminantChoice` from which
-  `repr_attribute` emits the Rust `#[repr(..)]` and `layout_tokens` emits the C# `Layout`. One
-  choice drives both sides, so **divergence is impossible by construction** — not merely absent
-  in the current corpus. `A`/`B`/`C` auto-number to a max of 2, hence `#[repr(u8)]` and
-  `Layout::Primitive(U8)`, hence `byte`. Note this also makes the `_ => Primitive::Int` arm in
-  `kind/enum.rs` **dead for `#[ffi]` enums**: a `#[repr(C)]` fieldless enum would be four bytes
-  against a one-byte C# side, but the macro never emits `Layout::C`, so that arm is unreachable
-  here. Do not cite it as evidence of a mismatch risk. `EnumNegative` still needs a signed type,
-  which the same mechanism supplies.
-- **Which marshalling mode the bindings run under — answered by execution, and the question was
-  overstated.** `DisableRuntimeMarshalling` is **not** emitted; `templates/rust/header.cs` is a
-  ten-line comment banner with no assembly attributes. Earlier revisions of this bullet treated
-  that as a live classic-marshaller hazard — "enum arrays and pinning are the failing cases" —
-  and it was wrong. **A pinned `EnumDocumented[]` survives the boundary.** Three cases, run:
-  `[A,B,B]` → 2, `[B,A,B,C,B]` → 3, `[A,C,A]` → 0. Three lengths and three arrangements, which
-  a wrong element stride could not jointly satisfy — confirmation, not an it-did-not-throw pass.
-
-  **The reason it was never really at risk is worth keeping**, because it is the thing the
-  earlier framing got backwards: **the enum never crosses as an enum.** What crosses is
-  `{ IntPtr, ulong }`. The only runtime component that touches the element type is
-  `GCHandle.Alloc`, and an `enum : byte` array pins exactly as a `byte[]` does. There was no
-  marshaller decision to get wrong. Treat "classic marshaller cannot handle enum arrays" as
-  retired, not merely untested.
-- Exhaustiveness is genuinely lost. A `switch` over a plain C# `enum` is never exhaustive, because
-  `(Color)99` compiles. Closed enums would have fixed this and **did not ship in C# 15**. A Roslyn
-  analyzer is the interim substitute for the compile-time half; there is no runtime half to lose,
-  because `Unmanaged::ToManaged` copies the tag blind today and validates nothing.
+- **The unit-only `Unmanaged` mirror was layout-identical to its discriminant.**
+  `body_unmanaged.rs` emitted only `[FieldOffset(0)] internal {discriminant} _variant;`.
+  Replacing that shape with a plain enum of the same legal underlying type therefore changed no
+  native-visible bytes.
+- **Rust repr and inventory layout share one discriminant choice.** `#[ffi]` selects a fixed-width
+  `DiscriminantChoice` and uses it for both Rust `#[repr(...)]` and
+  `Layout::Primitive(...)`. Manual inventory metadata is broader: it can carry `Isize` /
+  `Usize`. Commit `d29fa975` maps those exhaustively to `nint` / `nuint` instead of silently
+  falling back to `int`, and its `PointerSizedFlag` fixture proves that the illegal-enum-base
+  branch retains the discriminant struct.
+- **Pinned enum arrays work.** The enum never crosses as a marshaller-classified enum; the slice
+  boundary carries `{ IntPtr, ulong }`, and `GCHandle.Alloc` pins an enum array just as it pins
+  its underlying primitive array. Three lengths and arrangements were executed successfully.
+- **Plain enums lose compile-time exhaustiveness.** C# accepts casts such as `(Color)99`, and
+  closed enums did not ship in C# 15. The implementation accepted that documented trade-off rather
+  than waiting for a future language feature.
 
 ### Wiring a new model pass — nine sites, two pipelines
 
