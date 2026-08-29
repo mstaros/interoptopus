@@ -36,14 +36,18 @@ impl Pass {
 
         for file in output_master.outputs_of(FileType::Csharp) {
             let content = if output_master.type_belongs_to(csharp::UTF8_STRING, file) {
-                let helpers = pattern_string.helpers();
+                let Some(helpers) = pattern_string.helpers() else {
+                    return Err(crate::Error::from(
+                        "Cannot emit C# type `Utf8String`: create, destroy, and clone helpers were not all registered. \
+                         The type may have been collected transitively through another registered type. \
+                         Register `builtins_string!()` in the Rust inventory.",
+                    ));
+                };
 
                 let mut context = Context::new();
-                if let Some(h) = helpers {
-                    context.insert("create_entry_point", &h.create_entry_point);
-                    context.insert("destroy_entry_point", &h.destroy_entry_point);
-                    context.insert("clone_entry_point", &h.clone_entry_point);
-                }
+                context.insert("create_entry_point", &helpers.create_entry_point);
+                context.insert("destroy_entry_point", &helpers.destroy_entry_point);
+                context.insert("clone_entry_point", &helpers.clone_entry_point);
 
                 templates.render("rust/pattern/utf8string.cs", &context)?.trim().to_string()
             } else {

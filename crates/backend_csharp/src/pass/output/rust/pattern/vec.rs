@@ -52,9 +52,16 @@ impl Pass {
                     _ => continue,
                 };
 
-                let Some(helpers) = pattern_vec.helpers(*type_id) else { continue };
                 let Some(element_ty) = types.get(element_ty_id) else { continue };
                 let element_name = &element_ty.name;
+                let Some(helpers) = pattern_vec.helpers(*type_id) else {
+                    return Err(crate::Error::from(format!(
+                        "Cannot emit C# type `{}`: matching create and destroy helpers were not both registered. \
+                         The type may have been collected transitively through a field or enum payload. \
+                         Register `builtins_vec!(T)` for the Rust element type projected as `{}`.",
+                        ty.name, element_name
+                    )));
+                };
 
                 let Some(element_conversion) = managed_conversion.managed_conversion(element_ty_id) else {
                     continue;

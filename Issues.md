@@ -1,44 +1,54 @@
 # Issues
 
-## validate() should reject a Vec pattern used without its builtins_vec registration
+## C# generation must reject missing Vec and Utf8String builtin helpers explicitly
 
 ```issue
 id: 2a6da76a
 kind: bug
 severity: high
-status: open
+status: closed
 ```
 
 ### Symptom
 
-Registering `ffi::Vec<T>` in a function signature without also registering `builtins_vec!(T)` produces C# that references a type the backend never emits. Rust compiles cleanly, `RustLibrary::process()` succeeds, `write_buffers_to` succeeds. The only signal is a C# compile error in generated code:
+The C# backend had two different missing-builtin failure modes, neither deliberate:
 
-```
-error CS0246: The type or namespace name 'VecByte' could not be found
-error CS0246: The type or namespace name 'VecUtf8String' could not be found
-```
+- A collected `ffi::Vec<T>` without matching create and destroy helpers was silently skipped by the Vec emitter. Other generated types still referenced the projected C# Vec type, so `RustLibrary::process()` succeeded with dangling references.
+- A collected `ffi::String` without all three helpers reached the Utf8String template without its helper variables. Generation failed, but only because Tera happened to require missing context.
 
-This is not a one-off. It occurred twice in one session, once per newly introduced element type - first `ffi::Vec<u8>`, then `ffi::Vec<ffi::String>`. Every new element type will hit it again.
+### Measurements — 2026-08-29
 
-### Why validate() is the right place
+| Experiment | Generation | Observable gate |
+| --- | --- | --- |
+| Remove `builtins_vec!(ffi::String)` | Succeeds and writes a snapshot containing four `VecUtf8String` uses and no declaration | With the snapshot accepted, only `reference_project::csharp_suite` fails, at C# compile with `CS0246` |
+| Reach that Vec through `Layer1<T>.maybe_2` at `T = ffi::String` | The concrete Vec is collected despite appearing in no direct function signature | Confirms the generic-composite route is visible to the C# model |
+| Remove `builtins_string!()` | Fails before writing a snapshot | Both `reference_project::interop` and `reference_project::csharp_suite` stop in generation because the template lacks helper context |
 
-`validate()` already walks the full inventory and is the only component that sees both the declared surface and the registered builtins. The backend cannot decide at emit time whether a missing builtin is an error or a deliberate omission; the inventory can.
+The string result is not evidence of validation: its fast failure was an incidental property of the template.
 
-Moving the failure from `csc` to `cargo test` puts it seconds earlier, at the call site, naming the missing macro.
+### Revised scope
 
-### Proposed fix
+This is a C# backend generation defect, not a core `RustInventory::validate()` rule. Core validation is shared by the C, Python, and C# backends, and there is no measurement showing the other backends require these C# helper-backed wrapper types.
 
-Collect every `TypePattern::Vec(T)` reachable from any registered function signature, and diff against registered builtins. Fail with something like:
+Diagnostics name the missing projected type and state that it may have been collected transitively through a field or enum payload. Exact field-level reverse provenance is intentionally out of scope: one projected type can have several use sites, and the current model has no complete reverse-origin graph.
 
-`ffi::Vec<u8> is used by repo_git_dir but builtins_vec!(u8) is not registered`
+### Resolution
 
-Collection must be transitive: `Vec<T>` inside a struct field or enum payload needs the builtin just as much as one in a top-level signature.
+- The C# Vec output pass now returns an ordinary generation error when matching create and destroy helpers are absent instead of continuing and omitting the declaration.
+- The C# Utf8String output pass now returns an explicit missing-`builtins_string!()` error before template rendering instead of exposing a Tera context failure.
+- Both errors name the projected C# type or element name and point to the registration macro.
+- Core `RustInventory::validate()` remains unchanged.
 
-`builtins_string!()` has the identical hazard and is simply remembered more often.
+### Regression coverage
 
-### Note
+Backend tests cover all three missing-helper routes:
 
-Per CONTRIBUTING, this needs a reference-project test. Since the assertion is that something *fails*, a `trybuild`-style negative case is likely the right shape.
+- `ffi::Vec<T>` collected through a concrete `Layer1<T>` generic-composite instantiation;
+- `ffi::Vec<T>` collected through an enum payload;
+- `ffi::String` producing the explicit diagnostic rather than the old template error.
+
+Verification on 2026-08-29: the focused regression set passed 3/3, cargo diagnostics reported zero errors and zero warnings, and the complete `interoptopus_csharp` package run passed 89 tests with zero failures and six existing ignores. Its embedded C# suite passed 222/222 tests.
+
 ## reference_project snapshot not re-accepted after the AsSpan()/ToArray() template change
 
 ```issue
