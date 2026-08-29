@@ -24,7 +24,9 @@
 //! C# `enum`, which cannot carry a flag or union members by construction. The assertions below
 //! therefore check the stronger fact rather than the absence of members on a struct.
 
-use interoptopus::lang::meta::FileEmission;
+use interoptopus::inventory::TypeId;
+use interoptopus::lang::meta::{Docs, Emission, FileEmission, Visibility};
+use interoptopus::lang::types::{Enum, Layout, Primitive, Repr, Type, TypeKind, Variant, VariantKind};
 use interoptopus::wire::Wire;
 use interoptopus::{extra_type, ffi, function};
 use interoptopus_csharp::config::HeaderConfig;
@@ -43,6 +45,30 @@ pub enum Meter {
 pub enum Flag {
     Off,
     On,
+}
+
+/// Models the metadata a hand-written `TypeInfo` implementation may register.
+///
+/// `#[ffi]` intentionally normalises enum reprs to fixed widths, so a test-only inventory type
+/// is the narrowest way to exercise the pointer-sized discriminant route without adding a native
+/// reference-project API.
+fn pointer_sized_flag_type() -> (TypeId, Type) {
+    let id = TypeId::new(0xD15C_21A1_0000_0000_0000_0000_0000_0001);
+    let kind = TypeKind::Enum(Enum {
+        variants: vec![
+            Variant::new("NativeWidthZero", 0, VariantKind::Unit),
+            Variant::new("NativeWidthOne", 1, VariantKind::Unit),
+        ],
+        repr: Repr { layout: Layout::Primitive(Primitive::Isize), alignment: None },
+    });
+    let ty = Type {
+        name: "PointerSizedFlag".to_string(),
+        visibility: Visibility::Public,
+        docs: Docs::default(),
+        emission: Emission::FileEmission(FileEmission::Default),
+        kind,
+    };
+    (id, ty)
 }
 
 /// Class-backed: carries a `String`, so its managed conversion is `Into`.
@@ -76,6 +102,8 @@ fn generated_interop() -> String {
     let _ = inventory.register(function!(union_members_void_result));
     let _ = inventory.register(extra_type!(Meter));
     let _ = inventory.register(extra_type!(Flag));
+    let (id, ty) = pointer_sized_flag_type();
+    inventory.register_type(id, ty);
     let inventory = inventory.validate();
 
     let multibuf = interoptopus_csharp::RustLibrary::builder(inventory)
@@ -231,6 +259,39 @@ fn a_unit_only_enum_becomes_a_plain_csharp_enum() {
     assert!(!cs.contains("OffCase"), "unit-only enum must receive no union machinery");
 }
 
+
+/// A unit-only enum with a pointer-sized discriminant cannot become a plain C# enum.
+///
+/// `nint` is a valid managed representation of Rust `isize`, but C# does not permit it as an
+/// enum base. That is the third `Projection` value: no payload warrants union machinery, yet the
+/// discriminant prevents the plain-enum projection, so the legacy struct, mirror and marshaller
+/// must remain.
+#[test]
+fn a_unit_only_pointer_sized_enum_keeps_the_discriminant_struct_projection() {
+    let cs = generated_interop();
+
+    assert!(
+        !cs.contains("enum PointerSizedFlag :"),
+        "C# forbids nint as an enum base, so this type must not take the plain-enum route"
+    );
+    assert!(cs.contains("partial struct PointerSizedFlag"), "the discriminant projection must keep the managed struct");
+    assert!(
+        cs.contains("internal nint _variant;"),
+        "the unmanaged mirror must preserve the pointer-sized discriminant instead of collapsing it to int"
+    );
+    assert!(
+        cs.contains("[CustomMarshaller(typeof(PointerSizedFlag), MarshalMode.Default, typeof(Marshaller))]"),
+        "the discriminant projection keeps its marshaller"
+    );
+    assert!(
+        !cs.contains("partial struct PointerSizedFlag : IUnion"),
+        "a unit-only enum has no payload and must not receive union machinery"
+    );
+    assert!(
+        !cs.contains("public readonly record struct NativeWidthZeroCase()"),
+        "the discriminant projection must not emit case types"
+    );
+}
 
 /// Item 4c: a default struct-backed union must not read as its variant-zero case.
 ///

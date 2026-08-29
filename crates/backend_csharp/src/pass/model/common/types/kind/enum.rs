@@ -16,13 +16,20 @@ pub struct Pass {
 /// Map a core `Primitive` (from `Enum.repr`) to the C# backend `Primitive`.
 fn cs_primitive(p: lang::types::Primitive) -> Primitive {
     match p {
+        lang::types::Primitive::Void => Primitive::Void,
+        lang::types::Primitive::Bool => Primitive::Bool,
         lang::types::Primitive::U8 => Primitive::Byte,
         lang::types::Primitive::U16 => Primitive::UShort,
         lang::types::Primitive::U32 => Primitive::UInt,
+        lang::types::Primitive::U64 => Primitive::ULong,
+        lang::types::Primitive::Usize => Primitive::NUInt,
         lang::types::Primitive::I8 => Primitive::SByte,
         lang::types::Primitive::I16 => Primitive::Short,
         lang::types::Primitive::I32 => Primitive::Int,
-        _ => Primitive::Int,
+        lang::types::Primitive::I64 => Primitive::Long,
+        lang::types::Primitive::Isize => Primitive::NInt,
+        lang::types::Primitive::F32 => Primitive::Float,
+        lang::types::Primitive::F64 => Primitive::Double,
     }
 }
 
