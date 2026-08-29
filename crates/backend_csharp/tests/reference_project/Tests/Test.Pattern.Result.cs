@@ -70,6 +70,31 @@ public class TestPatternResult
         Assert.Equal(5u, resultInterface.AsOk());
     }
 
+    /// Step 6: body_from_call consumes the established Result factories. Exercise both branches
+    /// that exist for an ordinary payload Result: Ok(value) and the unit Panic property.
+    [Fact]
+    public void from_call_uses_payload_ok_and_panic_factories()
+    {
+        var ok = ResultUintError.FromCall(() => 9u);
+        var panic = ResultUintError.FromCall(() => throw new InvalidOperationException("boom"));
+
+        Assert.True(ok.IsOk);
+        Assert.Equal(9u, ok.AsOk());
+        Assert.True(panic.IsPanic);
+    }
+
+    /// The payloadless template branch spells the Ok factory as a property rather than a method.
+    [Fact]
+    public void from_call_uses_the_unit_ok_factory()
+    {
+        var called = false;
+
+        var ok = ResultVoidError.FromCall(() => { called = true; });
+
+        Assert.True(called);
+        Assert.True(ok.IsOk);
+    }
+
     [Fact]
     public void pattern_result_custom_matches()
     {

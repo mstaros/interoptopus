@@ -1,8 +1,8 @@
 # C# 15 union projection for Rust enums
 
-Status: **in progress.** § Todo/Remaining below is the single source for what is landed and what
-is open; this line deliberately does not restate it. See `docs/csharp-unions-handoff.md` for
-current state and traps; this file is the design record.
+Status: **complete.** § Todo/Remaining below is the execution ledger and every row is
+closed. See `docs/csharp-unions-handoff.md` for the historical handoff and traps; this file is the
+design record.
 
 Scope: project every Rust `DataEnum` reaching the C# backend as a C# 15 custom union, subject to
 the eligibility rule below. Native ABI unchanged. Not opt-in — the repository targets net11
@@ -596,21 +596,24 @@ disposable/backing invariant.
 **Not an exclusion.** `Option` and `Result` carry a `DataEnum`, so they get the union projection
 along with everything else — the machinery in Steps 3 and 4 is written generically and does not
 discriminate by type. Naming is *already* done for them: `union_names` resolves all three
-carriers, and `result_and_option_variants_resolve_unchanged` guards it.
+carriers, and `result_and_option_variants_resolve_unchanged` guards the fixed `Ok`, `Err`,
+`Panic` and `Null` stems consumed by the Result-specific templates.
 
-Earlier drafts described this step as "deferred until the plain case is proven", which read as
-"`Result` might not become a union". It will. What is deferred is the `Result`-specific tidying
-that has nothing to do with whether it is a union:
+The Result-specific surface remains deliberately intact:
 
-- `Result` implements `IResult<T,E>` with `AsOk()` / `AsErr()` and unit-side methods. Case types
-  must coexist with that interface, not replace it.
-- `body_from_call` constructs `Result` through the factories (`return Ok(func())`,
-  `return Panic`). It never fires for a plain `DataEnum` and needs no Step 4 treatment, but it
-  does consume factory names, so it is a naming consumer to re-check here.
-- `default(ResultX)` must be **empty**, not `Ok`. `default(OptionX)` must be distinct from
-  `NoneCase`.
+- `Result` implements `IResult<T,E>` with `AsOk()` / `AsErr()` and unit-side methods. The
+  compiled consumer assigns a value created from `ResultUintError.OkCase` first to
+  `ResultUintError` and then to `IResult<uint, Error>`, proving the case-type surface coexists
+  with the established interface.
+- `body_from_call` constructs `Result` through the factories. The generated consumer now executes
+  payload `Ok(func())`, exception-to-`Panic`, and the payloadless `Ok` property paths.
+- `default(ResultX)` is **empty**, not `Ok`; `default(OptionX)` is distinct from `NoneCase`.
+  The Step 5i runtime guards cover both statements.
 
-Retiring `IsOk` / `AsOk` is a separate breaking change and is not in scope.
+**Closed 2026-08-29 through the real consumer gate.** `reference_project::csharp_suite` ran 218
+tests with the Step 6 assertions. No generator change was required: the generic union projection,
+the fixed Result stems, and the existing `body_from_call` templates already agree. Retiring
+`IsOk` / `AsOk` remains a separate breaking change and is not in scope.
 
 ---
 
@@ -663,14 +666,12 @@ the pass is `union_names`, it owns naming only, and there is no gate — see Dec
 
 ### Remaining
 
-Items 0–1c, R (the .NET 11 retarget — `LangVersion=preview`, `rt/dynamic.rs`, plugin DLLs;
-`9d664613`, in the Done table above), 1d, **3a, 3b, 3c, 3d, 3f, 4, 4a, 4b and 4c** are done, and
-**3e is done**: the reference consumer compiles a case-type expression directly as `ResultUintError` and then as `IResult<uint, Error>`. **Open items #1 is closed**, not merely
-unblocked. Earlier commits supplied the composite-field (`a79ec28`), nested-payload (`b9b93a2`)
-and direct-marshaller (`4a8d3bc`) guards. This transaction completes the actual collection
-position, the borrowed marshaller path and the empty-struct accessor classification. Every
-generated boundary now uses the decided `InvalidOperationException` contract before native entry.
-With 4d and Step 5 now closed, item 6 is the only remaining row.
+Items 0–1c, R, 1d, 3a–3f, 4–4d, 5 and 6 are complete. **Open items #1 is
+closed**, not merely unblocked. The composite-field (`a79ec28`), nested-payload (`b9b93a2`),
+direct-marshaller (`4a8d3bc`), collection, borrowed-marshaller and empty-struct paths all use
+the decided `InvalidOperationException` contract before native entry. Step 5 closes the complete
+union surface through the real consumer; Step 6 confirms `IResult<T,E>` coexistence and every
+`body_from_call` factory branch without requiring a generator change.
 
 **Step 5 is closed.** `3e` and `5c` now pass through the real C# consumer; `5d`, `5e`, `5f`,
 `5h` and `5i` remain executed runtime guards. `5g` was corrected rather than faked: the two model
@@ -745,7 +746,7 @@ not determinable from this document and has not been guessed at.
 | 5g | **corrected — not applicable** | A default disposable struct cannot be generated. `ManagedConversion::Into` simultaneously selects class backing and `IDisposable`; `AsIs` / `To` select struct backing and non-disposable output. The compiled reflection test asserts both sides on `OptionUtf8String` and `ResultUintError` | — |
 | 5h | **done** `8bf658c` | ~~Managed-only `DataEnum` case~~ `Test.Pattern.Union.cs::a_managed_only_union_is_still_projected_as_a_union`. **The load-bearing assertion is an absence:** `DataEnum` has `IUnion`, case types and a working `Value`/`TryGetValue`, but **no nested `Unmanaged` mirror**, because there is nothing to marshal it to. That is the only check anywhere that union projection and the FFI crossing are independent — the distinction 3d had to get right when it placed `[Union]` *outside* the `is_managed_only` guard. Without the absence assertion this is just another union test | 3c ✔ |
 | 5i | **done** `8bf658c` | ~~`default(ResultX)`/`default(OptionX)` tests; `AsOk()` on default~~ `Test.Pattern.Union.cs`: `a_default_struct_union_does_not_read_as_its_variant_zero_case` asserts `IsOk` is false on a default and `AsOk()` throws — the behaviour 4c changed, which until now nothing executed. **The exception type is now pinned by 4b.** `ExceptionForVariant()` checks `_hasValue` before `_variant`, and this test now asserts `InvalidOperationException` plus the type and "no Rust variant" message. The contract 4c established is "throws rather than returning a fabricated value", and that is what is asserted. `a_default_option_is_empty_rather_than_none` covers the `Option` half through `HasValue`/`Value` rather than `IsNone`, so it does not depend on which variant is tag zero — the distinction 4c exists to preserve | 4c |
-| 6 | open | `Result` leftovers: `IResult<T,E>` coexistence, `body_from_call` factory names | 5 green |
+| 6 | **done** | `Result` leftovers: `IResult<T,E>` coexistence, `body_from_call` factory names | Step 5 and Step 6 consumer gates green |
 
 **Two lists number separately, and the gate column names which.** `1` in the Done table above is
 the `union_names` model pass, and it is done. `Open items #1` is the now-closed class-union
@@ -756,10 +757,10 @@ Item 1d gates 3b because 3b introduces `{case_type}`, a new collision class — 
 resolves moves a stem, and every moved stem is a place `wire` and `body.cs` disagree. 5c is gated
 on 1d rather than the reverse because a colliding variant is exactly the test that exposes it.
 
-Item 6 is **not** an exclusion — `Option` and `Result` are projected in this pass, and `8c70868d`
-already emits `_hasValue` on `Result` carriers (`ResultVoidError`, `ResultVec3f32Error`,
-`ResultUintDotnetException`) alongside plain enums. Only the `Result`-specific tidying is
-deferred; see Step 6. `body_from_call` is a naming consumer and moves here from the Closed list.
+Item 6 was **not** an exclusion — `Option` and `Result` were projected throughout. It is now
+closed: the compiled consumer proves `IResult<T,E>` coexistence and executes the payload `Ok`,
+exception-to-`Panic`, and unit `Ok` paths emitted by `body_from_call`; the fixed synthesized
+Result stems remain guarded by `result_and_option_variants_resolve_unchanged`.
 
 ### Decided
 
