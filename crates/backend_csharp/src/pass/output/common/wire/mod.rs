@@ -373,7 +373,7 @@ impl WireCodeGen<'_> {
             lines.push(format!("{p}}}"));
         }
         if !e.variants.is_empty() {
-            lines.push(format!("{p}else {{ throw new InvalidOperationException(\"Unknown variant\"); }}"));
+            lines.push(format!("{p}else {{ throw {val}.ExceptionForVariant(); }}"));
         }
     }
 
@@ -414,10 +414,11 @@ impl WireCodeGen<'_> {
             // `InteropException`, not `InvalidOperationException`: this is a tag arriving from
             // the native side that matches no variant, which `docs/csharp-unions.md` §Exceptions
             // assigns to "unknown native discriminant" — corruption crossing the FFI boundary,
-            // meaning *severe error, should never happen*. The serializer's `else` above keeps
-            // `InvalidOperationException`, because an unmatched *managed* value is the empty
-            // union being marshalled out, which is the other row of that table. The old backend
-            // threw `InteropException` here too, so this restores it rather than inventing it.
+            // meaning *severe error, should never happen*. The serializer's `else` above instead
+            // delegates to `ExceptionForVariant()`: an unmatched managed value is either an empty
+            // struct-backed union (`InvalidOperationException`) or an illegal managed state
+            // (`InteropException`). The old backend threw `InteropException` here too, so this
+            // restores the native-input classification rather than inventing it.
             lines.push(format!("{pi}else {{ throw new InteropException(\"Unknown variant tag\"); }}"));
         }
         lines.push(format!("{p}}}"));

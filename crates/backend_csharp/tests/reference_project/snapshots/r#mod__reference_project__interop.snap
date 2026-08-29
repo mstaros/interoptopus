@@ -1,5 +1,6 @@
 ---
 source: crates/backend_csharp/tests/reference_project/mod.rs
+assertion_line: 27
 expression: multibuf
 ---
 === Interop.Common.cs ===
@@ -28445,7 +28446,7 @@ public partial class WireOfDataEnum : IDisposable
                     }
                 }
             }
-            else { throw new InvalidOperationException("Unknown variant"); }
+            else { throw value.ExceptionForVariant(); }
             return wire;
         }
         catch

@@ -20,11 +20,12 @@ use interoptopus_csharp::output::Target;
 /// `IsFooVariant`. See `union_names::tests::is_prefixed_variant_collides_with_a_check`.
 ///
 /// The payload sits on the *moved* variant on purpose: that is the one whose accessor
-/// `As{stem}()` wire emits, so a regression shows up in both the check and the accessor.
+/// `As{stem}()` wire emits, so a regression shows up in both the check and the accessor. A
+/// primitive payload keeps `Choice` struct-backed, supplying item 4d's default empty state.
 #[ffi]
 pub enum Choice {
     Foo,
-    IsFoo(String),
+    IsFoo(u32),
 }
 
 /// A `String` field makes this struct `WireOnly`, which is what routes it — and the
@@ -75,6 +76,18 @@ fn wire_serializer_and_sizer_use_the_stem() {
 
     assert!(cs.contains(".IsIsFooVariant"), "wire should check the allocated stem");
     assert!(cs.contains(".AsIsFooVariant()"), "wire should access through the allocated stem");
+}
+
+#[test]
+fn wire_serializer_delegates_an_empty_struct_union_to_its_classifier() {
+    let cs = generated_interop();
+
+    assert!(cs.contains("public partial struct Choice"), "the fixture must remain struct-backed so default(Choice) has an empty state");
+    assert!(
+        cs.contains("else { throw value.choice.ExceptionForVariant(); }"),
+        "wire should use the union's shared empty-state and illegal-state classifier"
+    );
+    assert!(!cs.contains("InvalidOperationException(\"Unknown variant\")"), "wire must not hand-roll the empty-state exception");
 }
 
 #[test]
