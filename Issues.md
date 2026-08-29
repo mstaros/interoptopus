@@ -577,7 +577,7 @@ Together these prove both families, not just the variant half. Both are acceptan
 id: 7c8cb22e
 kind: bug
 severity: low
-status: open
+status: closed
 ```
 
 ### Symptom
@@ -643,6 +643,20 @@ emitted; they are noted here only so the distinction is on record.
 A reference-project enum with a keyword variant would need the fix in place first, since adding
 one now would break the build rather than a test. A `union_names`-level unit test asserting the
 escaped or cased stem is the cheaper gate.
+
+### Resolution
+
+Closed as non-reproducible on the supported `#[ffi]` path. The attempted reference-project
+fixture failed during proc-macro expansion with `Using the name 'class' can cause conflicts in
+generated code.` `TypeModel::validate_forbidden_names` checks every enum variant against
+`FORBIDDEN_NAMES`; a programmatic comparison confirms all 77 reserved C# keywords are already
+present in that 136-name cross-backend list. The variant therefore never reaches `TypeInfo`, the
+C# model, or an emitter.
+
+No C# generator change was retained. A manually implemented unsafe `TypeInfo` could fabricate an
+inventory that bypasses the proc macro, but supporting such manually constructed keyword names is
+a separate contract and was not the reported defect.
+
 ## wire's is_cs_value_type re-derives struct-vs-class that struct_class::Pass owns
 
 ```issue

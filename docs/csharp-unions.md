@@ -655,7 +655,8 @@ Execution state. Rationale lives in the step sections above; this tracks only wh
 | 1c | All **nine** name-deriving sites emit from `v.stem`; output byte-identical | `2bdbf054` |
 | 3 | Struct-backed data enums emit `_hasValue` in the managed partial | `8c70868d` |
 
-`Issues.md` `09b82d44` is closed; `2a6da76a`, `ccb105a2`, `1383b84b` and `7c8cb22e` remain open.
+`Issues.md` `09b82d44` and `7c8cb22e` are closed; `2a6da76a`, `ccb105a2` and `1383b84b` remain open.
+`7c8cb22e` closed as non-reproducible: the proc macro rejects every reserved C# keyword before inventory construction, so the reported `#[ffi]` enum never reaches this backend.
 
 Item 3 emits the field but nothing reads it yet, so every generated carrier currently warns
 **CS0169: the field `_hasValue` is never used** — eight types across five reference plugins at
