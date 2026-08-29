@@ -1,6 +1,7 @@
 # C# call-scoped marshalling for read-only Rust pointers
 
-Status: approved for implementation.
+Status: **implemented.** Landed in `3aeca3c8d5f1f9640dcaecdd8fec2b9832b879d4`. Guarded
+validation passed for both Rust and generated C# suites.
 
 This is an optimization and a generated-API change, not a defect fix. The existing `ref`
 marshaller moves owned payloads into native storage and writes them back correctly. The change
@@ -140,16 +141,16 @@ test step and the C# suite step.
 ### What it does not establish
 
 The feature-gated Rust allocator probes described in
-[the allocation-observability design](csharp-allocation-observability.md) now verify that the
-direct `Utf8String` and composite `UseString` shared-borrow cases produce no net change in live
-Rust allocations or bytes, and that disposing those owners restores the measured baseline.
+[the allocation-observability design](csharp-allocation-observability.md) now exercise direct and
+composite shared borrows, mutable string write-back, `ffi::Vec<T>`, Wire, and unique/shared
+Rust-created services. That document is the live source for exact coverage, validation results,
+and visibility boundaries.
 
-That result remains narrower than general native-memory safety. It does not prove that no balanced
-allocation/deallocation events occurred during a call, cover C# `GCHandle` or
-`Marshal.AllocHGlobal` resources, diagnose use-after-free, or cover the vector, wire, callback,
-async, and service ownership families. A double free will normally terminate the process before a
-counter assertion can diagnose it. The unmeasured `string_by_out_dont_leak` test retains its TODO;
-these limits remain part of the verification record.
+Those gauges remain narrower than general native-memory safety. They do not observe C#
+`GCHandle` or `Marshal.AllocHGlobal`, diagnose use-after-free or double-free directly, or cover
+callback closure and asynchronous task-handle lifetimes. Equal snapshots establish equal live
+Rust-allocator state for the enumerated paths, not absence of balanced allocation/deallocation
+events within a call.
 
 ## Compatibility
 

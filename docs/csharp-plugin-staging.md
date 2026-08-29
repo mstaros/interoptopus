@@ -1,6 +1,7 @@
 # Immutable C# plugin staging for parallel tests
 
-Status: approved for implementation.
+Status: **implemented.** Landed in `d86c0c72cc18c8faf3418d8be08940b5e646f11f`. The
+deterministic Windows regression and full workspace validation passed.
 
 This is a Windows test-infrastructure correction. The generated plugin API and runtime loading
 contract do not change.

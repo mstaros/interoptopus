@@ -101,6 +101,11 @@ Consequently this mechanism cannot verify that item 4b's null guard executes bef
 `Marshal.AllocHGlobal`; that ordering is on the .NET side and needs separate .NET-side
 observability. It can verify only Rust allocator state on paths that reach the reference cdylib.
 
+The covered Rust-created service wrappers store only an `IntPtr` context in C#; `Create` receives
+the Rust handle and `Dispose` calls its Rust destroy function. Their `Box`/`Arc` allocations are
+therefore visible to these gauges. `GCHandle` ownership belongs to managed callback/delegate
+marshalling and is not claimed by the service assertions.
+
 A double free may terminate the process, which is a failing test run but not a counter diagnosis. If
 the platform allocator does not terminate immediately, the gauges may become nonsensical; neither
 outcome makes this a direct double-free detector.

@@ -47,7 +47,8 @@ public class TestPatternStrings
     /// the same instance throws.
     ///
     /// Nothing tested it. <c>pattern_string_1</c> builds a fresh <c>.Utf8()</c> per call, and
-    /// <c>string_by_ref_dont_leak</c> reuses its value by <c>ref</c>, where the callee may write
+    /// the <c>pattern_string_6b</c> write-back allocation test reuses its value by <c>ref</c>,
+    /// where the callee may write
     /// it back. This is the missing case, and it is written because the prediction came from
     /// reading rather than running.
     ///
