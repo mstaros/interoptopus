@@ -1,6 +1,6 @@
 ---
 source: crates/backend_csharp/tests/reference_project/mod.rs
-assertion_line: 27
+assertion_line: 52
 expression: multibuf
 ---
 === Interop.Common.cs ===
@@ -4727,11 +4727,19 @@ public partial class SliceMutVec : IDisposable
         var size = Marshal.SizeOf<Vec.Unmanaged>();
         rval._data = Marshal.AllocHGlobal(size * managed.Length);
         rval._len = (ulong) managed.Length;
-        for (var i = 0; i < managed.Length; ++i)
+        try
         {
-            var unmanaged = managed[i].AsUnmanaged();
-            var dst = IntPtr.Add(rval._data, i * size);
-            Marshal.StructureToPtr(unmanaged, dst, false);
+            for (var i = 0; i < managed.Length; ++i)
+            {
+                var unmanaged = managed[i].AsUnmanaged();
+                var dst = IntPtr.Add(rval._data, i * size);
+                Marshal.StructureToPtr(unmanaged, dst, false);
+            }
+        }
+        catch
+        {
+            rval.Dispose();
+            throw;
         }
         return rval;
     }
@@ -4879,11 +4887,19 @@ public partial class SliceOptionUtf8String : IDisposable
         var size = Marshal.SizeOf<OptionUtf8String.Unmanaged>();
         rval._data = Marshal.AllocHGlobal(size * managed.Length);
         rval._len = (ulong) managed.Length;
-        for (var i = 0; i < managed.Length; ++i)
+        try
         {
-            var unmanaged = managed[i].AsUnmanaged();
-            var dst = IntPtr.Add(rval._data, i * size);
-            Marshal.StructureToPtr(unmanaged, dst, false);
+            for (var i = 0; i < managed.Length; ++i)
+            {
+                var unmanaged = managed[i].AsUnmanaged();
+                var dst = IntPtr.Add(rval._data, i * size);
+                Marshal.StructureToPtr(unmanaged, dst, false);
+            }
+        }
+        catch
+        {
+            rval.Dispose();
+            throw;
         }
         return rval;
     }
@@ -5199,11 +5215,19 @@ public partial class SliceUtf8String : IDisposable
         var size = Marshal.SizeOf<Utf8String.Unmanaged>();
         rval._data = Marshal.AllocHGlobal(size * managed.Length);
         rval._len = (ulong) managed.Length;
-        for (var i = 0; i < managed.Length; ++i)
+        try
         {
-            var unmanaged = managed[i].AsUnmanaged();
-            var dst = IntPtr.Add(rval._data, i * size);
-            Marshal.StructureToPtr(unmanaged, dst, false);
+            for (var i = 0; i < managed.Length; ++i)
+            {
+                var unmanaged = managed[i].AsUnmanaged();
+                var dst = IntPtr.Add(rval._data, i * size);
+                Marshal.StructureToPtr(unmanaged, dst, false);
+            }
+        }
+        catch
+        {
+            rval.Dispose();
+            throw;
         }
         return rval;
     }
@@ -5359,11 +5383,19 @@ public partial class SliceVec : IDisposable
         var size = Marshal.SizeOf<Vec.Unmanaged>();
         rval._data = Marshal.AllocHGlobal(size * managed.Length);
         rval._len = (ulong) managed.Length;
-        for (var i = 0; i < managed.Length; ++i)
+        try
         {
-            var unmanaged = managed[i].AsUnmanaged();
-            var dst = IntPtr.Add(rval._data, i * size);
-            Marshal.StructureToPtr(unmanaged, dst, false);
+            for (var i = 0; i < managed.Length; ++i)
+            {
+                var unmanaged = managed[i].AsUnmanaged();
+                var dst = IntPtr.Add(rval._data, i * size);
+                Marshal.StructureToPtr(unmanaged, dst, false);
+            }
+        }
+        catch
+        {
+            rval.Dispose();
+            throw;
         }
         return rval;
     }
@@ -24293,11 +24325,19 @@ public partial class SliceMutCharArray : IDisposable
         var size = Marshal.SizeOf<CharArray.Unmanaged>();
         rval._data = Marshal.AllocHGlobal(size * managed.Length);
         rval._len = (ulong) managed.Length;
-        for (var i = 0; i < managed.Length; ++i)
+        try
         {
-            var unmanaged = managed[i].AsUnmanaged();
-            var dst = IntPtr.Add(rval._data, i * size);
-            Marshal.StructureToPtr(unmanaged, dst, false);
+            for (var i = 0; i < managed.Length; ++i)
+            {
+                var unmanaged = managed[i].AsUnmanaged();
+                var dst = IntPtr.Add(rval._data, i * size);
+                Marshal.StructureToPtr(unmanaged, dst, false);
+            }
+        }
+        catch
+        {
+            rval.Dispose();
+            throw;
         }
         return rval;
     }
@@ -24453,11 +24493,19 @@ public partial class SliceUseCStrPtr : IDisposable
         var size = Marshal.SizeOf<UseCStrPtr.Unmanaged>();
         rval._data = Marshal.AllocHGlobal(size * managed.Length);
         rval._len = (ulong) managed.Length;
-        for (var i = 0; i < managed.Length; ++i)
+        try
         {
-            var unmanaged = managed[i].AsUnmanaged();
-            var dst = IntPtr.Add(rval._data, i * size);
-            Marshal.StructureToPtr(unmanaged, dst, false);
+            for (var i = 0; i < managed.Length; ++i)
+            {
+                var unmanaged = managed[i].AsUnmanaged();
+                var dst = IntPtr.Add(rval._data, i * size);
+                Marshal.StructureToPtr(unmanaged, dst, false);
+            }
+        }
+        catch
+        {
+            rval.Dispose();
+            throw;
         }
         return rval;
     }
@@ -24613,11 +24661,19 @@ public partial class SliceUseSliceByteInStruct : IDisposable
         var size = Marshal.SizeOf<UseSliceByteInStruct.Unmanaged>();
         rval._data = Marshal.AllocHGlobal(size * managed.Length);
         rval._len = (ulong) managed.Length;
-        for (var i = 0; i < managed.Length; ++i)
+        try
         {
-            var unmanaged = managed[i].AsUnmanaged();
-            var dst = IntPtr.Add(rval._data, i * size);
-            Marshal.StructureToPtr(unmanaged, dst, false);
+            for (var i = 0; i < managed.Length; ++i)
+            {
+                var unmanaged = managed[i].AsUnmanaged();
+                var dst = IntPtr.Add(rval._data, i * size);
+                Marshal.StructureToPtr(unmanaged, dst, false);
+            }
+        }
+        catch
+        {
+            rval.Dispose();
+            throw;
         }
         return rval;
     }
@@ -24765,11 +24821,19 @@ public partial class SliceUseString : IDisposable
         var size = Marshal.SizeOf<UseString.Unmanaged>();
         rval._data = Marshal.AllocHGlobal(size * managed.Length);
         rval._len = (ulong) managed.Length;
-        for (var i = 0; i < managed.Length; ++i)
+        try
         {
-            var unmanaged = managed[i].AsUnmanaged();
-            var dst = IntPtr.Add(rval._data, i * size);
-            Marshal.StructureToPtr(unmanaged, dst, false);
+            for (var i = 0; i < managed.Length; ++i)
+            {
+                var unmanaged = managed[i].AsUnmanaged();
+                var dst = IntPtr.Add(rval._data, i * size);
+                Marshal.StructureToPtr(unmanaged, dst, false);
+            }
+        }
+        catch
+        {
+            rval.Dispose();
+            throw;
         }
         return rval;
     }
@@ -24925,11 +24989,19 @@ public partial class SliceVec3f32 : IDisposable
         var size = Marshal.SizeOf<Vec3f32.Unmanaged>();
         rval._data = Marshal.AllocHGlobal(size * managed.Length);
         rval._len = (ulong) managed.Length;
-        for (var i = 0; i < managed.Length; ++i)
+        try
         {
-            var unmanaged = managed[i].AsUnmanaged();
-            var dst = IntPtr.Add(rval._data, i * size);
-            Marshal.StructureToPtr(unmanaged, dst, false);
+            for (var i = 0; i < managed.Length; ++i)
+            {
+                var unmanaged = managed[i].AsUnmanaged();
+                var dst = IntPtr.Add(rval._data, i * size);
+                Marshal.StructureToPtr(unmanaged, dst, false);
+            }
+        }
+        catch
+        {
+            rval.Dispose();
+            throw;
         }
         return rval;
     }

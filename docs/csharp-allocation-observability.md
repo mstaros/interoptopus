@@ -110,6 +110,42 @@ A double free may terminate the process, which is a failing test run but not a c
 the platform allocator does not terminate immediately, the gauges may become nonsensical; neither
 outcome makes this a direct double-free detector.
 
+## Non-blittable slice construction exception safety
+
+The generated non-blittable `Slice<T>.From` path owns a temporary buffer allocated with
+`Marshal.AllocHGlobal`. Null elements governed by `NullPolicy::Throw` are preflighted before
+allocation, but a non-null element can still throw while `AsUnmanaged()` converts a nested
+payload, or while `Marshal.StructureToPtr` copies the unmanaged mirror. Before this change the
+slice instance was never returned and its buffer could no longer be disposed.
+
+The cleanup boundary is deliberately narrow:
+
+1. Keep null-element preflight before allocation.
+2. Leave `Marshal.AllocHGlobal` outside the `try`; when allocation itself throws, no successful
+   allocation is owned by the local slice.
+3. Wrap the element-conversion loop in `try`.
+4. On any exception, call the slice's existing idempotent `Dispose()` and use bare `throw;` so
+   the original exception type, message, and stack are preserved.
+5. Return the slice only after the loop succeeds.
+
+No per-element destruction is added. This path calls `AsUnmanaged()`: its unmanaged mirrors
+borrow nested pointers from the managed elements, and `StructureToPtr(..., false)` copies those
+mirrors into the one `HGlobal` buffer owned by the slice. The slice therefore owns exactly that
+buffer during construction.
+
+Verification has two layers. A generated-output regression pins the ordering and the
+`try` / `catch` / `Dispose()` / rethrow shape. The real C# consumer passes a non-null
+`OptionUtf8String` whose nested payload is null; it passes the outer null preflight, allocates,
+then throws from nested conversion. A direct borrowed call and slice construction both currently
+surface the same `NullReferenceException` from `OptionUtf8String.AsUnmanaged()`; the test
+compares their exact type and message so the cleanup boundary cannot translate the existing
+failure. It also retains a valid control that reaches Rust. This task does not change nested
+null-payload policy.
+
+The Rust allocation gauges cannot observe this buffer, so they cannot directly prove that
+`FreeHGlobal` ran. Cleanup is established by the emitted control flow plus execution of the
+post-allocation failure path. Direct allocation accounting would require a .NET-side allocator
+seam and is outside this change.
 ## Verification
 
 Required generated-surface checks:

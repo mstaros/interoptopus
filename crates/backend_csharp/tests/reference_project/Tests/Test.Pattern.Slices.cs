@@ -165,4 +165,22 @@ public class TestPatternSlices
         Assert.Contains("SliceOptionUtf8String element at index 0", exception.Message);
         Assert.Contains("no Rust variant", exception.Message);
     }
+
+    [Fact]
+    public void slice_of_class_backed_unions_preserves_post_allocation_conversion_failure()
+    {
+        var invalid = OptionUtf8String.Some(null!);
+        var direct = Assert.Throws<NullReferenceException>(
+            () => Interop.pattern_option_string_borrow(invalid)
+        );
+        var fromSlice = Assert.Throws<NullReferenceException>(
+            () => new[] { invalid }.Slice()
+        );
+
+        Assert.Equal(direct.Message, fromSlice.Message);
+
+        using var some = OptionUtf8String.Some("hello".Utf8());
+        using var valid = new[] { some, OptionUtf8String.None }.Slice();
+        Assert.Equal(1u, Interop.pattern_ffi_slice_of_option_string(valid));
+    }
 }

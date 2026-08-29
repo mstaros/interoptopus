@@ -8,6 +8,10 @@ use std::path::PathBuf;
 fn interop() -> Result<(), Box<dyn std::error::Error>> {
     let multibuf = crate::prepare_reference_bindings()?;
     let interop = multibuf.buffer("Interop.cs").expect("reference bindings must contain Interop.cs").to_string();
+    let common = multibuf
+        .buffer("Interop.Common.cs")
+        .expect("reference bindings must contain Interop.Common.cs")
+        .to_string();
 
     assert!(interop.contains(
         "public static partial ResultVoidError pattern_string_6a([MarshalUsing(typeof(UseString.InMarshallerMeta))] in UseString _0);"
@@ -23,6 +27,27 @@ fn interop() -> Result<(), Box<dyn std::error::Error>> {
     assert!(interop.contains("return pattern_string_13(in _0, callback_wrapped);"));
     assert!(interop.contains("public static partial ulong __test_live_bytes();"));
     assert!(interop.contains("public static partial ulong __test_live_allocations();"));
+
+    let slice_from = common
+        .split_once("public static unsafe SliceOptionUtf8String From(OptionUtf8String[] managed)")
+        .and_then(|(_, rest)| rest.split_once("/// Frees the native copy.").map(|(method, _)| method))
+        .expect("generated SliceOptionUtf8String.From method");
+    let mut cursor = 0;
+    for fragment in [
+        "if (managed[i] is null)",
+        "rval._data = Marshal.AllocHGlobal(size * managed.Length);",
+        "\n        try\n        {",
+        "var unmanaged = managed[i].AsUnmanaged();",
+        "\n        catch\n        {",
+        "rval.Dispose();",
+        "throw;",
+        "return rval;",
+    ] {
+        let relative = slice_from[cursor..]
+            .find(fragment)
+            .unwrap_or_else(|| panic!("SliceOptionUtf8String.From must contain ordered fragment `{fragment}`"));
+        cursor += relative + fragment.len();
+    }
 
     insta::assert_snapshot!(multibuf);
 

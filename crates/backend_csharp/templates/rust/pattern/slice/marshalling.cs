@@ -52,11 +52,19 @@ public partial class {{ name }} : IDisposable
         var size = Marshal.SizeOf<{{ unmanaged_element_type }}>();
         rval._data = Marshal.AllocHGlobal(size * managed.Length);
         rval._len = (ulong) managed.Length;
-        for (var i = 0; i < managed.Length; ++i)
+        try
         {
-            var unmanaged = managed[i].AsUnmanaged();
-            var dst = IntPtr.Add(rval._data, i * size);
-            Marshal.StructureToPtr(unmanaged, dst, false);
+            for (var i = 0; i < managed.Length; ++i)
+            {
+                var unmanaged = managed[i].AsUnmanaged();
+                var dst = IntPtr.Add(rval._data, i * size);
+                Marshal.StructureToPtr(unmanaged, dst, false);
+            }
+        }
+        catch
+        {
+            rval.Dispose();
+            throw;
         }
         return rval;
     }
