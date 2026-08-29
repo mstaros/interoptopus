@@ -683,6 +683,11 @@ process keeps running. Immutable plugin staging removes the loaded-plugin overwr
 overlapping cargo processes can still contend for Rust compiler/linker outputs or other fixed-path
 test artifacts. Poll for the existing result before re-issuing the command.
 
+**But poll once, after a wait — not in a loop.** On 2026-08-29 a commit succeeded at 09:29:33
+while polling continued, and the result went unread for several minutes because the poll was
+treated as the work. A `rust-mcp-transform` validation takes six to seven minutes; interoptopus
+two to three. Start something else and come back.
+
 **Snapshot acceptance is iterative, not one-shot.** `insta` stops at the *first* failing snapshot
 within a test, and some tests write several — `reference_plugins::service::define_plugins` writes
 at least `-1` through `-4`. Accept, re-run, repeat until a run comes back clean. Accepting
@@ -746,6 +751,14 @@ The real gap was that an empty result could not be told apart from a glob that m
 identical empty `matches` array. A `files_searched` field was added to `SearchRegexResult` in
 `rust-mcp-transform` for exactly this: **zero means look at the glob, non-zero with
 `total_matches: 0` means the pattern is genuinely absent.**
+
+**Finding a failing test is one call now, not six.** `get_operation_log` takes a `contains`
+filter: `contains: "FAIL"` for a nextest run, `contains: "error"` for a build. It filters by
+message substring, case-insensitively, **in SQL** — so it applies before `tail`/`limit` choose a
+window, which is the whole point. Events are coalesced and the summary line sits at an
+unpredictable sequence, so the thing you want is normally *outside* the window you asked for;
+that is why paging by `starting_sequence` took four to six calls on nearly every failing run.
+Added in `rust-mcp-transform`; omitting it changes nothing.
 
 **Line endings, and this one cost more than any trap above.** `interoptopus` is LF;
 `rust-mcp-transform` is **CRLF**. A multi-line pattern written with `\n` silently matches nothing
