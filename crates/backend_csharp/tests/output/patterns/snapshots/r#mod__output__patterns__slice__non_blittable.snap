@@ -72,7 +72,7 @@ public partial struct Attribute
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal SliceByte.Unmanaged bytes;
 
@@ -119,9 +119,9 @@ public partial struct Attribute
     [CustomMarshaller(typeof(Attribute), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(Attribute), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private Attribute _managed;
 
@@ -135,7 +135,7 @@ public partial struct Attribute
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private Attribute _managed;
         private Unmanaged _unmanaged;
@@ -262,7 +262,7 @@ public partial class SliceAttribute : IDisposable
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         public IntPtr _data;
         public ulong _len;
@@ -281,9 +281,9 @@ public partial class SliceAttribute : IDisposable
 }public partial class SliceAttribute
 {
     [CustomMarshaller(typeof(SliceAttribute), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private SliceAttribute _managed;
 
@@ -297,7 +297,7 @@ public partial class SliceAttribute : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private SliceAttribute _managed;
         private Unmanaged _unmanaged;

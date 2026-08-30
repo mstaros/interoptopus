@@ -114,7 +114,7 @@ public partial class Utf8String : IDisposable
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         public IntPtr _ptr;
         public ulong _len;
@@ -155,9 +155,9 @@ public partial class Utf8String : IDisposable
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(Utf8String), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private Utf8String _managed;
 
@@ -171,7 +171,7 @@ public partial class Utf8String : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private Utf8String _managed; // Used when converting managed -> unmanaged
         private Unmanaged _unmanaged; // Used when converting unmanaged -> managed

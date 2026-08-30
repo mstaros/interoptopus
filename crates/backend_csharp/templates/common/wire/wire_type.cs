@@ -93,9 +93,9 @@ public partial class {{ wire_name }} : IDisposable
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
-        public WireBuffer Buffer;
+        internal WireBuffer Buffer;
 
         {{ _fns_decorators_all | indent(width = 8) }}
         {{ _fns_decorators_internal | indent(width = 8) }}
@@ -106,9 +106,9 @@ public partial class {{ wire_name }} : IDisposable
     }
 
     [CustomMarshaller(typeof({{ wire_name }}), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private {{ wire_name }} _managed;
 
@@ -122,7 +122,7 @@ public partial class {{ wire_name }} : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private {{ wire_name }} _managed;
         private Unmanaged _unmanaged;

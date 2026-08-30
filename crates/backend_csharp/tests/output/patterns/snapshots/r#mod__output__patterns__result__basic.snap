@@ -113,7 +113,7 @@ public partial struct ResultUintError : IUnion, IResult<uint, Error>
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -279,9 +279,9 @@ public partial struct ResultUintError : IUnion, IResult<uint, Error>
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultUintError), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultUintError _managed;
 
@@ -295,7 +295,7 @@ public partial struct ResultUintError : IUnion, IResult<uint, Error>
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultUintError _managed;
         private Unmanaged _unmanaged;
@@ -357,7 +357,7 @@ public partial struct ResultVoidError : IUnion, IResult<Unit, Error>
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -524,9 +524,9 @@ public partial struct ResultVoidError : IUnion, IResult<Unit, Error>
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultVoidError), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultVoidError _managed;
 
@@ -540,7 +540,7 @@ public partial struct ResultVoidError : IUnion, IResult<Unit, Error>
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultVoidError _managed;
         private Unmanaged _unmanaged;

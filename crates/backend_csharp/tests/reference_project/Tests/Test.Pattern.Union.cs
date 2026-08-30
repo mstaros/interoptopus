@@ -6,9 +6,8 @@ using My.Company.Common;
 using Xunit;
 using Interop = My.Company.Interop;
 
-// The malformed-tag P/Invoke lives in `Bindings/MalformedFixture.cs`, not here. `Unmanaged` and
-// `Marshaller` are `internal` to that assembly, so a `LibraryImport` declared in this one cannot
-// use the custom marshaller at all - CS0122, measured 2026-08-28. Recorded in `Issues.md`.
+// MalformedFixture deliberately lives in this consumer project. Its LibraryImport declarations
+// compile only while generated unmanaged mirrors and marshaller entry points remain public.
 
 /// Executed assertions for union marshalling and the discriminated-union surface.
 ///
@@ -17,8 +16,6 @@ using Interop = My.Company.Interop;
 /// runtime would survive a snapshot too.
 public partial class TestPatternUnion
 {
-    // See `Bindings/MalformedFixture.cs` for the declaration this test calls.
-
     /// Item 5f: an invalid native tag throws rather than yielding a malformed managed value.
     ///
     /// Before item 4a (`056b9e4`) an unrecognised tag fell through every `if` and returned a
@@ -74,13 +71,15 @@ public partial class TestPatternUnion
         Assert.Contains("ResultUintError", ex.Message);
     }
 
+    /// Both the generated binding and a consumer-owned LibraryImport must select the borrow
+    /// marshaller without moving the union.
     [Fact]
     public void borrowing_a_constructed_struct_union_preserves_the_value()
     {
         var result = ResultUintError.Ok(7);
 
         Interop.pattern_result_borrow(in result);
-        Interop.pattern_result_borrow(in result);
+        MalformedFixture.BorrowResult(in result);
 
         Assert.Equal(7u, result.AsOk());
     }

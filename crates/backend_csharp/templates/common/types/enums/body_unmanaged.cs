@@ -1,5 +1,5 @@
 [StructLayout(LayoutKind.Explicit)]
-internal unsafe struct Unmanaged
+public unsafe struct Unmanaged
 {
     [FieldOffset(0)]
     internal {{ discriminant_type }} _variant;

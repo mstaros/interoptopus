@@ -23,9 +23,9 @@
     [CustomMarshaller(typeof({{ name }}), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof({{ name }}), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private {{ name }} _managed;
 
@@ -39,7 +39,7 @@
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private {{ name }} _managed;
         private Unmanaged _unmanaged;

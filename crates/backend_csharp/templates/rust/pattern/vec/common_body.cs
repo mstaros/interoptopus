@@ -76,7 +76,7 @@ public partial class {{ name }}
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         internal IntPtr _ptr;
         internal ulong _len;
@@ -95,9 +95,9 @@ public partial class {{ name }}
     }
 
     [CustomMarshaller(typeof({{ name }}), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private {{ name }} _managed;
 
@@ -111,7 +111,7 @@ public partial class {{ name }}
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private {{ name }} _managed;
         private Unmanaged _unmanaged;

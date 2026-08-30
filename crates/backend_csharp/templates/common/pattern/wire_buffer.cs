@@ -85,7 +85,7 @@ internal partial struct WireBuffer
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         public IntPtr data;
         public int len;
@@ -113,9 +113,9 @@ internal partial struct WireBuffer
     [CustomMarshaller(typeof(WireBuffer), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(WireBuffer), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private WireBuffer _managed;
 
@@ -129,7 +129,7 @@ internal partial struct WireBuffer
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private WireBuffer _managed;
         private Unmanaged _unmanaged;

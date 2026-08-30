@@ -205,7 +205,7 @@ public partial class SumDelegate2 : IDisposable
     private struct MarshallerMeta {  }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         internal IntPtr _callback;
         internal IntPtr _data;
@@ -226,9 +226,9 @@ public partial class SumDelegate2 : IDisposable
     }
 
     [CustomMarshaller(typeof(SumDelegate2), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private SumDelegate2 _managed;
 
@@ -242,7 +242,7 @@ public partial class SumDelegate2 : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private SumDelegate2 _managed;
         private Unmanaged _unmanaged;
@@ -420,7 +420,7 @@ public partial class MyCallback : IDisposable
     private struct MarshallerMeta {  }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         internal IntPtr _callback;
         internal IntPtr _data;
@@ -441,9 +441,9 @@ public partial class MyCallback : IDisposable
     }
 
     [CustomMarshaller(typeof(MyCallback), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private MyCallback _managed;
 
@@ -457,7 +457,7 @@ public partial class MyCallback : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private MyCallback _managed;
         private Unmanaged _unmanaged;
@@ -870,7 +870,7 @@ public partial struct Vec3f32
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal float x;
         internal float y;
@@ -925,9 +925,9 @@ public partial struct Vec3f32
     [CustomMarshaller(typeof(Vec3f32), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(Vec3f32), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private Vec3f32 _managed;
 
@@ -941,7 +941,7 @@ public partial struct Vec3f32
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private Vec3f32 _managed;
         private Unmanaged _unmanaged;
@@ -1012,7 +1012,7 @@ public partial struct ResultVec3f32Error : IUnion, IResult<Vec3f32, Error>
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -1196,9 +1196,9 @@ public partial struct ResultVec3f32Error : IUnion, IResult<Vec3f32, Error>
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultVec3f32Error), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultVec3f32Error _managed;
 
@@ -1212,7 +1212,7 @@ public partial struct ResultVec3f32Error : IUnion, IResult<Vec3f32, Error>
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultVec3f32Error _managed;
         private Unmanaged _unmanaged;

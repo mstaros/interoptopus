@@ -1,5 +1,6 @@
 ---
 source: crates/backend_csharp/tests/reference_plugins/wire.rs
+assertion_line: 9
 expression: multibuf
 ---
 === Interop.Common.cs ===
@@ -359,7 +360,7 @@ internal partial struct WireBuffer
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         public IntPtr data;
         public int len;
@@ -388,9 +389,9 @@ internal partial struct WireBuffer
     [CustomMarshaller(typeof(WireBuffer), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(WireBuffer), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private WireBuffer _managed;
 
@@ -404,7 +405,7 @@ internal partial struct WireBuffer
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private WireBuffer _managed;
         private Unmanaged _unmanaged;
@@ -553,9 +554,9 @@ public partial class WireOfHashMapStringString : IDisposable
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
-        public WireBuffer Buffer;
+        internal WireBuffer Buffer;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         [Obsolete("This method is intended for use by generated code only.")]
@@ -567,9 +568,9 @@ public partial class WireOfHashMapStringString : IDisposable
     }
 
     [CustomMarshaller(typeof(WireOfHashMapStringString), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private WireOfHashMapStringString _managed;
 
@@ -583,7 +584,7 @@ public partial class WireOfHashMapStringString : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private WireOfHashMapStringString _managed;
         private Unmanaged _unmanaged;
@@ -706,9 +707,9 @@ public partial class WireOfString : IDisposable
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
-        public WireBuffer Buffer;
+        internal WireBuffer Buffer;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         [Obsolete("This method is intended for use by generated code only.")]
@@ -720,9 +721,9 @@ public partial class WireOfString : IDisposable
     }
 
     [CustomMarshaller(typeof(WireOfString), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private WireOfString _managed;
 
@@ -736,7 +737,7 @@ public partial class WireOfString : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private WireOfString _managed;
         private Unmanaged _unmanaged;

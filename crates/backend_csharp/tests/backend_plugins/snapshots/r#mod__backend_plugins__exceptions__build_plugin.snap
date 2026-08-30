@@ -68,7 +68,7 @@ public partial struct DotnetException
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal ulong exception_id;
 
@@ -115,9 +115,9 @@ public partial struct DotnetException
     [CustomMarshaller(typeof(DotnetException), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(DotnetException), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private DotnetException _managed;
 
@@ -131,7 +131,7 @@ public partial struct DotnetException
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private DotnetException _managed;
         private Unmanaged _unmanaged;
@@ -206,7 +206,7 @@ public partial class ResultNestedADotnetException : IUnion, IResult<NestedA, Dot
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -399,9 +399,9 @@ public partial class ResultNestedADotnetException : IUnion, IResult<NestedA, Dot
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultNestedADotnetException), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultNestedADotnetException _managed;
 
@@ -415,7 +415,7 @@ public partial class ResultNestedADotnetException : IUnion, IResult<NestedA, Dot
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultNestedADotnetException _managed;
         private Unmanaged _unmanaged;
@@ -486,7 +486,7 @@ public partial struct ResultUintDotnetException : IUnion, IResult<uint, DotnetEx
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -671,9 +671,9 @@ public partial struct ResultUintDotnetException : IUnion, IResult<uint, DotnetEx
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultUintDotnetException), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultUintDotnetException _managed;
 
@@ -687,7 +687,7 @@ public partial struct ResultUintDotnetException : IUnion, IResult<uint, DotnetEx
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultUintDotnetException _managed;
         private Unmanaged _unmanaged;

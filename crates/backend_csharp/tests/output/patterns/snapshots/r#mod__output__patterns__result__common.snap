@@ -86,7 +86,7 @@ public partial struct ResultUintVoid : IUnion, IResult<uint, Unit>
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -253,9 +253,9 @@ public partial struct ResultUintVoid : IUnion, IResult<uint, Unit>
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultUintVoid), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultUintVoid _managed;
 
@@ -269,7 +269,7 @@ public partial struct ResultUintVoid : IUnion, IResult<uint, Unit>
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultUintVoid _managed;
         private Unmanaged _unmanaged;

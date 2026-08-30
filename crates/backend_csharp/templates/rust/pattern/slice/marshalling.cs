@@ -96,7 +96,7 @@ public partial class {{ name }} : IDisposable
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         public IntPtr _data;
         public ulong _len;

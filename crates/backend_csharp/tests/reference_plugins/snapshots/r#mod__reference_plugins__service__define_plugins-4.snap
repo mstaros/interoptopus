@@ -1,5 +1,6 @@
 ---
 source: crates/backend_csharp/tests/reference_plugins/service.rs
+assertion_line: 12
 expression: multibuf
 ---
 === Interop.Common.cs ===
@@ -751,7 +752,7 @@ public partial class ResultNestedAError : IUnion, IResult<NestedA, Error>, IDisp
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -943,9 +944,9 @@ public partial class ResultNestedAError : IUnion, IResult<NestedA, Error>, IDisp
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultNestedAError), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultNestedAError _managed;
 
@@ -959,7 +960,7 @@ public partial class ResultNestedAError : IUnion, IResult<NestedA, Error>, IDisp
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultNestedAError _managed;
         private Unmanaged _unmanaged;

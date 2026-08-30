@@ -145,7 +145,7 @@ delegate void {{ name }}Destructor(IntPtr data);
     private struct MarshallerMeta {  }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         internal IntPtr _callback;
         internal IntPtr _data;
@@ -165,9 +165,9 @@ delegate void {{ name }}Destructor(IntPtr data);
     }
 
     [CustomMarshaller(typeof({{ name }}), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private {{ name }} _managed;
 
@@ -181,7 +181,7 @@ delegate void {{ name }}Destructor(IntPtr data);
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private {{ name }} _managed;
         private Unmanaged _unmanaged;

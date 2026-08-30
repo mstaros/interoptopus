@@ -1,5 +1,6 @@
 ---
 source: crates/backend_csharp/tests/backend_plugins/memory.rs
+assertion_line: 36
 expression: multibuf
 ---
 === Interop.Common.cs ===
@@ -67,7 +68,7 @@ public partial struct DotnetException
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal ulong exception_id;
 
@@ -114,9 +115,9 @@ public partial struct DotnetException
     [CustomMarshaller(typeof(DotnetException), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(DotnetException), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private DotnetException _managed;
 
@@ -130,7 +131,7 @@ public partial struct DotnetException
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private DotnetException _managed;
         private Unmanaged _unmanaged;
@@ -205,7 +206,7 @@ public partial class ResultFliparooDotnetException : IUnion, IResult<Fliparoo, D
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -398,9 +399,9 @@ public partial class ResultFliparooDotnetException : IUnion, IResult<Fliparoo, D
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultFliparooDotnetException), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultFliparooDotnetException _managed;
 
@@ -414,7 +415,7 @@ public partial class ResultFliparooDotnetException : IUnion, IResult<Fliparoo, D
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultFliparooDotnetException _managed;
         private Unmanaged _unmanaged;
@@ -489,7 +490,7 @@ public partial class ResultHeavyDotnetException : IUnion, IResult<Heavy, DotnetE
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -682,9 +683,9 @@ public partial class ResultHeavyDotnetException : IUnion, IResult<Heavy, DotnetE
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultHeavyDotnetException), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultHeavyDotnetException _managed;
 
@@ -698,7 +699,7 @@ public partial class ResultHeavyDotnetException : IUnion, IResult<Heavy, DotnetE
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultHeavyDotnetException _managed;
         private Unmanaged _unmanaged;

@@ -93,7 +93,7 @@ public partial class OptionUtf8String : IUnion, IDisposable
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -218,9 +218,9 @@ public partial class OptionUtf8String : IUnion, IDisposable
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(OptionUtf8String), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private OptionUtf8String _managed;
 
@@ -234,7 +234,7 @@ public partial class OptionUtf8String : IUnion, IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private OptionUtf8String _managed;
         private Unmanaged _unmanaged;
@@ -292,7 +292,7 @@ public partial struct OptionUint : IUnion
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -408,9 +408,9 @@ public partial struct OptionUint : IUnion
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(OptionUint), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private OptionUint _managed;
 
@@ -424,7 +424,7 @@ public partial struct OptionUint : IUnion
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private OptionUint _managed;
         private Unmanaged _unmanaged;
@@ -482,7 +482,7 @@ public partial struct OptionVec : IUnion
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -598,9 +598,9 @@ public partial struct OptionVec : IUnion
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(OptionVec), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private OptionVec _managed;
 
@@ -614,7 +614,7 @@ public partial struct OptionVec : IUnion
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private OptionVec _managed;
         private Unmanaged _unmanaged;
@@ -667,7 +667,7 @@ public partial struct ResultVoidVoid : IUnion, IResult<Unit, Unit>
 
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -835,9 +835,9 @@ public partial struct ResultVoidVoid : IUnion, IResult<Unit, Unit>
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultVoidVoid), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultVoidVoid _managed;
 
@@ -851,7 +851,7 @@ public partial struct ResultVoidVoid : IUnion, IResult<Unit, Unit>
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultVoidVoid _managed;
         private Unmanaged _unmanaged;
@@ -894,7 +894,7 @@ public partial struct Vec
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal double x;
         internal double z;
@@ -945,9 +945,9 @@ public partial struct Vec
     [CustomMarshaller(typeof(Vec), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(Vec), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private Vec _managed;
 
@@ -961,7 +961,7 @@ public partial struct Vec
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private Vec _managed;
         private Unmanaged _unmanaged;
@@ -1140,7 +1140,7 @@ public partial class CallbackFFISlice : IDisposable
     private struct MarshallerMeta {  }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         internal IntPtr _callback;
         internal IntPtr _data;
@@ -1161,9 +1161,9 @@ public partial class CallbackFFISlice : IDisposable
     }
 
     [CustomMarshaller(typeof(CallbackFFISlice), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private CallbackFFISlice _managed;
 
@@ -1177,7 +1177,7 @@ public partial class CallbackFFISlice : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private CallbackFFISlice _managed;
         private Unmanaged _unmanaged;
@@ -1355,7 +1355,7 @@ public partial class CallbackU8 : IDisposable
     private struct MarshallerMeta {  }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         internal IntPtr _callback;
         internal IntPtr _data;
@@ -1376,9 +1376,9 @@ public partial class CallbackU8 : IDisposable
     }
 
     [CustomMarshaller(typeof(CallbackU8), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private CallbackU8 _managed;
 
@@ -1392,7 +1392,7 @@ public partial class CallbackU8 : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private CallbackU8 _managed;
         private Unmanaged _unmanaged;
@@ -1570,7 +1570,7 @@ public partial class SumDelegate2 : IDisposable
     private struct MarshallerMeta {  }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         internal IntPtr _callback;
         internal IntPtr _data;
@@ -1591,9 +1591,9 @@ public partial class SumDelegate2 : IDisposable
     }
 
     [CustomMarshaller(typeof(SumDelegate2), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private SumDelegate2 _managed;
 
@@ -1607,7 +1607,7 @@ public partial class SumDelegate2 : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private SumDelegate2 _managed;
         private Unmanaged _unmanaged;
@@ -1785,7 +1785,7 @@ public partial class CStrPassthrough : IDisposable
     private struct MarshallerMeta {  }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         internal IntPtr _callback;
         internal IntPtr _data;
@@ -1806,9 +1806,9 @@ public partial class CStrPassthrough : IDisposable
     }
 
     [CustomMarshaller(typeof(CStrPassthrough), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private CStrPassthrough _managed;
 
@@ -1822,7 +1822,7 @@ public partial class CStrPassthrough : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private CStrPassthrough _managed;
         private Unmanaged _unmanaged;
@@ -2000,7 +2000,7 @@ public partial class MyCallbackNamespaced : IDisposable
     private struct MarshallerMeta {  }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         internal IntPtr _callback;
         internal IntPtr _data;
@@ -2021,9 +2021,9 @@ public partial class MyCallbackNamespaced : IDisposable
     }
 
     [CustomMarshaller(typeof(MyCallbackNamespaced), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private MyCallbackNamespaced _managed;
 
@@ -2037,7 +2037,7 @@ public partial class MyCallbackNamespaced : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private MyCallbackNamespaced _managed;
         private Unmanaged _unmanaged;
@@ -2215,7 +2215,7 @@ public partial class MyCallback : IDisposable
     private struct MarshallerMeta {  }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         internal IntPtr _callback;
         internal IntPtr _data;
@@ -2236,9 +2236,9 @@ public partial class MyCallback : IDisposable
     }
 
     [CustomMarshaller(typeof(MyCallback), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private MyCallback _managed;
 
@@ -2252,7 +2252,7 @@ public partial class MyCallback : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private MyCallback _managed;
         private Unmanaged _unmanaged;
@@ -2430,7 +2430,7 @@ public partial class CallbackSliceMut : IDisposable
     private struct MarshallerMeta {  }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         internal IntPtr _callback;
         internal IntPtr _data;
@@ -2451,9 +2451,9 @@ public partial class CallbackSliceMut : IDisposable
     }
 
     [CustomMarshaller(typeof(CallbackSliceMut), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private CallbackSliceMut _managed;
 
@@ -2467,7 +2467,7 @@ public partial class CallbackSliceMut : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private CallbackSliceMut _managed;
         private Unmanaged _unmanaged;
@@ -2645,7 +2645,7 @@ public partial class MyCallbackContextual : IDisposable
     private struct MarshallerMeta {  }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         internal IntPtr _callback;
         internal IntPtr _data;
@@ -2666,9 +2666,9 @@ public partial class MyCallbackContextual : IDisposable
     }
 
     [CustomMarshaller(typeof(MyCallbackContextual), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private MyCallbackContextual _managed;
 
@@ -2682,7 +2682,7 @@ public partial class MyCallbackContextual : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private MyCallbackContextual _managed;
         private Unmanaged _unmanaged;
@@ -2860,7 +2860,7 @@ public partial class MyCallbackVoid : IDisposable
     private struct MarshallerMeta {  }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         internal IntPtr _callback;
         internal IntPtr _data;
@@ -2881,9 +2881,9 @@ public partial class MyCallbackVoid : IDisposable
     }
 
     [CustomMarshaller(typeof(MyCallbackVoid), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private MyCallbackVoid _managed;
 
@@ -2897,7 +2897,7 @@ public partial class MyCallbackVoid : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private MyCallbackVoid _managed;
         private Unmanaged _unmanaged;
@@ -3075,7 +3075,7 @@ public partial class Pointers : IDisposable
     private struct MarshallerMeta {  }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         internal IntPtr _callback;
         internal IntPtr _data;
@@ -3096,9 +3096,9 @@ public partial class Pointers : IDisposable
     }
 
     [CustomMarshaller(typeof(Pointers), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private Pointers _managed;
 
@@ -3112,7 +3112,7 @@ public partial class Pointers : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private Pointers _managed;
         private Unmanaged _unmanaged;
@@ -3290,7 +3290,7 @@ public partial class StringCallback : IDisposable
     private struct MarshallerMeta {  }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         internal IntPtr _callback;
         internal IntPtr _data;
@@ -3311,9 +3311,9 @@ public partial class StringCallback : IDisposable
     }
 
     [CustomMarshaller(typeof(StringCallback), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private StringCallback _managed;
 
@@ -3327,7 +3327,7 @@ public partial class StringCallback : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private StringCallback _managed;
         private Unmanaged _unmanaged;
@@ -3505,7 +3505,7 @@ public partial class SumDelegate1 : IDisposable
     private struct MarshallerMeta {  }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         internal IntPtr _callback;
         internal IntPtr _data;
@@ -3526,9 +3526,9 @@ public partial class SumDelegate1 : IDisposable
     }
 
     [CustomMarshaller(typeof(SumDelegate1), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private SumDelegate1 _managed;
 
@@ -3542,7 +3542,7 @@ public partial class SumDelegate1 : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private SumDelegate1 _managed;
         private Unmanaged _unmanaged;
@@ -3720,7 +3720,7 @@ public partial class SumDelegateReturn2 : IDisposable
     private struct MarshallerMeta {  }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         internal IntPtr _callback;
         internal IntPtr _data;
@@ -3741,9 +3741,9 @@ public partial class SumDelegateReturn2 : IDisposable
     }
 
     [CustomMarshaller(typeof(SumDelegateReturn2), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private SumDelegateReturn2 _managed;
 
@@ -3757,7 +3757,7 @@ public partial class SumDelegateReturn2 : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private SumDelegateReturn2 _managed;
         private Unmanaged _unmanaged;
@@ -3897,7 +3897,7 @@ public partial class SliceBool : IEnumerable<Bool>, IDisposable
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         public IntPtr _data;
         public ulong _len;
@@ -3913,9 +3913,9 @@ public partial class SliceBool : IEnumerable<Bool>, IDisposable
 }public partial class SliceBool
 {
     [CustomMarshaller(typeof(SliceBool), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private SliceBool _managed;
 
@@ -3929,7 +3929,7 @@ public partial class SliceBool : IEnumerable<Bool>, IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private SliceBool _managed;
         private Unmanaged _unmanaged;
@@ -4072,7 +4072,7 @@ public partial class SliceByte : IEnumerable<byte>, IDisposable
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         public IntPtr _data;
         public ulong _len;
@@ -4088,9 +4088,9 @@ public partial class SliceByte : IEnumerable<byte>, IDisposable
 }public partial class SliceByte
 {
     [CustomMarshaller(typeof(SliceByte), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private SliceByte _managed;
 
@@ -4104,7 +4104,7 @@ public partial class SliceByte : IEnumerable<byte>, IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private SliceByte _managed;
         private Unmanaged _unmanaged;
@@ -4247,7 +4247,7 @@ public partial class SliceInt : IEnumerable<int>, IDisposable
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         public IntPtr _data;
         public ulong _len;
@@ -4263,9 +4263,9 @@ public partial class SliceInt : IEnumerable<int>, IDisposable
 }public partial class SliceInt
 {
     [CustomMarshaller(typeof(SliceInt), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private SliceInt _managed;
 
@@ -4279,7 +4279,7 @@ public partial class SliceInt : IEnumerable<int>, IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private SliceInt _managed;
         private Unmanaged _unmanaged;
@@ -4429,7 +4429,7 @@ public partial class SliceMutByte : IEnumerable<byte>, IDisposable
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         public IntPtr _data;
         public ulong _len;
@@ -4445,9 +4445,9 @@ public partial class SliceMutByte : IEnumerable<byte>, IDisposable
 }public partial class SliceMutByte
 {
     [CustomMarshaller(typeof(SliceMutByte), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private SliceMutByte _managed;
 
@@ -4461,7 +4461,7 @@ public partial class SliceMutByte : IEnumerable<byte>, IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private SliceMutByte _managed;
         private Unmanaged _unmanaged;
@@ -4611,7 +4611,7 @@ public partial class SliceMutUint : IEnumerable<uint>, IDisposable
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         public IntPtr _data;
         public ulong _len;
@@ -4627,9 +4627,9 @@ public partial class SliceMutUint : IEnumerable<uint>, IDisposable
 }public partial class SliceMutUint
 {
     [CustomMarshaller(typeof(SliceMutUint), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private SliceMutUint _managed;
 
@@ -4643,7 +4643,7 @@ public partial class SliceMutUint : IEnumerable<uint>, IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private SliceMutUint _managed;
         private Unmanaged _unmanaged;
@@ -4776,7 +4776,7 @@ public partial class SliceMutVec : IDisposable
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         public IntPtr _data;
         public ulong _len;
@@ -4795,9 +4795,9 @@ public partial class SliceMutVec : IDisposable
 }public partial class SliceMutVec
 {
     [CustomMarshaller(typeof(SliceMutVec), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private SliceMutVec _managed;
 
@@ -4811,7 +4811,7 @@ public partial class SliceMutVec : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private SliceMutVec _managed;
         private Unmanaged _unmanaged;
@@ -4936,7 +4936,7 @@ public partial class SliceOptionUtf8String : IDisposable
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         public IntPtr _data;
         public ulong _len;
@@ -4955,9 +4955,9 @@ public partial class SliceOptionUtf8String : IDisposable
 }public partial class SliceOptionUtf8String
 {
     [CustomMarshaller(typeof(SliceOptionUtf8String), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private SliceOptionUtf8String _managed;
 
@@ -4971,7 +4971,7 @@ public partial class SliceOptionUtf8String : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private SliceOptionUtf8String _managed;
         private Unmanaged _unmanaged;
@@ -5114,7 +5114,7 @@ public partial class SliceUint : IEnumerable<uint>, IDisposable
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         public IntPtr _data;
         public ulong _len;
@@ -5130,9 +5130,9 @@ public partial class SliceUint : IEnumerable<uint>, IDisposable
 }public partial class SliceUint
 {
     [CustomMarshaller(typeof(SliceUint), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private SliceUint _managed;
 
@@ -5146,7 +5146,7 @@ public partial class SliceUint : IEnumerable<uint>, IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private SliceUint _managed;
         private Unmanaged _unmanaged;
@@ -5264,7 +5264,7 @@ public partial class SliceUtf8String : IDisposable
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         public IntPtr _data;
         public ulong _len;
@@ -5283,9 +5283,9 @@ public partial class SliceUtf8String : IDisposable
 }public partial class SliceUtf8String
 {
     [CustomMarshaller(typeof(SliceUtf8String), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private SliceUtf8String _managed;
 
@@ -5299,7 +5299,7 @@ public partial class SliceUtf8String : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private SliceUtf8String _managed;
         private Unmanaged _unmanaged;
@@ -5432,7 +5432,7 @@ public partial class SliceVec : IDisposable
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         public IntPtr _data;
         public ulong _len;
@@ -5451,9 +5451,9 @@ public partial class SliceVec : IDisposable
 }public partial class SliceVec
 {
     [CustomMarshaller(typeof(SliceVec), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private SliceVec _managed;
 
@@ -5467,7 +5467,7 @@ public partial class SliceVec : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private SliceVec _managed;
         private Unmanaged _unmanaged;
@@ -5590,7 +5590,7 @@ public partial class VecByte
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         internal IntPtr _ptr;
         internal ulong _len;
@@ -5610,9 +5610,9 @@ public partial class VecByte
     }
 
     [CustomMarshaller(typeof(VecByte), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private VecByte _managed;
 
@@ -5626,7 +5626,7 @@ public partial class VecByte
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private VecByte _managed;
         private Unmanaged _unmanaged;
@@ -5812,7 +5812,7 @@ public partial class VecUtf8String
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         internal IntPtr _ptr;
         internal ulong _len;
@@ -5832,9 +5832,9 @@ public partial class VecUtf8String
     }
 
     [CustomMarshaller(typeof(VecUtf8String), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private VecUtf8String _managed;
 
@@ -5848,7 +5848,7 @@ public partial class VecUtf8String
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private VecUtf8String _managed;
         private Unmanaged _unmanaged;
@@ -6250,7 +6250,7 @@ public partial class Utf8String : IDisposable
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         public IntPtr _ptr;
         public ulong _len;
@@ -6292,9 +6292,9 @@ public partial class Utf8String : IDisposable
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(Utf8String), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private Utf8String _managed;
 
@@ -6308,7 +6308,7 @@ public partial class Utf8String : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private Utf8String _managed; // Used when converting managed -> unmanaged
         private Unmanaged _unmanaged; // Used when converting unmanaged -> managed
@@ -6437,7 +6437,7 @@ internal partial struct WireBuffer
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         public IntPtr data;
         public int len;
@@ -6466,9 +6466,9 @@ internal partial struct WireBuffer
     [CustomMarshaller(typeof(WireBuffer), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(WireBuffer), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private WireBuffer _managed;
 
@@ -6482,7 +6482,7 @@ internal partial struct WireBuffer
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private WireBuffer _managed;
         private Unmanaged _unmanaged;
@@ -6642,9 +6642,9 @@ public partial class WireOfHashMapStringString : IDisposable
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
-        public WireBuffer Buffer;
+        internal WireBuffer Buffer;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         [Obsolete("This method is intended for use by generated code only.")]
@@ -6656,9 +6656,9 @@ public partial class WireOfHashMapStringString : IDisposable
     }
 
     [CustomMarshaller(typeof(WireOfHashMapStringString), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private WireOfHashMapStringString _managed;
 
@@ -6672,7 +6672,7 @@ public partial class WireOfHashMapStringString : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private WireOfHashMapStringString _managed;
         private Unmanaged _unmanaged;
@@ -6805,9 +6805,9 @@ public partial class WireOfU832 : IDisposable
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
-        public WireBuffer Buffer;
+        internal WireBuffer Buffer;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         [Obsolete("This method is intended for use by generated code only.")]
@@ -6819,9 +6819,9 @@ public partial class WireOfU832 : IDisposable
     }
 
     [CustomMarshaller(typeof(WireOfU832), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private WireOfU832 _managed;
 
@@ -6835,7 +6835,7 @@ public partial class WireOfU832 : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private WireOfU832 _managed;
         private Unmanaged _unmanaged;
@@ -6958,9 +6958,9 @@ public partial class WireOfString : IDisposable
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
-        public WireBuffer Buffer;
+        internal WireBuffer Buffer;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         [Obsolete("This method is intended for use by generated code only.")]
@@ -6972,9 +6972,9 @@ public partial class WireOfString : IDisposable
     }
 
     [CustomMarshaller(typeof(WireOfString), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private WireOfString _managed;
 
@@ -6988,7 +6988,7 @@ public partial class WireOfString : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private WireOfString _managed;
         private Unmanaged _unmanaged;
@@ -10225,7 +10225,7 @@ public partial class Layer3String : IUnion, IDisposable
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal byte _variant;
@@ -10356,9 +10356,9 @@ public partial class Layer3String : IUnion, IDisposable
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(Layer3String), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private Layer3String _managed;
 
@@ -10372,7 +10372,7 @@ public partial class Layer3String : IUnion, IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private Layer3String _managed;
         private Unmanaged _unmanaged;
@@ -10474,7 +10474,7 @@ public partial struct EnumExplicitPayload : IUnion
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal byte _variant;
@@ -10625,9 +10625,9 @@ public partial struct EnumExplicitPayload : IUnion
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(EnumExplicitPayload), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private EnumExplicitPayload _managed;
 
@@ -10641,7 +10641,7 @@ public partial struct EnumExplicitPayload : IUnion
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private EnumExplicitPayload _managed;
         private Unmanaged _unmanaged;
@@ -10703,7 +10703,7 @@ public partial class OptionOptionResultOptionUtf8StringError : IUnion, IDisposab
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -10828,9 +10828,9 @@ public partial class OptionOptionResultOptionUtf8StringError : IUnion, IDisposab
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(OptionOptionResultOptionUtf8StringError), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private OptionOptionResultOptionUtf8StringError _managed;
 
@@ -10844,7 +10844,7 @@ public partial class OptionOptionResultOptionUtf8StringError : IUnion, IDisposab
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private OptionOptionResultOptionUtf8StringError _managed;
         private Unmanaged _unmanaged;
@@ -10906,7 +10906,7 @@ public partial class OptionResultOptionUtf8StringError : IUnion, IDisposable
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -11031,9 +11031,9 @@ public partial class OptionResultOptionUtf8StringError : IUnion, IDisposable
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(OptionResultOptionUtf8StringError), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private OptionResultOptionUtf8StringError _managed;
 
@@ -11047,7 +11047,7 @@ public partial class OptionResultOptionUtf8StringError : IUnion, IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private OptionResultOptionUtf8StringError _managed;
         private Unmanaged _unmanaged;
@@ -11105,7 +11105,7 @@ public partial struct OptionEnumPayload : IUnion
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -11221,9 +11221,9 @@ public partial struct OptionEnumPayload : IUnion
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(OptionEnumPayload), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private OptionEnumPayload _managed;
 
@@ -11237,7 +11237,7 @@ public partial struct OptionEnumPayload : IUnion
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private OptionEnumPayload _managed;
         private Unmanaged _unmanaged;
@@ -11295,7 +11295,7 @@ public partial struct OptionInner : IUnion
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -11411,9 +11411,9 @@ public partial struct OptionInner : IUnion
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(OptionInner), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private OptionInner _managed;
 
@@ -11427,7 +11427,7 @@ public partial struct OptionInner : IUnion
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private OptionInner _managed;
         private Unmanaged _unmanaged;
@@ -11502,7 +11502,7 @@ public partial class ResultOptionUtf8StringError : IUnion, IResult<OptionUtf8Str
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -11677,9 +11677,9 @@ public partial class ResultOptionUtf8StringError : IUnion, IResult<OptionUtf8Str
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultOptionUtf8StringError), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultOptionUtf8StringError _managed;
 
@@ -11693,7 +11693,7 @@ public partial class ResultOptionUtf8StringError : IUnion, IResult<OptionUtf8Str
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultOptionUtf8StringError _managed;
         private Unmanaged _unmanaged;
@@ -11768,7 +11768,7 @@ public partial class ResultServiceAsyncCancelError : IUnion, IResult<IntPtr, Err
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -11942,9 +11942,9 @@ public partial class ResultServiceAsyncCancelError : IUnion, IResult<IntPtr, Err
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultServiceAsyncCancelError), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultServiceAsyncCancelError _managed;
 
@@ -11958,7 +11958,7 @@ public partial class ResultServiceAsyncCancelError : IUnion, IResult<IntPtr, Err
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultServiceAsyncCancelError _managed;
         private Unmanaged _unmanaged;
@@ -12033,7 +12033,7 @@ public partial class ResultServiceAsyncCtorError : IUnion, IResult<IntPtr, Error
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -12207,9 +12207,9 @@ public partial class ResultServiceAsyncCtorError : IUnion, IResult<IntPtr, Error
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultServiceAsyncCtorError), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultServiceAsyncCtorError _managed;
 
@@ -12223,7 +12223,7 @@ public partial class ResultServiceAsyncCtorError : IUnion, IResult<IntPtr, Error
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultServiceAsyncCtorError _managed;
         private Unmanaged _unmanaged;
@@ -12298,7 +12298,7 @@ public partial class ResultServiceAsyncPanicError : IUnion, IResult<IntPtr, Erro
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -12472,9 +12472,9 @@ public partial class ResultServiceAsyncPanicError : IUnion, IResult<IntPtr, Erro
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultServiceAsyncPanicError), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultServiceAsyncPanicError _managed;
 
@@ -12488,7 +12488,7 @@ public partial class ResultServiceAsyncPanicError : IUnion, IResult<IntPtr, Erro
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultServiceAsyncPanicError _managed;
         private Unmanaged _unmanaged;
@@ -12563,7 +12563,7 @@ public partial class ResultServiceAsyncResultError : IUnion, IResult<IntPtr, Err
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -12737,9 +12737,9 @@ public partial class ResultServiceAsyncResultError : IUnion, IResult<IntPtr, Err
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultServiceAsyncResultError), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultServiceAsyncResultError _managed;
 
@@ -12753,7 +12753,7 @@ public partial class ResultServiceAsyncResultError : IUnion, IResult<IntPtr, Err
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultServiceAsyncResultError _managed;
         private Unmanaged _unmanaged;
@@ -12828,7 +12828,7 @@ public partial class ResultServiceAsyncSleepError : IUnion, IResult<IntPtr, Erro
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -13002,9 +13002,9 @@ public partial class ResultServiceAsyncSleepError : IUnion, IResult<IntPtr, Erro
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultServiceAsyncSleepError), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultServiceAsyncSleepError _managed;
 
@@ -13018,7 +13018,7 @@ public partial class ResultServiceAsyncSleepError : IUnion, IResult<IntPtr, Erro
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultServiceAsyncSleepError _managed;
         private Unmanaged _unmanaged;
@@ -13093,7 +13093,7 @@ public partial class ResultServiceAsyncStructsError : IUnion, IResult<IntPtr, Er
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -13267,9 +13267,9 @@ public partial class ResultServiceAsyncStructsError : IUnion, IResult<IntPtr, Er
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultServiceAsyncStructsError), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultServiceAsyncStructsError _managed;
 
@@ -13283,7 +13283,7 @@ public partial class ResultServiceAsyncStructsError : IUnion, IResult<IntPtr, Er
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultServiceAsyncStructsError _managed;
         private Unmanaged _unmanaged;
@@ -13358,7 +13358,7 @@ public partial class ResultServiceAsyncVecStringError : IUnion, IResult<IntPtr, 
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -13532,9 +13532,9 @@ public partial class ResultServiceAsyncVecStringError : IUnion, IResult<IntPtr, 
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultServiceAsyncVecStringError), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultServiceAsyncVecStringError _managed;
 
@@ -13548,7 +13548,7 @@ public partial class ResultServiceAsyncVecStringError : IUnion, IResult<IntPtr, 
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultServiceAsyncVecStringError _managed;
         private Unmanaged _unmanaged;
@@ -13623,7 +13623,7 @@ public partial class ResultServiceAsyncWireError : IUnion, IResult<IntPtr, Error
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -13797,9 +13797,9 @@ public partial class ResultServiceAsyncWireError : IUnion, IResult<IntPtr, Error
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultServiceAsyncWireError), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultServiceAsyncWireError _managed;
 
@@ -13813,7 +13813,7 @@ public partial class ResultServiceAsyncWireError : IUnion, IResult<IntPtr, Error
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultServiceAsyncWireError _managed;
         private Unmanaged _unmanaged;
@@ -13888,7 +13888,7 @@ public partial class ResultServiceCallbacksError : IUnion, IResult<IntPtr, Error
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -14062,9 +14062,9 @@ public partial class ResultServiceCallbacksError : IUnion, IResult<IntPtr, Error
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultServiceCallbacksError), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultServiceCallbacksError _managed;
 
@@ -14078,7 +14078,7 @@ public partial class ResultServiceCallbacksError : IUnion, IResult<IntPtr, Error
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultServiceCallbacksError _managed;
         private Unmanaged _unmanaged;
@@ -14153,7 +14153,7 @@ public partial class ResultServiceDependentError : IUnion, IResult<IntPtr, Error
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -14327,9 +14327,9 @@ public partial class ResultServiceDependentError : IUnion, IResult<IntPtr, Error
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultServiceDependentError), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultServiceDependentError _managed;
 
@@ -14343,7 +14343,7 @@ public partial class ResultServiceDependentError : IUnion, IResult<IntPtr, Error
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultServiceDependentError _managed;
         private Unmanaged _unmanaged;
@@ -14418,7 +14418,7 @@ public partial class ResultServiceIgnoringMethodsError : IUnion, IResult<IntPtr,
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -14592,9 +14592,9 @@ public partial class ResultServiceIgnoringMethodsError : IUnion, IResult<IntPtr,
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultServiceIgnoringMethodsError), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultServiceIgnoringMethodsError _managed;
 
@@ -14608,7 +14608,7 @@ public partial class ResultServiceIgnoringMethodsError : IUnion, IResult<IntPtr,
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultServiceIgnoringMethodsError _managed;
         private Unmanaged _unmanaged;
@@ -14683,7 +14683,7 @@ public partial class ResultServiceMainError : IUnion, IResult<IntPtr, Error>, ID
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -14857,9 +14857,9 @@ public partial class ResultServiceMainError : IUnion, IResult<IntPtr, Error>, ID
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultServiceMainError), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultServiceMainError _managed;
 
@@ -14873,7 +14873,7 @@ public partial class ResultServiceMainError : IUnion, IResult<IntPtr, Error>, ID
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultServiceMainError _managed;
         private Unmanaged _unmanaged;
@@ -14948,7 +14948,7 @@ public partial class ResultServiceMultipleCtorsError : IUnion, IResult<IntPtr, E
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -15122,9 +15122,9 @@ public partial class ResultServiceMultipleCtorsError : IUnion, IResult<IntPtr, E
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultServiceMultipleCtorsError), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultServiceMultipleCtorsError _managed;
 
@@ -15138,7 +15138,7 @@ public partial class ResultServiceMultipleCtorsError : IUnion, IResult<IntPtr, E
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultServiceMultipleCtorsError _managed;
         private Unmanaged _unmanaged;
@@ -15213,7 +15213,7 @@ public partial class ResultServiceResultError : IUnion, IResult<IntPtr, Error>, 
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -15387,9 +15387,9 @@ public partial class ResultServiceResultError : IUnion, IResult<IntPtr, Error>, 
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultServiceResultError), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultServiceResultError _managed;
 
@@ -15403,7 +15403,7 @@ public partial class ResultServiceResultError : IUnion, IResult<IntPtr, Error>, 
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultServiceResultError _managed;
         private Unmanaged _unmanaged;
@@ -15478,7 +15478,7 @@ public partial class ResultServiceStringsError : IUnion, IResult<IntPtr, Error>,
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -15652,9 +15652,9 @@ public partial class ResultServiceStringsError : IUnion, IResult<IntPtr, Error>,
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultServiceStringsError), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultServiceStringsError _managed;
 
@@ -15668,7 +15668,7 @@ public partial class ResultServiceStringsError : IUnion, IResult<IntPtr, Error>,
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultServiceStringsError _managed;
         private Unmanaged _unmanaged;
@@ -15743,7 +15743,7 @@ public partial class ResultServiceVariousSlicesError : IUnion, IResult<IntPtr, E
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -15917,9 +15917,9 @@ public partial class ResultServiceVariousSlicesError : IUnion, IResult<IntPtr, E
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultServiceVariousSlicesError), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultServiceVariousSlicesError _managed;
 
@@ -15933,7 +15933,7 @@ public partial class ResultServiceVariousSlicesError : IUnion, IResult<IntPtr, E
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultServiceVariousSlicesError _managed;
         private Unmanaged _unmanaged;
@@ -16008,7 +16008,7 @@ public partial class ResultUseStringError : IUnion, IResult<UseString, Error>, I
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -16183,9 +16183,9 @@ public partial class ResultUseStringError : IUnion, IResult<UseString, Error>, I
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultUseStringError), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultUseStringError _managed;
 
@@ -16199,7 +16199,7 @@ public partial class ResultUseStringError : IUnion, IResult<UseString, Error>, I
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultUseStringError _managed;
         private Unmanaged _unmanaged;
@@ -16274,7 +16274,7 @@ public partial class ResultUtf8StringError : IUnion, IResult<Utf8String, Error>,
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -16449,9 +16449,9 @@ public partial class ResultUtf8StringError : IUnion, IResult<Utf8String, Error>,
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultUtf8StringError), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultUtf8StringError _managed;
 
@@ -16465,7 +16465,7 @@ public partial class ResultUtf8StringError : IUnion, IResult<Utf8String, Error>,
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultUtf8StringError _managed;
         private Unmanaged _unmanaged;
@@ -16540,7 +16540,7 @@ public partial class ResultVecUtf8StringError : IUnion, IResult<VecUtf8String, E
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -16715,9 +16715,9 @@ public partial class ResultVecUtf8StringError : IUnion, IResult<VecUtf8String, E
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultVecUtf8StringError), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultVecUtf8StringError _managed;
 
@@ -16731,7 +16731,7 @@ public partial class ResultVecUtf8StringError : IUnion, IResult<VecUtf8String, E
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultVecUtf8StringError _managed;
         private Unmanaged _unmanaged;
@@ -16806,7 +16806,7 @@ public partial class ResultWireOfHashMapStringStringError : IUnion, IResult<Wire
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -16981,9 +16981,9 @@ public partial class ResultWireOfHashMapStringStringError : IUnion, IResult<Wire
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultWireOfHashMapStringStringError), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultWireOfHashMapStringStringError _managed;
 
@@ -16997,7 +16997,7 @@ public partial class ResultWireOfHashMapStringStringError : IUnion, IResult<Wire
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultWireOfHashMapStringStringError _managed;
         private Unmanaged _unmanaged;
@@ -17068,7 +17068,7 @@ public partial struct ResultNestedArrayError : IUnion, IResult<NestedArray, Erro
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -17234,9 +17234,9 @@ public partial struct ResultNestedArrayError : IUnion, IResult<NestedArray, Erro
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultNestedArrayError), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultNestedArrayError _managed;
 
@@ -17250,7 +17250,7 @@ public partial struct ResultNestedArrayError : IUnion, IResult<NestedArray, Erro
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultNestedArrayError _managed;
         private Unmanaged _unmanaged;
@@ -17321,7 +17321,7 @@ public partial struct ResultOptionEnumPayloadError : IUnion, IResult<OptionEnumP
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -17487,9 +17487,9 @@ public partial struct ResultOptionEnumPayloadError : IUnion, IResult<OptionEnumP
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultOptionEnumPayloadError), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultOptionEnumPayloadError _managed;
 
@@ -17503,7 +17503,7 @@ public partial struct ResultOptionEnumPayloadError : IUnion, IResult<OptionEnumP
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultOptionEnumPayloadError _managed;
         private Unmanaged _unmanaged;
@@ -17574,7 +17574,7 @@ public partial struct ResultUintError : IUnion, IResult<uint, Error>
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -17740,9 +17740,9 @@ public partial struct ResultUintError : IUnion, IResult<uint, Error>
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultUintError), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultUintError _managed;
 
@@ -17756,7 +17756,7 @@ public partial struct ResultUintError : IUnion, IResult<uint, Error>
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultUintError _managed;
         private Unmanaged _unmanaged;
@@ -17827,7 +17827,7 @@ public partial struct ResultUlongError : IUnion, IResult<ulong, Error>
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -17993,9 +17993,9 @@ public partial struct ResultUlongError : IUnion, IResult<ulong, Error>
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultUlongError), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultUlongError _managed;
 
@@ -18009,7 +18009,7 @@ public partial struct ResultUlongError : IUnion, IResult<ulong, Error>
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultUlongError _managed;
         private Unmanaged _unmanaged;
@@ -18071,7 +18071,7 @@ public partial struct ResultVoidError : IUnion, IResult<Unit, Error>
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal uint _variant;
@@ -18238,9 +18238,9 @@ public partial struct ResultVoidError : IUnion, IResult<Unit, Error>
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(ResultVoidError), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ResultVoidError _managed;
 
@@ -18254,7 +18254,7 @@ public partial struct ResultVoidError : IUnion, IResult<Unit, Error>
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ResultVoidError _managed;
         private Unmanaged _unmanaged;
@@ -18346,7 +18346,7 @@ public partial struct EnumUnionNameCollision : IUnion
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal byte _variant;
@@ -18507,9 +18507,9 @@ public partial struct EnumUnionNameCollision : IUnion
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(EnumUnionNameCollision), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private EnumUnionNameCollision _managed;
 
@@ -18523,7 +18523,7 @@ public partial struct EnumUnionNameCollision : IUnion
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private EnumUnionNameCollision _managed;
         private Unmanaged _unmanaged;
@@ -18627,7 +18627,7 @@ public partial struct EnumNum : IUnion
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal byte _variant;
@@ -18763,9 +18763,9 @@ public partial struct EnumNum : IUnion
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(EnumNum), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private EnumNum _managed;
 
@@ -18779,7 +18779,7 @@ public partial struct EnumNum : IUnion
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private EnumNum _managed;
         private Unmanaged _unmanaged;
@@ -18847,7 +18847,7 @@ public partial struct EnumPayload : IUnion
     
 
     [StructLayout(LayoutKind.Explicit)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         [FieldOffset(0)]
         internal byte _variant;
@@ -18983,9 +18983,9 @@ public partial struct EnumPayload : IUnion
     private struct MarshallerMeta { }
 
     [CustomMarshaller(typeof(EnumPayload), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private EnumPayload _managed;
 
@@ -18999,7 +18999,7 @@ public partial struct EnumPayload : IUnion
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private EnumPayload _managed;
         private Unmanaged _unmanaged;
@@ -19053,7 +19053,7 @@ public partial class CallbackTable : IDisposable
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal MyCallback.Unmanaged my_callback;
         internal MyCallbackNamespaced.Unmanaged my_callback_namespaced;
@@ -19140,9 +19140,9 @@ public partial class CallbackTable : IDisposable
     [CustomMarshaller(typeof(CallbackTable), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(CallbackTable), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private CallbackTable _managed;
 
@@ -19156,7 +19156,7 @@ public partial class CallbackTable : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private CallbackTable _managed;
         private Unmanaged _unmanaged;
@@ -19205,7 +19205,7 @@ public partial class Layer1String : IDisposable
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal OptionUtf8String.Unmanaged maybe_1;
         internal VecUtf8String.Unmanaged maybe_2;
@@ -19267,9 +19267,9 @@ public partial class Layer1String : IDisposable
     [CustomMarshaller(typeof(Layer1String), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(Layer1String), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private Layer1String _managed;
 
@@ -19283,7 +19283,7 @@ public partial class Layer1String : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private Layer1String _managed;
         private Unmanaged _unmanaged;
@@ -19333,7 +19333,7 @@ public partial class Layer2String : IDisposable
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal Layer1String.Unmanaged layer_1;
         internal Vec3f32.Unmanaged vec;
@@ -19398,9 +19398,9 @@ public partial class Layer2String : IDisposable
     [CustomMarshaller(typeof(Layer2String), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(Layer2String), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private Layer2String _managed;
 
@@ -19414,7 +19414,7 @@ public partial class Layer2String : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private Layer2String _managed;
         private Unmanaged _unmanaged;
@@ -19462,7 +19462,7 @@ public partial class UseSliceAndVec : IDisposable
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal SliceUtf8String.Unmanaged s1;
         internal VecUtf8String.Unmanaged s2;
@@ -19518,9 +19518,9 @@ public partial class UseSliceAndVec : IDisposable
     [CustomMarshaller(typeof(UseSliceAndVec), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(UseSliceAndVec), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private UseSliceAndVec _managed;
 
@@ -19534,7 +19534,7 @@ public partial class UseSliceAndVec : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private UseSliceAndVec _managed;
         private Unmanaged _unmanaged;
@@ -19582,7 +19582,7 @@ public partial class UseString : IDisposable
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal Utf8String.Unmanaged s1;
         internal Utf8String.Unmanaged s2;
@@ -19639,9 +19639,9 @@ public partial class UseString : IDisposable
     [CustomMarshaller(typeof(UseString), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(UseString), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private UseString _managed;
 
@@ -19655,7 +19655,7 @@ public partial class UseString : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private UseString _managed;
         private Unmanaged _unmanaged;
@@ -19699,7 +19699,7 @@ public partial struct UseSliceByteInStruct
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal SliceByte.Unmanaged bytes;
 
@@ -19746,9 +19746,9 @@ public partial struct UseSliceByteInStruct
     [CustomMarshaller(typeof(UseSliceByteInStruct), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(UseSliceByteInStruct), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private UseSliceByteInStruct _managed;
 
@@ -19762,7 +19762,7 @@ public partial struct UseSliceByteInStruct
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private UseSliceByteInStruct _managed;
         private Unmanaged _unmanaged;
@@ -19806,7 +19806,7 @@ public partial struct StructDocumented
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal float x;
 
@@ -19853,9 +19853,9 @@ public partial struct StructDocumented
     [CustomMarshaller(typeof(StructDocumented), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(StructDocumented), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private StructDocumented _managed;
 
@@ -19869,7 +19869,7 @@ public partial struct StructDocumented
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private StructDocumented _managed;
         private Unmanaged _unmanaged;
@@ -19911,7 +19911,7 @@ public partial struct Array
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal fixed byte data[16];
 
@@ -19978,9 +19978,9 @@ public partial struct Array
     [CustomMarshaller(typeof(Array), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(Array), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private Array _managed;
 
@@ -19994,7 +19994,7 @@ public partial struct Array
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private Array _managed;
         private Unmanaged _unmanaged;
@@ -20036,7 +20036,7 @@ public partial struct BoolField
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal Bool val;
 
@@ -20083,9 +20083,9 @@ public partial struct BoolField
     [CustomMarshaller(typeof(BoolField), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(BoolField), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private BoolField _managed;
 
@@ -20099,7 +20099,7 @@ public partial struct BoolField
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private BoolField _managed;
         private Unmanaged _unmanaged;
@@ -20142,7 +20142,7 @@ public partial struct CharArray
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal FixedString32.Unmanaged str;
         internal FixedString32.Unmanaged str_2;
@@ -20193,9 +20193,9 @@ public partial struct CharArray
     [CustomMarshaller(typeof(CharArray), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(CharArray), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private CharArray _managed;
 
@@ -20209,7 +20209,7 @@ public partial struct CharArray
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private CharArray _managed;
         private Unmanaged _unmanaged;
@@ -20251,7 +20251,7 @@ public partial struct Container
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal Local.Unmanaged foreign;
 
@@ -20298,9 +20298,9 @@ public partial struct Container
     [CustomMarshaller(typeof(Container), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(Container), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private Container _managed;
 
@@ -20314,7 +20314,7 @@ public partial struct Container
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private Container _managed;
         private Unmanaged _unmanaged;
@@ -20356,7 +20356,7 @@ public partial struct DeeplyNestedWire4
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal uint a;
 
@@ -20403,9 +20403,9 @@ public partial struct DeeplyNestedWire4
     [CustomMarshaller(typeof(DeeplyNestedWire4), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(DeeplyNestedWire4), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private DeeplyNestedWire4 _managed;
 
@@ -20419,7 +20419,7 @@ public partial struct DeeplyNestedWire4
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private DeeplyNestedWire4 _managed;
         private Unmanaged _unmanaged;
@@ -20461,7 +20461,7 @@ public partial struct ExtraTypeF32
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal float x;
 
@@ -20508,9 +20508,9 @@ public partial struct ExtraTypeF32
     [CustomMarshaller(typeof(ExtraTypeF32), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(ExtraTypeF32), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private ExtraTypeF32 _managed;
 
@@ -20524,7 +20524,7 @@ public partial struct ExtraTypeF32
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private ExtraTypeF32 _managed;
         private Unmanaged _unmanaged;
@@ -20566,7 +20566,7 @@ public partial struct FixedString32
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal fixed byte data[32];
 
@@ -20633,9 +20633,9 @@ public partial struct FixedString32
     [CustomMarshaller(typeof(FixedString32), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(FixedString32), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private FixedString32 _managed;
 
@@ -20649,7 +20649,7 @@ public partial struct FixedString32
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private FixedString32 _managed;
         private Unmanaged _unmanaged;
@@ -20691,7 +20691,7 @@ public partial struct GenericU32
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal IntPtr x;
 
@@ -20738,9 +20738,9 @@ public partial struct GenericU32
     [CustomMarshaller(typeof(GenericU32), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(GenericU32), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private GenericU32 _managed;
 
@@ -20754,7 +20754,7 @@ public partial struct GenericU32
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private GenericU32 _managed;
         private Unmanaged _unmanaged;
@@ -20796,7 +20796,7 @@ public partial struct GenericU8
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal IntPtr x;
 
@@ -20843,9 +20843,9 @@ public partial struct GenericU8
     [CustomMarshaller(typeof(GenericU8), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(GenericU8), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private GenericU8 _managed;
 
@@ -20859,7 +20859,7 @@ public partial struct GenericU8
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private GenericU8 _managed;
         private Unmanaged _unmanaged;
@@ -20903,7 +20903,7 @@ public partial struct IVec3
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal nint x;
         internal nint y;
@@ -20958,9 +20958,9 @@ public partial struct IVec3
     [CustomMarshaller(typeof(IVec3), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(IVec3), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private IVec3 _managed;
 
@@ -20974,7 +20974,7 @@ public partial struct IVec3
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private IVec3 _managed;
         private Unmanaged _unmanaged;
@@ -21016,7 +21016,7 @@ public partial struct Inner
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal float x;
 
@@ -21063,9 +21063,9 @@ public partial struct Inner
     [CustomMarshaller(typeof(Inner), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(Inner), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private Inner _managed;
 
@@ -21079,7 +21079,7 @@ public partial struct Inner
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private Inner _managed;
         private Unmanaged _unmanaged;
@@ -21121,7 +21121,7 @@ public partial struct Local
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal uint x;
 
@@ -21168,9 +21168,9 @@ public partial struct Local
     [CustomMarshaller(typeof(Local), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(Local), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private Local _managed;
 
@@ -21184,7 +21184,7 @@ public partial struct Local
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private Local _managed;
         private Unmanaged _unmanaged;
@@ -21232,7 +21232,7 @@ public partial struct NestedArray
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal EnumRenamed field_enum;
         internal Vec3f32.Unmanaged field_vec;
@@ -21343,9 +21343,9 @@ public partial struct NestedArray
     [CustomMarshaller(typeof(NestedArray), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(NestedArray), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private NestedArray _managed;
 
@@ -21359,7 +21359,7 @@ public partial struct NestedArray
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private NestedArray _managed;
         private Unmanaged _unmanaged;
@@ -21401,7 +21401,7 @@ public partial struct Outer
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal OptionInner.Unmanaged inner;
 
@@ -21448,9 +21448,9 @@ public partial struct Outer
     [CustomMarshaller(typeof(Outer), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(Outer), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private Outer _managed;
 
@@ -21464,7 +21464,7 @@ public partial struct Outer
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private Outer _managed;
         private Unmanaged _unmanaged;
@@ -21507,7 +21507,7 @@ public partial struct Packed1
 {
     
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal byte x;
         internal ushort y;
@@ -21558,9 +21558,9 @@ public partial struct Packed1
     [CustomMarshaller(typeof(Packed1), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(Packed1), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private Packed1 _managed;
 
@@ -21574,7 +21574,7 @@ public partial struct Packed1
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private Packed1 _managed;
         private Unmanaged _unmanaged;
@@ -21617,7 +21617,7 @@ public partial struct Packed2
 {
     
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal ushort y;
         internal byte x;
@@ -21668,9 +21668,9 @@ public partial struct Packed2
     [CustomMarshaller(typeof(Packed2), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(Packed2), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private Packed2 _managed;
 
@@ -21684,7 +21684,7 @@ public partial struct Packed2
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private Packed2 _managed;
         private Unmanaged _unmanaged;
@@ -21726,7 +21726,7 @@ public partial struct PhantomU8
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal uint x;
 
@@ -21773,9 +21773,9 @@ public partial struct PhantomU8
     [CustomMarshaller(typeof(PhantomU8), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(PhantomU8), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private PhantomU8 _managed;
 
@@ -21789,7 +21789,7 @@ public partial struct PhantomU8
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private PhantomU8 _managed;
         private Unmanaged _unmanaged;
@@ -21831,7 +21831,7 @@ public partial struct StructRenamed
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal EnumRenamed e;
 
@@ -21878,9 +21878,9 @@ public partial struct StructRenamed
     [CustomMarshaller(typeof(StructRenamed), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(StructRenamed), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private StructRenamed _managed;
 
@@ -21894,7 +21894,7 @@ public partial struct StructRenamed
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private StructRenamed _managed;
         private Unmanaged _unmanaged;
@@ -21936,7 +21936,7 @@ public partial struct TransparentNum
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal nuint field_0;
 
@@ -21983,9 +21983,9 @@ public partial struct TransparentNum
     [CustomMarshaller(typeof(TransparentNum), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(TransparentNum), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private TransparentNum _managed;
 
@@ -21999,7 +21999,7 @@ public partial struct TransparentNum
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private TransparentNum _managed;
         private Unmanaged _unmanaged;
@@ -22041,7 +22041,7 @@ public partial struct Tupled
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal byte field_0;
 
@@ -22088,9 +22088,9 @@ public partial struct Tupled
     [CustomMarshaller(typeof(Tupled), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(Tupled), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private Tupled _managed;
 
@@ -22104,7 +22104,7 @@ public partial struct Tupled
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private Tupled _managed;
         private Unmanaged _unmanaged;
@@ -22146,7 +22146,7 @@ public partial struct UseCStrPtr
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal string ascii_string;
 
@@ -22193,9 +22193,9 @@ public partial struct UseCStrPtr
     [CustomMarshaller(typeof(UseCStrPtr), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(UseCStrPtr), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private UseCStrPtr _managed;
 
@@ -22209,7 +22209,7 @@ public partial struct UseCStrPtr
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private UseCStrPtr _managed;
         private Unmanaged _unmanaged;
@@ -22252,7 +22252,7 @@ public partial struct Vec1
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal float x;
         internal float y;
@@ -22303,9 +22303,9 @@ public partial struct Vec1
     [CustomMarshaller(typeof(Vec1), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(Vec1), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private Vec1 _managed;
 
@@ -22319,7 +22319,7 @@ public partial struct Vec1
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private Vec1 _managed;
         private Unmanaged _unmanaged;
@@ -22362,7 +22362,7 @@ public partial struct Vec2
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal double x;
         internal double z;
@@ -22413,9 +22413,9 @@ public partial struct Vec2
     [CustomMarshaller(typeof(Vec2), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(Vec2), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private Vec2 _managed;
 
@@ -22429,7 +22429,7 @@ public partial struct Vec2
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private Vec2 _managed;
         private Unmanaged _unmanaged;
@@ -22473,7 +22473,7 @@ public partial struct Vec3f32
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal float x;
         internal float y;
@@ -22528,9 +22528,9 @@ public partial struct Vec3f32
     [CustomMarshaller(typeof(Vec3f32), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(Vec3f32), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private Vec3f32 _managed;
 
@@ -22544,7 +22544,7 @@ public partial struct Vec3f32
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private Vec3f32 _managed;
         private Unmanaged _unmanaged;
@@ -22587,7 +22587,7 @@ public partial struct Visibility1
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal byte pblc;
         internal byte prvt;
@@ -22638,9 +22638,9 @@ public partial struct Visibility1
     [CustomMarshaller(typeof(Visibility1), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(Visibility1), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private Visibility1 _managed;
 
@@ -22654,7 +22654,7 @@ public partial struct Visibility1
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private Visibility1 _managed;
         private Unmanaged _unmanaged;
@@ -22697,7 +22697,7 @@ public partial struct Visibility2
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal byte pblc1;
         internal byte pblc2;
@@ -22748,9 +22748,9 @@ public partial struct Visibility2
     [CustomMarshaller(typeof(Visibility2), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(Visibility2), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private Visibility2 _managed;
 
@@ -22764,7 +22764,7 @@ public partial struct Visibility2
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private Visibility2 _managed;
         private Unmanaged _unmanaged;
@@ -22806,7 +22806,7 @@ public partial struct Weird1U32
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal uint x;
 
@@ -22853,9 +22853,9 @@ public partial struct Weird1U32
     [CustomMarshaller(typeof(Weird1U32), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(Weird1U32), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private Weird1U32 _managed;
 
@@ -22869,7 +22869,7 @@ public partial struct Weird1U32
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private Weird1U32 _managed;
         private Unmanaged _unmanaged;
@@ -22913,7 +22913,7 @@ public partial struct Weird2U85
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct Unmanaged
+    public unsafe struct Unmanaged
     {
         internal byte t;
         internal fixed byte a[5];
@@ -22988,9 +22988,9 @@ public partial struct Weird2U85
     [CustomMarshaller(typeof(Weird2U85), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
     [CustomMarshaller(typeof(Weird2U85), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private Weird2U85 _managed;
 
@@ -23004,7 +23004,7 @@ public partial struct Weird2U85
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private Weird2U85 _managed;
         private Unmanaged _unmanaged;
@@ -23183,7 +23183,7 @@ public partial class SumDelegateReturn : IDisposable
     private struct MarshallerMeta {  }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         internal IntPtr _callback;
         internal IntPtr _data;
@@ -23204,9 +23204,9 @@ public partial class SumDelegateReturn : IDisposable
     }
 
     [CustomMarshaller(typeof(SumDelegateReturn), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private SumDelegateReturn _managed;
 
@@ -23220,7 +23220,7 @@ public partial class SumDelegateReturn : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private SumDelegateReturn _managed;
         private Unmanaged _unmanaged;
@@ -23398,7 +23398,7 @@ public partial class CallbackHugeVecSlice : IDisposable
     private struct MarshallerMeta {  }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         internal IntPtr _callback;
         internal IntPtr _data;
@@ -23419,9 +23419,9 @@ public partial class CallbackHugeVecSlice : IDisposable
     }
 
     [CustomMarshaller(typeof(CallbackHugeVecSlice), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private CallbackHugeVecSlice _managed;
 
@@ -23435,7 +23435,7 @@ public partial class CallbackHugeVecSlice : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private CallbackHugeVecSlice _managed;
         private Unmanaged _unmanaged;
@@ -23613,7 +23613,7 @@ public partial class CallbackCharArray2 : IDisposable
     private struct MarshallerMeta {  }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         internal IntPtr _callback;
         internal IntPtr _data;
@@ -23634,9 +23634,9 @@ public partial class CallbackCharArray2 : IDisposable
     }
 
     [CustomMarshaller(typeof(CallbackCharArray2), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private CallbackCharArray2 _managed;
 
@@ -23650,7 +23650,7 @@ public partial class CallbackCharArray2 : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private CallbackCharArray2 _managed;
         private Unmanaged _unmanaged;
@@ -23828,7 +23828,7 @@ public partial class CallbackSliceUseSliceByteInStruct : IDisposable
     private struct MarshallerMeta {  }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         internal IntPtr _callback;
         internal IntPtr _data;
@@ -23849,9 +23849,9 @@ public partial class CallbackSliceUseSliceByteInStruct : IDisposable
     }
 
     [CustomMarshaller(typeof(CallbackSliceUseSliceByteInStruct), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private CallbackSliceUseSliceByteInStruct _managed;
 
@@ -23865,7 +23865,7 @@ public partial class CallbackSliceUseSliceByteInStruct : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private CallbackSliceUseSliceByteInStruct _managed;
         private Unmanaged _unmanaged;
@@ -24043,7 +24043,7 @@ public partial class NestedStringCallback : IDisposable
     private struct MarshallerMeta {  }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         internal IntPtr _callback;
         internal IntPtr _data;
@@ -24064,9 +24064,9 @@ public partial class NestedStringCallback : IDisposable
     }
 
     [CustomMarshaller(typeof(NestedStringCallback), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private NestedStringCallback _managed;
 
@@ -24080,7 +24080,7 @@ public partial class NestedStringCallback : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private NestedStringCallback _managed;
         private Unmanaged _unmanaged;
@@ -24220,7 +24220,7 @@ public partial class SliceEnumDocumented : IEnumerable<EnumDocumented>, IDisposa
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         public IntPtr _data;
         public ulong _len;
@@ -24236,9 +24236,9 @@ public partial class SliceEnumDocumented : IEnumerable<EnumDocumented>, IDisposa
 }public partial class SliceEnumDocumented
 {
     [CustomMarshaller(typeof(SliceEnumDocumented), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private SliceEnumDocumented _managed;
 
@@ -24252,7 +24252,7 @@ public partial class SliceEnumDocumented : IEnumerable<EnumDocumented>, IDisposa
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private SliceEnumDocumented _managed;
         private Unmanaged _unmanaged;
@@ -24385,7 +24385,7 @@ public partial class SliceMutCharArray : IDisposable
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         public IntPtr _data;
         public ulong _len;
@@ -24404,9 +24404,9 @@ public partial class SliceMutCharArray : IDisposable
 }public partial class SliceMutCharArray
 {
     [CustomMarshaller(typeof(SliceMutCharArray), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private SliceMutCharArray _managed;
 
@@ -24420,7 +24420,7 @@ public partial class SliceMutCharArray : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private SliceMutCharArray _managed;
         private Unmanaged _unmanaged;
@@ -24553,7 +24553,7 @@ public partial class SliceUseCStrPtr : IDisposable
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         public IntPtr _data;
         public ulong _len;
@@ -24572,9 +24572,9 @@ public partial class SliceUseCStrPtr : IDisposable
 }public partial class SliceUseCStrPtr
 {
     [CustomMarshaller(typeof(SliceUseCStrPtr), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private SliceUseCStrPtr _managed;
 
@@ -24588,7 +24588,7 @@ public partial class SliceUseCStrPtr : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private SliceUseCStrPtr _managed;
         private Unmanaged _unmanaged;
@@ -24721,7 +24721,7 @@ public partial class SliceUseSliceByteInStruct : IDisposable
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         public IntPtr _data;
         public ulong _len;
@@ -24740,9 +24740,9 @@ public partial class SliceUseSliceByteInStruct : IDisposable
 }public partial class SliceUseSliceByteInStruct
 {
     [CustomMarshaller(typeof(SliceUseSliceByteInStruct), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private SliceUseSliceByteInStruct _managed;
 
@@ -24756,7 +24756,7 @@ public partial class SliceUseSliceByteInStruct : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private SliceUseSliceByteInStruct _managed;
         private Unmanaged _unmanaged;
@@ -24881,7 +24881,7 @@ public partial class SliceUseString : IDisposable
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         public IntPtr _data;
         public ulong _len;
@@ -24900,9 +24900,9 @@ public partial class SliceUseString : IDisposable
 }public partial class SliceUseString
 {
     [CustomMarshaller(typeof(SliceUseString), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private SliceUseString _managed;
 
@@ -24916,7 +24916,7 @@ public partial class SliceUseString : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private SliceUseString _managed;
         private Unmanaged _unmanaged;
@@ -25049,7 +25049,7 @@ public partial class SliceVec3f32 : IDisposable
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         public IntPtr _data;
         public ulong _len;
@@ -25068,9 +25068,9 @@ public partial class SliceVec3f32 : IDisposable
 }public partial class SliceVec3f32
 {
     [CustomMarshaller(typeof(SliceVec3f32), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private SliceVec3f32 _managed;
 
@@ -25084,7 +25084,7 @@ public partial class SliceVec3f32 : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private SliceVec3f32 _managed;
         private Unmanaged _unmanaged;
@@ -25205,7 +25205,7 @@ public partial class VecEnumPayload
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         internal IntPtr _ptr;
         internal ulong _len;
@@ -25225,9 +25225,9 @@ public partial class VecEnumPayload
     }
 
     [CustomMarshaller(typeof(VecEnumPayload), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private VecEnumPayload _managed;
 
@@ -25241,7 +25241,7 @@ public partial class VecEnumPayload
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private VecEnumPayload _managed;
         private Unmanaged _unmanaged;
@@ -25407,7 +25407,7 @@ public partial class VecVec3f32
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
         internal IntPtr _ptr;
         internal ulong _len;
@@ -25427,9 +25427,9 @@ public partial class VecVec3f32
     }
 
     [CustomMarshaller(typeof(VecVec3f32), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private VecVec3f32 _managed;
 
@@ -25443,7 +25443,7 @@ public partial class VecVec3f32
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private VecVec3f32 _managed;
         private Unmanaged _unmanaged;
@@ -27458,9 +27458,9 @@ public partial class WireOfDeeplyNestedWire1 : IDisposable
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
-        public WireBuffer Buffer;
+        internal WireBuffer Buffer;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         [Obsolete("This method is intended for use by generated code only.")]
@@ -27472,9 +27472,9 @@ public partial class WireOfDeeplyNestedWire1 : IDisposable
     }
 
     [CustomMarshaller(typeof(WireOfDeeplyNestedWire1), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private WireOfDeeplyNestedWire1 _managed;
 
@@ -27488,7 +27488,7 @@ public partial class WireOfDeeplyNestedWire1 : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private WireOfDeeplyNestedWire1 _managed;
         private Unmanaged _unmanaged;
@@ -27617,9 +27617,9 @@ public partial class WireOfMyString : IDisposable
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
-        public WireBuffer Buffer;
+        internal WireBuffer Buffer;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         [Obsolete("This method is intended for use by generated code only.")]
@@ -27631,9 +27631,9 @@ public partial class WireOfMyString : IDisposable
     }
 
     [CustomMarshaller(typeof(WireOfMyString), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private WireOfMyString _managed;
 
@@ -27647,7 +27647,7 @@ public partial class WireOfMyString : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private WireOfMyString _managed;
         private Unmanaged _unmanaged;
@@ -28674,9 +28674,9 @@ public partial class WireOfOptionRoot : IDisposable
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
-        public WireBuffer Buffer;
+        internal WireBuffer Buffer;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         [Obsolete("This method is intended for use by generated code only.")]
@@ -28688,9 +28688,9 @@ public partial class WireOfOptionRoot : IDisposable
     }
 
     [CustomMarshaller(typeof(WireOfOptionRoot), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private WireOfOptionRoot _managed;
 
@@ -28704,7 +28704,7 @@ public partial class WireOfOptionRoot : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private WireOfOptionRoot _managed;
         private Unmanaged _unmanaged;
@@ -28940,9 +28940,9 @@ public partial class WireOfDataEnum : IDisposable
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
-        public WireBuffer Buffer;
+        internal WireBuffer Buffer;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         [Obsolete("This method is intended for use by generated code only.")]
@@ -28954,9 +28954,9 @@ public partial class WireOfDataEnum : IDisposable
     }
 
     [CustomMarshaller(typeof(WireOfDataEnum), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private WireOfDataEnum _managed;
 
@@ -28970,7 +28970,7 @@ public partial class WireOfDataEnum : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private WireOfDataEnum _managed;
         private Unmanaged _unmanaged;
@@ -29108,9 +29108,9 @@ public partial class WireOfMyEnum : IDisposable
     private struct MarshallerMeta { }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Unmanaged
+    public struct Unmanaged
     {
-        public WireBuffer Buffer;
+        internal WireBuffer Buffer;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         [Obsolete("This method is intended for use by generated code only.")]
@@ -29122,9 +29122,9 @@ public partial class WireOfMyEnum : IDisposable
     }
 
     [CustomMarshaller(typeof(WireOfMyEnum), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
-    internal struct InMarshallerMeta { }
+    public struct InMarshallerMeta { }
 
-    internal ref struct InMarshaller
+    public ref struct InMarshaller
     {
         private WireOfMyEnum _managed;
 
@@ -29138,7 +29138,7 @@ public partial class WireOfMyEnum : IDisposable
         public void Free() {}
     }
 
-    internal ref struct Marshaller
+    public ref struct Marshaller
     {
         private WireOfMyEnum _managed;
         private Unmanaged _unmanaged;
