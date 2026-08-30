@@ -58,6 +58,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🐛 Bug Fixes
 
+- **Generated custom-marshalled types now work in consumer-owned `LibraryImport` declarations.**
+  Their nested `Unmanaged`, default `Marshaller`, and read-only `InMarshallerMeta` /
+  `InMarshaller` helpers are public so the .NET source generator can reference them across
+  assembly boundaries. The private `MarshallerMeta` carrier and internal `WireBuffer`
+  implementation remain hidden.
+
 - **`ToString()` on a default struct-backed union now returns `"<empty>"`.**
   The all-zero managed value has no Rust variant; it previously fell through the discriminant-only
   formatter and appeared as variant zero. The generated guard now checks `_hasValue` before variant

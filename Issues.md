@@ -1474,27 +1474,49 @@ An earlier revision of this issue claimed the NRE "cannot have been observed thr
 id: e5f03dbe
 kind: bug
 severity: medium
-status: open
+status: closed
 ```
 
-`Unmanaged` and `Marshaller` are emitted `internal`. The `LibraryImport` source generator emits code that references both directly, so it can only wire a custom-marshalled type from inside the assembly that declares it. A consumer who puts generated bindings in one project and writes their own `LibraryImport` in another cannot use any custom-marshalled type in their own P/Invoke signatures.
+**Closed by `20f94b5`.** Generated custom-marshalled types now expose the nested types the
+`LibraryImport` source generator must name across an assembly boundary: `Unmanaged`,
+`Marshaller`, `InMarshallerMeta` and `InMarshaller`. `MarshallerMeta` remains private because
+external generated code never references it. `WireBuffer` also remains an internal implementation
+detail; the public `Wire<T>.Unmanaged` wrapper keeps its `Buffer` field internal.
+
+The former workaround is now the regression fixture: default return-by-value and read-only `in`
+declarations both live in the referencing `Tests` assembly, compile with runtime marshalling
+disabled, and execute through the 223-test generated C# suite. The complete `backend_csharp` suite
+also passes.
+
+Before the fix, `Unmanaged` and `Marshaller` were emitted `internal`. The `LibraryImport`
+source generator emits code that references both directly, so it could only wire a
+custom-marshalled type from inside the assembly that declared it. A consumer who put generated
+bindings in one project and wrote their own `LibraryImport` in another could not use any
+custom-marshalled type in their own P/Invoke signatures.
 
 ### Measured 2026-08-28
 
-The same declaration, differing only in which project holds it:
+The same declaration, differing only in which project held it:
 
     [LibraryImport("reference_project", EntryPoint = "reference_malformed_result_tag")]
     public static partial ResultUintError MalformedResultTag();
 
-- In `Bindings` (the assembly that declares `ResultUintError`) — compiles, runs, marshals correctly.
-- In `Tests` (a referencing assembly) — fails.
+- In `Bindings` (the assembly that declares `ResultUintError`) — compiled, ran, and marshalled correctly.
+- In `Tests` (a referencing assembly) — failed.
 
-The failure presents two different ways depending on an unrelated attribute, which is what makes it hard to diagnose:
+The failure presented two different ways depending on an unrelated attribute, which is what made it
+hard to diagnose:
 
-- Without `[assembly: DisableRuntimeMarshalling]`: **SYSLIB1051**, "Runtime marshalling must be disabled in this project ... to enable marshalling this type." The generator silently falls back to runtime marshalling and reports the fallback, not the cause.
-- With it: the fallback is refused and the real cause surfaces as five **CS0122** in `LibraryImports.g.cs` — `ResultUintError.Unmanaged`, `.Marshaller`, `.Marshaller.FromUnmanaged`, `.Marshaller.ToManaged`, `.Marshaller.Free`, each "inaccessible due to its protection level".
+- Without `[assembly: DisableRuntimeMarshalling]`: **SYSLIB1051**, "Runtime marshalling must be
+  disabled in this project ... to enable marshalling this type." The generator silently fell back
+  to runtime marshalling and reported the fallback, not the cause.
+- With it: the fallback was refused and the real cause surfaced as six **CS0122** diagnostics in
+  `LibraryImports.g.cs` — `ResultUintError.Unmanaged` (twice), `.Marshaller`,
+  `.Marshaller.FromUnmanaged`, `.Marshaller.ToManaged`, and `.Marshaller.Free`, each
+  "inaccessible due to its protection level".
 
-Neither message names accessibility as the problem unless the attribute is set, and the attribute is unrelated to the actual defect.
+Neither message named accessibility as the problem unless the attribute was set, and the attribute
+was unrelated to the actual defect.
 
 ### What this is not
 
@@ -1503,22 +1525,47 @@ Return-by-value of a union-projected enum is **not** the trigger. `Interop.cs:71
     [LibraryImport(NativeLib, EntryPoint = "pattern_result_1")]
     public static partial ResultUintError pattern_result_1(ResultUintError x);
 
-which returns the same custom-marshalled type by value, from the declaring assembly, and has always compiled. An earlier reading of this defect blamed return-by-value and then blamed cross-assembly `[NativeMarshalling]` resolution; both were wrong. The variable is accessibility of the generated helper types.
+which returns the same custom-marshalled type by value, from the declaring assembly, and had always
+compiled. An earlier reading of this defect blamed return-by-value and then blamed cross-assembly
+`[NativeMarshalling]` resolution; both were wrong. The variable was accessibility of the generated
+helper types.
 
 ### Scope
 
-Affects any consumer whose call sites live outside the bindings project — a normal layout, not an exotic one. It does not affect calls made *through* the generated `Interop` class, which is how every existing consumer and every test in this repo works; that is why it has gone unnoticed.
+Before closure, this affected any consumer whose call sites lived outside the bindings project — a
+normal layout, not an exotic one. It did not affect calls made *through* the generated `Interop`
+class, which was how every existing consumer and test in the repo worked; that is why it had gone
+unnoticed.
 
-### Options, none taken
+### Resolution
 
-- Emit `Unmanaged` and `Marshaller` as `public`. Straightforward, and enlarges the public API surface with types whose members already carry `[Obsolete("intended for use by generated code only")]` and `[EditorBrowsable(Never)]`.
-- Emit `[assembly: InternalsVisibleTo(...)]`. Needs a consumer assembly name the generator has no way to know.
-- Document the constraint and leave it. Cheapest, and consumers hit SYSLIB1051 with no path to the cause.
+- **Chosen:** Emit `Unmanaged`, `Marshaller`, `InMarshallerMeta` and `InMarshaller` as
+  `public` across every custom-marshalled template family. Their generated-code-only members retain
+  `[Obsolete("intended for use by generated code only")]` and `[EditorBrowsable(Never)]`.
+- Keep the outer `MarshallerMeta` carrier private; the source generator consumes its attribute
+  metadata but does not name the type in consumer-generated code.
+- Keep `WireBuffer` internal by making `Wire<T>.Unmanaged.Buffer` internal rather than widening
+  that implementation type.
+- `[assembly: InternalsVisibleTo(...)]` was rejected because the bindings generator cannot know
+  every consumer assembly name.
+- Merely documenting the constraint was rejected because consumers otherwise receive SYSLIB1051
+  with no path to the actual cause.
 
 ### Related, and separate
 
-`DisableRuntimeMarshalling` cannot currently be set on the Bindings assembly at all: it emits `[MarshalAs(UnmanagedType.LPStr)] string` parameters and returns — at least ten sites, result set truncated — which the attribute forbids. That blocks the attribute for AOT reasons independently of this issue, and would need the ASCII-pointer and CStr paths moved to source-generated marshallers first. `Bindings.csproj` already sets `IsAotCompatible` and `Tests.csproj` sets `PublishAot` for Release, so the AOT story otherwise appears to hold; no concrete AOT or trimming failure has been observed, and none of that work should start without one.
+`DisableRuntimeMarshalling` cannot currently be set on the Bindings assembly at all: it emits
+`[MarshalAs(UnmanagedType.LPStr)] string` parameters and returns — at least ten sites, result set
+truncated — which the attribute forbids. That blocks the attribute for AOT reasons independently of
+this issue, and would need the ASCII-pointer and CStr paths moved to source-generated marshallers
+first. `Bindings.csproj` already sets `IsAotCompatible` and `Tests.csproj` sets `PublishAot`
+for Release, so the AOT story otherwise appears to hold; no concrete AOT or trimming failure has
+been observed, and none of that work should start without one.
 
-### Worked around in-repo
+### Regression fixture
 
-`crates/backend_csharp/tests/reference_project/Bindings/MalformedFixture.cs` — a hand-written, non-generated file placed in the Bindings project precisely because it cannot live in Tests. It exists for item 5f (`1e14d2c6`), which asserts the invalid-tag arm of `Unmanaged.ToManaged()`. `Bindings/` gitignores only `Interop*.cs`, so a hand-written file there is tracked normally.
+`crates/backend_csharp/tests/reference_project/Tests/MalformedFixture.cs` is deliberately
+hand-written in the referencing assembly and compiled with
+`[assembly: DisableRuntimeMarshalling]`. Its `MalformedResultTag` declaration preserves the
+invalid-tag regression for item 5f (`1e14d2c6`), while `BorrowResult` exercises the public
+read-only `InMarshallerMeta` / `InMarshaller` path with `in ResultUintError`. Keeping these
+declarations outside `Bindings` is load-bearing coverage for the cross-assembly contract.
