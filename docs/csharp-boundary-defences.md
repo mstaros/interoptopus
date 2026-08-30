@@ -2,14 +2,15 @@
 
 Status: **proposed.**
 
-This document proposes six generator-level defences for the C# backend. Each converts a class
-of undefined, silent, or misleading behaviour into a compile error, a build error, or a
-returned status. None changes the wire format or the ownership rules established in
-[the borrow-marshalling design](csharp-borrow-marshalling.md).
+This document proposes six generator-level defences for the C# backend, and one prerequisite
+they depend on. Each defence converts a class of undefined, silent, or misleading behaviour
+into a compile error, a build error, or a returned status. None changes the wire format or the
+ownership rules established in [the borrow-marshalling design](csharp-borrow-marshalling.md).
 
 D1-D4 were proposed first, argued from a workload that lends borrowed values per element. D5
-and D6 were added after reviewing the first consumer, which lends nothing. The
-sequencing section records what that evidence changed.
+and D6 were added after reviewing the first consumer, which lends nothing. P0 was added after
+reading the validation code: two of the defences were written against a mechanism that does not
+exist. The sequencing section records what that evidence changed.
 
 ## Objective
 
@@ -40,6 +41,7 @@ The following defences already exist and are not restated as proposals.
 | Async callback lifetime | `AsyncCallbackGuard` | `crates/proc_macros_impl/src/service/emit.rs` |
 | Panic to status conversion | `panic_to_result` | `crates/core/src/pattern/result.rs` |
 | Native allocation accounting | Global allocator wrapper with live byte and allocation counters | `crates/reference_project/src/allocation_tracking.rs` |
+| Registration-time name and shape rules | Proc-macro validation returning `syn::Result<()>` | `crates/proc_macros_impl/src/types/validation.rs`, `crates/proc_macros_impl/src/service/validation.rs` |
 
 Two boundaries on that table. The load-time guard emits only when the inventory contains a
 function whose return type is `TypePattern::Version`; an inventory without one is unguarded and
@@ -51,6 +53,67 @@ Out of scope: cross-library handle mixing. Two cdylibs that each link the same c
 independent state with no stable ABI between them. A per-library identity tag would catch the
 accidental case and not the aliasing one. The defence is architectural - one library per world
 of shared state - and no generator change substitutes for it.
+
+## P0. Inventory validation does not exist yet
+
+This is a prerequisite, not a defence. D2 and D5 both need a place to enforce a rule across a
+whole inventory, and that place is currently a name without a body.
+
+### Problem
+
+`Inventory::validate()` performs no validation. Both the Rust and plugin inventories implement
+it as a swap-and-return:
+
+```rust
+pub fn validate(&mut self) -> Self {
+    let mut rval = Self::new();
+    swap(&mut rval, self);
+    rval
+}
+```
+
+`crates/core/tests/inventory/forbidden.rs` carries a commented-out `#[should_panic]` test
+asserting that a forbidden function name is rejected through `validate()`, so inventory-level
+validation was intended and did not land.
+
+What does exist is proc-macro validation. `types/validation.rs` and `service/validation.rs`
+return `syn::Result<()>`, so forbidden names and shape rules are rejected at compile time with a
+span pointing at the offending item. That is better diagnostics than an inventory-time check,
+not worse.
+
+An earlier revision of this document asserted that `Inventory::validate()` "already exists as
+the place where registration-time invariants are enforced". That was incorrect and is retracted
+here.
+
+### Why the proc-macro layer is not sufficient for D2 and D5
+
+The proc macro sees one item at a time. It cannot see a policy declared elsewhere, and it
+cannot answer a question about the whole registered surface. A rule such as "this library
+lends nothing" is a property of an inventory, not of any single item, so it cannot be enforced
+where the current validation lives.
+
+### Design
+
+Give `Inventory::validate()` a real body and a real failure mode, then express D2 and D5 as
+rules over the assembled inventory.
+
+Policy is declared per inventory rather than per registration. That matches how a consumer
+states such a rule - as a property of the whole library - and it prevents the invariant being
+defeated one attribute at a time. A per-registration opt-out, if it is wanted at all, is a
+later addition and should be argued separately.
+
+### Open question - failure mode
+
+`validate()` currently returns `Self`. Making it reject anything requires either a panic or a
+signature change to a `Result`.
+
+The commented-out test expects a panic, which suggests panic was the original intent and is the
+non-breaking route. Against that: a build-time invariant that aborts the build process is worse
+to diagnose than one that reports, and callers cannot handle it.
+
+Returning `Result` is the better contract and is a breaking change to a public API on this fork.
+This document does not settle it. It should be settled before P0 is implemented, because both
+D2 and D5 inherit whichever is chosen.
 
 ## D1. `ref struct` for call-scoped borrows
 
@@ -89,6 +152,8 @@ code compiling, so the recommendation is unconditional, with the break documente
 
 ## D2. Reject registered functions that cannot carry a panic
 
+Depends on P0.
+
 ### Problem
 
 `panic_to_result` is opt-in. A registered function that panics without it unwinds out of an
@@ -98,14 +163,16 @@ condition, and the failure destroys the host with no managed diagnostic.
 
 ### Design
 
-Extend inventory validation to reject a registered function whose return type cannot represent
-a panic. `Inventory::validate()` already exists as the place where registration-time invariants
-are enforced, and this reuses it: the failure surfaces when the inventory is built, naming the
-function, rather than at runtime as an abort.
+Reject a registered function whose return type cannot represent a panic, as a rule over the
+assembled inventory once P0 provides a place to put it. The failure names the function.
 
 The check is on the return type's ability to carry the state, not on the presence of
 `panic_to_result` in the body - a body-level check is not available to the generator and would
 be unreliable if it were.
+
+A proc-macro-time variant is possible for the subset of cases where the return type alone
+decides it, and would give better spans. It is not sufficient on its own if the rule is ever
+made conditional on a declared policy, which is why this is stated against P0.
 
 ### Open question
 
@@ -179,9 +246,10 @@ an error status instead of proceeding.
 Cost is one thread-local read per call, which is not material relative to the marshalling
 already performed. The result is a diagnosable failure rather than corruption.
 
-## D5. Reject borrowed and lifetime-carrying registrations
+## D5. Reject borrowed registrations under a detach-only policy
 
 The mirror of D1. Where D1 makes lending safe to use, D5 makes the absence of lending provable.
+Depends on P0.
 
 ### Problem
 
@@ -192,24 +260,43 @@ grows, a single registration that returns a borrowed view reintroduces the entir
 silently, and the reviewer who would have caught it is looking at a diff, not at an invariant.
 
 This is not hypothetical. The first consumer states the rule as a required invariant, records
-that it needs automated enforcement rather than convention, and explicitly leaves the
-mechanism unchosen. It repeats the same requirement for its streaming payloads: violations
-should become a build or test failure rather than a review convention.
+that it needs automated enforcement rather than convention, and explicitly leaves the mechanism
+unchosen. It repeats the same requirement for its streaming payloads: violations should become
+a build or test failure rather than a review convention.
+
+### Detection surface
+
+This defence cannot be stated as "reject lifetimes". Lifetime-carrying types are first class in
+this codebase and deliberately so:
+
+- `ffi::Slice<'a, T>` and `ffi::SliceMut<'a, T>` are the canonical borrowed types
+  (`crates/core/src/pattern/slice.rs`), and the borrow-marshalling design keeps their existing
+  copy/borrow semantics unchanged.
+- `crates/proc_macros_impl/src/function/emit.rs` explicitly handles `syn::GenericParam::Lifetime`
+  and synthesizes `PhantomData` for it.
+- `crates/core/tests/ui/proc/svc/lifetime.rs` is registered as a **pass** test: a service method
+  with `<'a, 'b>` taking two `ffi::Slice` parameters compiles today by design.
+
+So the rule is not about lifetimes as a language feature. It is about a declared policy that a
+particular inventory exposes no borrowed data, and its detection surface is the specific
+patterns that carry a borrow across the boundary: `Slice` and `SliceMut`, read-only and
+read/write pointer-family parameters, and user types carrying a lifetime parameter.
 
 ### Design
 
-Extend inventory validation to reject registration of a type or signature that carries a
-lifetime or exposes borrowed data, when the consumer has declared a detach-only policy.
+Under a declared detach-only policy, reject any registration whose signature or exposed types
+match the detection surface above. The failure names the type or function.
 
-The policy is a declaration rather than a default, because lending is a supported mode and
-D1 exists to make it safe. A consumer that has not declared a policy keeps current behaviour.
+The policy is a declaration rather than a default, because lending is a supported mode and D1
+exists to make it safe. An inventory that declares nothing keeps current behaviour, including
+the passing lifetime test above.
 
-Two aspects need settling before implementation. First, the granularity: whether the policy is
-declared per inventory or per registration. Per inventory is simpler and matches how the first
-consumer states the rule. Second, the detection boundary: a lifetime parameter on a registered
-type is directly visible, but a type that owns a raw pointer into borrowed data is not
-distinguishable by the generator. The check is therefore sound against the common case and not
-a proof; the document should say so rather than imply completeness.
+### Boundary
+
+The check is sound against the common case and is not a proof. A type that owns a raw pointer
+into borrowed data is indistinguishable from one that owns its buffer, and the generator cannot
+tell them apart. The document should claim detection of declared borrows, not absence of
+aliasing.
 
 ### Compatibility
 
@@ -260,8 +347,8 @@ implementation, not discovered by a consumer.
 
 ## Priority and sequencing
 
-The original ordering placed D1 first, argued from a lending workload. Reviewing the first
-consumer changed the basis for that argument in two ways.
+The original ordering placed D1 first, argued from a lending workload. Two later reviews changed
+the basis for that argument.
 
 **No consumer currently lends.** The first consumer's stated design rule is that no borrowed
 data crosses the boundary; its record streams use managed pull enumeration with Rust-owned
@@ -277,30 +364,40 @@ reintroducing the hazard class D1 exists to contain. That trade does not current
 lending, and the rule against it therefore rests on measurement rather than on inheritance from
 the object-handle and streaming cases where it is independently justified.
 
+**Two defences were written against a mechanism that does not exist.** D2 and D5 both assumed an
+inventory-level validation step. P0 has to land first, and its failure-mode question has to be
+answered first, because both inherit the answer.
+
 This does not make D1 or D3 wrong. It defers them until a consumer adopts a lending policy or a
 per-element callback surface, at which point they become prerequisites rather than improvements.
 
 Recommended order:
 
-1. **D5** - requested twice by the first consumer, currently unowned, and the enforcement
+1. **P0** - prerequisite for D2 and D5; settle the failure mode before writing it.
+2. **D5** - requested twice by the first consumer, currently unowned, and the enforcement
    mechanism is explicitly open.
-2. **D4** - independent of every policy question and cheap.
-3. **D6** - a correctness defect in the generated projection, independent of the boundary
+3. **D4** - independent of every policy question and cheap.
+4. **D6** - a correctness defect in the generated projection, independent of the boundary
    policy, pending the `IResult` decision.
-4. **D2** - after a consumer's error envelope is frozen, per the sequencing constraint above.
-5. **D1**, **D3** - when a lending or per-element-callback consumer exists.
+5. **D2** - after a consumer's error envelope is frozen, per the sequencing constraint above.
+6. **D1**, **D3** - when a lending or per-element-callback consumer exists.
 
 ## Verification
 
 Per defence, the required checks.
+
+**P0** - a test asserting that an inventory containing a known-invalid registration fails, in
+whichever failure mode is chosen; and re-enabling the commented-out forbidden-name test in
+`crates/core/tests/inventory/forbidden.rs` as the first rule expressed through the new
+mechanism.
 
 **D1** - compile-failure tests asserting that a call-scoped value cannot be assigned to a field,
 captured in a lambda, boxed, stored in a collection, or held across an `await`; and a passing
 test that in-call consumption still compiles and produces identical unmanaged behaviour.
 
 **D2** - an inventory test registering a function with a return type that cannot carry a panic
-and asserting the validation error names it; and confirmation that the reference project's
-existing registrations either satisfy the rule or are updated in the same change.
+and asserting the failure names it; and confirmation that the reference project's existing
+registrations either satisfy the rule or are updated in the same change.
 
 **D3** - a test invoking a callback that throws on the first of many elements, asserting that
 the managed delegate is not invoked again, that `Dispose()` reports the first exception, and
@@ -309,20 +406,20 @@ that the Rust-side observed values are unchanged from current behaviour.
 **D4** - a test whose callback re-enters a library function while a mutable borrow is held,
 asserting an error status rather than proceeding.
 
-**D5** - an inventory test declaring a detach-only policy and registering a lifetime-carrying
-type, asserting the validation error names it; and a test that the same registration is
-accepted when no policy is declared.
+**D5** - an inventory test declaring a detach-only policy and registering an `ffi::Slice`
+parameter, asserting the failure names it; and confirmation that
+`crates/core/tests/ui/proc/svc/lifetime.rs` still passes unchanged when no policy is declared.
 
 **D6** - allocation-probe tests asserting that a non-owning Result conversion allocates nothing
 on the managed heap; a compile-failure or runtime test that an owning Result cannot be disposed
 twice; and confirmation that no generated non-owning Result carries the ownership remark.
 
-Completion checks for any of the six: the full `interoptopus_csharp` target including generated
+Completion checks for any of these: the full `interoptopus_csharp` target including generated
 C# execution, and workspace validation from the exact candidate.
 
 ### What green verification establishes
 
-For D1, that the enumerated constructs are rejected by the compiler. For D2 and D5, that the
+For D1, that the enumerated constructs are rejected by the compiler. For P0, D2 and D5, that the
 enumerated invalid registrations fail at inventory build. For D3 and D4, that the enumerated
 sequences produce the specified statuses. For D6, that the enumerated conversions do not
 allocate and that the ownership remark tracks actual ownership.
@@ -331,13 +428,12 @@ allocate and that the ownership remark tracks actual ownership.
 
 None of these gauges observes native memory safety generally. D1 constrains the generated
 managed surface; it does not prevent a caller from obtaining a raw pointer by other means. D4
-detects re-entrancy through generated entry points only. D5 detects lifetimes and borrows that
-are visible in the registered signature; a type that owns a raw pointer into borrowed data is
-not distinguishable by the generator, so D5 is sound against the common case and is not a
-proof. The allocation probes described in
-[the allocation-observability design](csharp-allocation-observability.md) remain the live
-source for what allocator state is and is not observed, and their stated limits around callback
-closure lifetimes are not altered by this document.
+detects re-entrancy through generated entry points only. D5 detects borrows declared in a
+registered signature; a type that owns a raw pointer into borrowed data is not distinguishable
+by the generator, so D5 is sound against the common case and is not a proof. The allocation
+probes described in [the allocation-observability design](csharp-allocation-observability.md)
+remain the live source for what allocator state is and is not observed, and their stated limits
+around callback closure lifetimes are not altered by this document.
 
 ## Alternatives rejected
 
@@ -347,6 +443,14 @@ unenforced. A rule that the compiler can enforce for free should be enforced.
 **Automatic `panic_to_result` wrapping in `#[ffi]`.** Would change return types of registered
 functions implicitly, making the FFI signature diverge from the written one. Validation reports
 the same problem without changing what the author wrote.
+
+**Expressing D5 at proc-macro time only.** Better spans, but the proc macro sees one item at a
+time and cannot observe a policy declared for the inventory. A whole-surface invariant needs a
+whole-surface check.
+
+**Rejecting lifetime-carrying types outright.** Would break `ffi::Slice`, the pointer-family
+parameter modes, and an existing passing UI test. Lending is a supported mode; the policy is
+what varies, not the language feature.
 
 **Per-library handle identity tags.** Catches accidental cross-library handle use, not the
 aliasing case, and could imply a guarantee the ABI does not provide. Architectural separation
@@ -365,15 +469,16 @@ Result carrying an owned handle turns one disposal obligation into an unbounded 
 
 ## Compatibility summary
 
-| Defence | Break | Detection |
+| Item | Break | Detection |
 |---|---|---|
+| P0 | `Result` return would break `validate()` callers; panic would not | Depends on the chosen failure mode |
 | D1 | Source-breaking for callers that store call-scoped values | Compile error naming the construct |
-| D2 | Build-breaking for registrations that cannot carry a panic | Inventory validation error naming the function |
+| D2 | Build-breaking for registrations that cannot carry a panic | Inventory failure naming the function |
 | D3 | Behavioural; first exception reported instead of last | None required |
 | D4 | None | Error status at runtime |
-| D5 | Build-breaking, only for a consumer that declares the policy | Inventory validation error naming the type |
+| D5 | Build-breaking, only for a consumer that declares the policy | Inventory failure naming the type |
 | D6 | Source-breaking where callers dispose a now non-owning Result | Compile error on the removed `Dispose()` |
 
-D1 and D3 are independent of each other and of the rest. D5 is independent of D1 despite being
-its mirror: a consumer declares one policy or the other, and the tool supports both. D6 is
-independent of all of them, pending its own open question. Any subset can land separately.
+D1 and D3 are independent of each other and of the rest. D2 and D5 both depend on P0. D5 is
+independent of D1 despite being its mirror: a consumer declares one policy or the other, and the
+tool supports both. D6 is independent of all of them, pending its own open question.
