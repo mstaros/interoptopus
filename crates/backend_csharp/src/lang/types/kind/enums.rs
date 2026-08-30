@@ -36,6 +36,35 @@ pub struct Variant {
     pub case_type: String,
 }
 
+/// One resolved payload slot of a variant, in declaration order.
+///
+/// A tuple variant's slots are unnamed. A named variant's slots carry the declared field
+/// name. Today every variant yields at most one unnamed slot, because [`Variant::ty`] holds
+/// one optional [`TypeId`]; see `docs/csharp-multi-field-variants.md`.
+///
+/// These are *resolved* payloads, not declared ones. `Result<(), ()>` declares `Ok(T)` but
+/// resolves the `()` to no C# payload, so it yields no slots while
+/// [`Variant::can_carry_payload`] stays true. Union eligibility asks the latter.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Payload<'a> {
+    /// The slot's C# type.
+    pub ty: TypeId,
+    /// The declared field name, present only for a named variant.
+    pub name: Option<&'a str>,
+}
+
+impl Variant {
+    /// The variant's resolved payload slots, in declaration order.
+    ///
+    /// Read payloads through this rather than through [`Variant::ty`] directly. A bare
+    /// `v.ty` sees exactly one payload by construction, so it keeps compiling and silently
+    /// drops the rest once variants widen. This accessor is the one seam that widens with
+    /// them.
+    pub fn payloads(&self) -> impl Iterator<Item = Payload<'_>> + '_ {
+        self.ty.map(|ty| Payload { ty, name: None }).into_iter()
+    }
+}
+
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct DataEnum {
     pub variants: Vec<Variant>,

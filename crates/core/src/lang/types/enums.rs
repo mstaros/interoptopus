@@ -34,9 +34,43 @@ pub struct Variant {
     pub kind: VariantKind,
 }
 
+/// One payload slot of a variant, in declaration order.
+///
+/// A tuple variant's slots are unnamed. A named variant's slots carry the declared field
+/// name. Today every payload-carrying variant has exactly one unnamed slot, because
+/// [`VariantKind::Tuple`] holds one [`TypeId`] and the proc macro rejects both multi-field
+/// and named variants; see `docs/csharp-multi-field-variants.md`.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Payload<'a> {
+    /// The slot's type.
+    pub ty: TypeId,
+    /// The declared field name, present only for a named variant.
+    pub name: Option<&'a str>,
+}
+
 impl Variant {
     pub fn new(name: impl AsRef<str>, tag: isize, kind: VariantKind) -> Self {
         Self { name: name.as_ref().to_string(), docs: Docs::default(), tag, kind }
+    }
+
+    /// The variant's payload slots, in declaration order.
+    ///
+    /// Read payloads through this rather than matching [`Variant::kind`] directly. An inline
+    /// `VariantKind::Tuple(ty) => ty` sees exactly one payload by construction, so it keeps
+    /// compiling and silently drops the rest once variants widen. This accessor is the one
+    /// seam that widens with them.
+    pub fn payloads(&self) -> impl Iterator<Item = Payload<'_>> + '_ {
+        match &self.kind {
+            VariantKind::Unit => None,
+            VariantKind::Tuple(ty) => Some(Payload { ty: *ty, name: None }),
+        }
+        .into_iter()
+    }
+
+    /// Whether this variant's declaration has at least one payload slot.
+    #[must_use]
+    pub fn has_payload(&self) -> bool {
+        matches!(self.kind, VariantKind::Tuple(_))
     }
 }
 
