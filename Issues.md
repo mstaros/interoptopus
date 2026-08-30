@@ -1183,7 +1183,7 @@ measure first, then decide. `nullable.rs`'s `SubstituteDefault` variant carries 
 id: 5d1ae4c7
 kind: bug
 severity: medium
-status: open
+status: closed
 ```
 
 ### What this traces
@@ -1301,6 +1301,41 @@ Still not confirmed by running the generator: that the three template guards are
 consumers of the flag in the rendered output, and what the sub-passes cost when their fragments
 are rendered and discarded.
 
+### Resolution
+
+Closed. Every defect this issue names has been fixed, and the open call it declined to make was made the other way.
+
+**One seam, not ten.** `TypeKind::DataEnum(e)` now appears in exactly two places, both inside the `union_names.rs` helpers. All ten enum output passes call the helper on an identical line:
+
+```rust
+let Some(data_enum) = model::common::types::union_names::data_enum(type_kind) else { continue };
+```
+
+`definition.rs:41`, `body_unmanaged.rs:36`, `body_unmanaged_variant.rs:35`, `body_to_unmanaged.rs:38`, `body_as_unmanaged.rs:38`, `body_ctors.rs:37`, `body_exception_for_variant.rs:37`, `body_tostring.rs:35`, plus the two union-era passes added since this issue was filed, `body_case_types.rs:49` and `body_union_members.rs:56`.
+
+**`body_from_call.rs` excluded as instructed.** Still `TypeKind::TypePattern(TypePattern::Result(ok, err, _)) => (*ok, *err), _ => continue` at line 64. No `DataEnum` arm, no `Option` arm.
+
+**The discipline carried into wire.** `cs_names.rs:114-118` warns against re-deriving the predicate and names `data_enum(kind).is_some()` as a proxy that looks right and is not, because a plain-projected enum is still `TypeKind::DataEnum` in the model. Regression test at `cs_names.rs:210`.
+
+**The third category was named, and placed in the model rather than beside `is_managed_only`.** This issue argued the template-flag route was materially cheaper and left the naming to someone else. A `projection` model pass now exists (`pass/model/common/types/info/projection.rs`):
+
+```rust
+let projection = if data_enum.is_union_projected() { Projection::Union }
+    else if data_enum.discriminant_type.is_csharp_enum_underlying() { Projection::PlainEnum }
+    else { Projection::Discriminant };
+```
+
+`Projection::PlainEnum` is exactly the case described under *What a unit-only projection would actually need* — crosses FFI, needs no mirror because it is blittable. Accessors `is_union`, `is_plain_enum`, `crosses_ffi`, `has_wire_only_payload`; wired into both pipelines at `rust/library.rs:34,125,285` and `dotnet/library.rs:30,116,233`.
+
+**`is_managed_only` collapsed to one derived predicate.** `body.rs:73` is now `!projection.crosses_ffi(*type_id).unwrap_or(true)`, replacing the inline `has_wire_only_payload || Result/Option-Ok-is-Service`. `projection.rs:31` documents `crosses_ffi`, `is_managed_only`, `struct_class::is_struct` and `Projection::Union` as four orthogonal questions — the conflation this issue was tracing.
+
+### Deliberately left, so it is not re-found and reopened
+
+`all.rs:43` and `body.rs:50` still carry the old three-arm match, both binding a payload they discard with `=> {}`. These are the two sites this issue already classified as *match for effect only*; they are dead shape, not a second authority, and nothing reads what they bind.
+
+The final paragraph of *Measured, and not measured* also stands: nobody has run the generator to confirm the three template guards are the only consumers of the flag, or costed the fragments that are rendered and discarded. Note that `body_union_members.rs:58` now checks `projection.is_union(*type_id)` inside the pass, so for the union family suppression has already moved out of the template.
+
+The analysis in this issue is not superseded. `managed_conversion` was the wrong lever and `79be256e`'s "The lever" section remains disproved; `projection` is the lever that replaced it.
 ## `_hasValue` was emitted, never written, never read — 19 CS0169 with nothing to surface them
 
 ```issue
