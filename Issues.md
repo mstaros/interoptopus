@@ -342,7 +342,7 @@ before retrying a commit that appears to have failed.
 id: 4e9a17c3
 kind: bug
 severity: high
-status: open
+status: closed
 ```
 
 ### Symptom
@@ -571,6 +571,29 @@ Together these prove both families, not just the variant half. Both are acceptan
 #### Order
 
 `WireNames` + builder → threading → six variant sites → `cs_type_name` → 5c → then 3b.
+
+### Resolution
+
+Closed. Everything under *Proposed fix* and *Design — agreed* has landed, and both acceptance gates exist.
+
+**Variant names — all six sites.** `wire/mod.rs` now resolves through `self.cs.variant_stem(ty_id, variant.tag)` in `emit_enum_serialize`, `emit_enum_deserialize` and `emit_enum_size`. The accessor panics rather than falling back, with a doc comment stating that `variant.name` here *"would silently reinstate the bug this accessor exists to prevent"*.
+
+**Type names.** `cs_type_name`'s `Struct` and `Enum` arms call `model_type_name(ty_id, &ty.name)`, which consults `cs.mapped_type_name` and panics on absence. The `rust_to_pascal(sanitize_rust_name(..))` fallback the design proposed was dropped rather than implemented, on the grounds that a locally derived name is itself a second authority.
+
+**The third alignment gap, also closed.** The hand-rolled `throw new InvalidOperationException("Unknown variant")` is gone. `wire/mod.rs:376` delegates to `{val}.ExceptionForVariant()` on the serialize side; `:422` throws `InteropException("Unknown variant tag")` on deserialize, with a comment deriving the split from `docs/csharp-unions.md` §Exceptions — an unmatched managed value versus a corrupt tag arriving from native.
+
+**Item 5c, both halves.** `tests/output/wire/collision.rs` carries the `Foo` / `IsFoo` fixture that forces `stem != name`, and `cs_names.rs:180` asserts `variant_stem_of` resolves to the moved stem. `cs_names.rs:114-118` additionally documents two proxies that look like the union predicate and are not.
+
+### Out of scope, and still open — recorded so they are not re-found as new
+
+Both were declared out of scope by *Explicitly out of scope* above and neither gated this issue:
+
+- `cs_type_name`'s `_ => "object"` fallback. A generator emitting `object` because it does not understand a type masks a model bug. A snapshot search for `object result`, `List<object>`, `WireOfObject` and `public required object` found nothing, so there is still no evidence it fires.
+- The `WireOnly` composition duplicated between `names.rs` (87-97) and `cs_type_name`. Real, present, and compose from different resolvers, so a shared helper needs a resolver parameter. Factor on a third consumer or on drift.
+
+### Checked and not a defect
+
+Struct field names are emitted verbatim — `struct_fields.rs:61` is `name: rust_field.name.clone()`, and wire's `serialize_struct_body` / `deserialize_struct_body` use `f.name` directly. That reads like the variant-name defect this issue describes, and it is not: there is one authority rather than two, and both sides agree. Keyword safety is handled a layer earlier by `proc_macros_impl/src/types/validation.rs:47-53`, which rejects a field whose name is in `FORBIDDEN_NAMES` (136 entries, including `event`, `value`, `params` and `base`), gated by the compile-fail test `tests/ui/proc/ty/forbidden_field.rs`. Variant names are checked at `validation.rs:57-59` the same way.
 ## Enum variant names are never sanitized, so a C# keyword variant emits uncompilable bindings
 
 ```issue
