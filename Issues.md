@@ -1413,7 +1413,7 @@ catchable — but anything emitted only in library mode stays unguarded until it
 id: 5e2a319c
 kind: bug
 severity: medium
-status: open
+status: closed
 ```
 
 `AsUnmanaged()` is emitted for composites and for struct-backed unions, and for the latter it carries the empty-state guard from `templates/common/types/enums/body_as_unmanaged.cs`. Nothing calls it. There are two parallel conversion cascades and only one of them is rooted.
@@ -1468,6 +1468,30 @@ The mechanism is right and the measurement is not in doubt — but the method na
 **This makes Open item 1 more urgent, not less.** The item itself cites both passes emitting the `?... ?? default` form — `body_as_unmanaged.rs:47` *and* `body_to_unmanaged.rs:48` — so the nullability gap is identical in the cascade that actually executes. A reader who checks only the named method finds unreachable code and may conclude the defect is theoretical. It is not.
 
 An earlier revision of this issue claimed the NRE "cannot have been observed through this path" and suggested it may have been derived rather than run. That was wrong: it was found by searching only for `_managed.AsUnmanaged()`, which misses `_managed.IntoUnmanaged()`, the class-backed root. The negative was real but partial.
+
+### Resolution
+
+Closed. The open question above resolves to the former: `AsUnmanaged` is the borrow-side conversion for `in` parameters, and that mode is now emitted.
+
+`pass/model/rust/types/overload/pointer.rs:79` selects the decorator for a read pointer whose pointee is custom-marshalled and is not `ManagedConversion::AsIs`:
+
+```rust
+if hint == IntPtrHint::Read && conversion != ManagedConversion::AsIs && supports_in_marshaller(&pointee_type.kind) {
+    ParamDecorator::In { marshaller: format!("{pointee_name}.InMarshallerMeta") }
+```
+
+`tests/reference_project/mod.rs` asserts the generated output accordingly:
+
+| Line | Asserted output | Closes |
+|---|---|---|
+| 23 | `[CustomMarshaller(typeof(UseString), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]` | the mode exists |
+| 25 | `public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }` | the missing root |
+| 21-22 | `in ResultUintError _0`, `in OptionUtf8String _0` | struct-backed unions are among the `in` parameters, so the empty-state guard is reachable |
+| 40 | `var unmanaged = managed[i].AsUnmanaged();` | the pinned slice-element path named in the open question |
+
+Both cascades are now rooted, so the `2e172709` CHANGELOG entry's guard is reachable on both methods rather than only on `ToUnmanaged`, and the `Consequences` list above no longer holds. Design in `docs/csharp-borrow-marshalling.md`; item 5d of `docs/csharp-unions.md` cites `borrowing_a_default_struct_union_reaches_the_as_unmanaged_guard` for the `in` half.
+
+The `Correction to docs/csharp-unions.md Open item 1` section above is unaffected and still stands: that NRE fires through the class-backed `IntoUnmanaged` root, a different path from the one closed here.
 ## Custom-marshalled types are unusable in a consumer's own LibraryImport because Unmanaged and Marshaller are internal
 
 ```issue
