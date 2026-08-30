@@ -36,14 +36,6 @@ impl Pass {
                 continue;
             }
 
-            if ty.name == "ConnectionAction" {
-                eprintln!("DEBUG struct_fields: processing ConnectionAction for first time, fields:");
-                for f in &rust_struct.fields {
-                    let f_ty = rs_types.get(&f.ty);
-                    eprintln!("  field {} ty={:?} kind={:?}", f.name, f.ty, f_ty.map(|t| &t.kind));
-                }
-            }
-
             // Try to convert all fields
             let mut cs_fields = Vec::new();
             let mut all_fields_available = true;
@@ -53,9 +45,6 @@ impl Pass {
                 // are only used through Wire serialization and should not become
                 // C# composite types.
                 if contains_wireonly(rust_field.ty, rs_types, &mut std::collections::HashSet::new()) {
-                    if ty.name == "ConnectionAction" {
-                        eprintln!("DEBUG struct_fields: ConnectionAction SKIPPED due to wireonly field {:?}", rust_field.name);
-                    }
                     all_fields_available = false;
                     break;
                 }
