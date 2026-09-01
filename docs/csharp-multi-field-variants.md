@@ -91,7 +91,11 @@ This is the same defect family as `Issues.md` `4e9a17c3`, `7c8cb22e`, `31248473`
 
 Additive migration. The reference-project snapshot is the gate for steps 1-4: output must be byte-identical, because nothing about the emitted C# changes until step 5.
 
-**Step 1 — widen the model, populate both.** Add the N-payload representation to `core`'s `VariantKind` and to `backend_csharp`'s `Variant` alongside the existing single-payload field. Populate both from the current single payload. No consumer reads the new field yet. Snapshot unchanged.
+**Step 1 — open the N-payload seam. Done.** Add a `Payload<'a> { ty, name }` view type and a `Variant::payloads()` accessor to both `core` and `backend_csharp`, derived from the existing single-payload storage. No consumer reads it yet; snapshot unchanged.
+
+Deliberately *not* done as originally written here, which called for a second stored field populated alongside the first. Duplicated stored state leaks into `PartialEq`, `Hash`, serde and every construction site, and the two copies drift. A derived accessor gives step 2 the same migration surface — one place to widen — at none of that cost. When step 5 replaces the storage, `payloads()` changes behind its callers rather than being reconciled with them.
+
+`backend_csharp`'s payloads are *resolved*, not declared: `Result<(), ()>` declares `Ok(T)` but resolves `()` to no C# payload, so it yields no slots while `can_carry_payload` stays true. Union eligibility asks the latter. Step 2 migrates passes that depend on this distinction, so preserve it rather than collapsing the two questions.
 
 **Step 2 — migrate `backend_csharp` output passes.** One pass at a time to read the N-payload field, still length 1. Ten passes: `definition`, `body_ctors`, `body_unmanaged`, `body_unmanaged_variant`, `body_to_unmanaged`, `body_as_unmanaged`, `body_case_types`, `body_union_members`, `body_tostring`, `body_exception_for_variant`. Templates gain nested loops that iterate exactly once. Snapshot unchanged. Settle the `EnumException<T>` decision here.
 
@@ -99,7 +103,7 @@ Additive migration. The reference-project snapshot is the gate for steps 1-4: ou
 
 **Step 4 — migrate `wireio` and `wire`.** `write` / `read` / `live_size` destructure N bindings; `wire/mod.rs`'s three `VariantKind` matches carry N. Still N=1. Snapshot unchanged.
 
-**Step 5 — lift both rejections.** Accept `Fields::Unnamed(n)` and `Fields::Named` in `model.rs`, allocate field names through `union_names`, drop the old single-payload field. Add reference-project fixtures for both forms and accept the snapshot. This is the only step that changes output.
+**Step 5 — lift both rejections.** Accept `Fields::Unnamed(n)` and `Fields::Named` in `model.rs`, allocate field names through `union_names`, and widen the single-payload storage itself — `VariantKind::Tuple(TypeId)` and `Variant::ty`. Because step 1 derived `payloads()` rather than duplicating the field, there is no second copy to reconcile: the accessor starts yielding N slots and its migrated callers need no further change. Add reference-project fixtures for both forms and accept the snapshot. This is the only step that changes output.
 
 Steps 1-4 are refactors with a byte-identical snapshot as the safety net, and any of them can be abandoned without leaving a broken tree. Step 5 is the only one that needs review of generated C#.
 
