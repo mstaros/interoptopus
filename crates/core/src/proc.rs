@@ -6,8 +6,12 @@
 ///
 /// # Structs and Enums
 ///
-/// Annotating a struct or enum registers it as an FFI type and derives [`TypeInfo`]. A
-/// `#[repr(C)]` is added to structs and `#[repr(u32)]` to enums if no `repr` is present.
+/// Annotating a struct or enum registers it as an FFI type and derives [`TypeInfo`].
+/// The macro chooses the representation itself. Structs receive `#[repr(C)]`; enums
+/// receive the narrowest discriminant their variants fit in - `u8`, `u16` or `u32`, or
+/// the signed equivalent when a variant is negative. Declaring your own `repr` is a
+/// compile error: the same choice is reported to backends, and the two must not
+/// disagree about the width of a value.
 ///
 /// ```rust
 /// # use interoptopus::ffi;

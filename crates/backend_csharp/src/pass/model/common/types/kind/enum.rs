@@ -63,10 +63,11 @@ impl Pass {
             }
 
             // Determine discriminant type from Rust repr
-            let discriminant_type = match rust_enum.repr.layout {
-                lang::types::Layout::Primitive(p) => cs_primitive(p),
-                _ => Primitive::Int,
-            };
+            // The width itself is decided by `Repr::discriminant_primitive` so that every
+            // backend answers the same thing; this only maps that answer into the C#
+            // primitive set. This pass and the wire pass previously each carried their own
+            // fallback and disagreed, answering `int` here and `uint` there.
+            let discriminant_type = cs_primitive(rust_enum.repr.discriminant_primitive());
 
             // Create the data enum
             let data_enum = DataEnum { variants: variants.clone(), discriminant_type };

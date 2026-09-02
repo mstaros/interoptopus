@@ -149,6 +149,24 @@ impl Repr {
     pub fn u32() -> Self {
         Self { layout: Layout::Primitive(Primitive::U32), alignment: None }
     }
+
+    /// The primitive an enum's discriminant is stored as.
+    ///
+    /// `#[ffi]` always emits `Layout::Primitive`, so the fallback is reached only
+    /// by hand-written inventory entries. It answers `I32` because that is what a
+    /// `#[repr(C)]` enum discriminant is in both Rust and C.
+    ///
+    /// Backends should route every discriminant-width decision through this. Two
+    /// that decide it independently will eventually disagree about the same type:
+    /// the C# backend carried separate fallbacks in its model and wire passes and
+    /// answered `int` in one and `uint` in the other.
+    #[must_use]
+    pub fn discriminant_primitive(&self) -> Primitive {
+        match self.layout {
+            Layout::Primitive(p) => p,
+            _ => Primitive::I32,
+        }
+    }
 }
 
 /// Compile-time assertion that `T` is wire-safe.

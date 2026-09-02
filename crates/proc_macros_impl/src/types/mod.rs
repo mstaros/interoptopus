@@ -2,6 +2,8 @@ mod args;
 mod discriminant;
 mod emit;
 mod model;
+#[cfg(test)]
+mod tests;
 mod validation;
 mod wireio;
 
@@ -26,6 +28,8 @@ pub fn ffi(attr: TokenStream, input: TokenStream) -> syn::Result<TokenStream> {
     model.validate()?;
 
     // Add repr attributes and remove skip attributes
+    reject_declared_repr(&input_ast, &model)?;
+
     add_repr_attribute(&mut input_ast, &model);
     remove_skip_attributes(&mut input_ast);
 
@@ -46,13 +50,41 @@ pub fn ffi(attr: TokenStream, input: TokenStream) -> syn::Result<TokenStream> {
     Ok(result)
 }
 
+/// Refuse a source-declared `#[repr(...)]` on a non-service type.
+///
+/// The macro owns this attribute. For enums it picks the discriminant width
+/// (see [`discriminant::optimal_discriminant`]) and for structs it enforces a
+/// known layout, and that same choice is what the inventory reports to a
+/// backend. Honouring a declared `repr` would let the Rust type and the
+/// generated binding disagree about the width of a value.
+///
+/// This was previously a silent `retain` that deleted the attribute, which left
+/// nothing to explain the result: a caller who wrote `#[repr(u32)]` saw `: byte`
+/// in the generated C# and had no way to connect the two.
+fn reject_declared_repr(input: &DeriveInput, model: &TypeModel) -> syn::Result<()> {
+    if model.args.service {
+        return Ok(());
+    }
+
+    match input.attrs.iter().find(|attr| attr.path().is_ident("repr")) {
+        Some(attr) => Err(syn::Error::new_spanned(
+            attr,
+            "`#[ffi]` chooses the representation itself and would discard this attribute. \
+             Remove it: enums receive the narrowest discriminant their variants fit in, \
+             structs receive `#[repr(C)]`, and `#[ffi(opaque)]`, `#[ffi(transparent)]` \
+             and `#[ffi(packed)]` select the alternatives.",
+        )),
+        None => Ok(()),
+    }
+}
+
 fn add_repr_attribute(input: &mut DeriveInput, model: &TypeModel) {
     if model.args.service {
         return;
     }
 
-    // Remove any existing repr attribute — for enums the macro always picks the
-    // optimal discriminant size, and for structs we enforce a known layout.
+    // Defensive only: `reject_declared_repr` has already refused a declared repr, so
+    // this finds nothing. Enums get the optimal discriminant size, structs a known layout.
     input.attrs.retain(|attr| !attr.path().is_ident("repr"));
 
     let repr_attr = if model.args.opaque {

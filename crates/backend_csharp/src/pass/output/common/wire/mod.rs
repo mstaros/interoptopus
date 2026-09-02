@@ -508,11 +508,18 @@ impl WireCodeGen<'_> {
     }
 }
 
+/// The Rust discriminant primitive for an enum's declared layout.
+///
+/// `#[ffi]` always emits `Layout::Primitive`, so the fallback is reached only by
+/// hand-written inventory entries - the `enum_union_members` fixture is one. It
+/// answers `I32` because that is what a `#[repr(C)]` enum discriminant is in both
+/// Rust and C.
+///
+/// Delegates to [`Repr::discriminant_primitive`], the single place this is
+/// decided. Before it existed this pass and the model pass each carried their
+/// own fallback and disagreed: `uint` here, `int` there.
 fn enum_repr_primitive(e: &interoptopus::lang::types::Enum) -> Primitive {
-    match e.repr.layout {
-        Layout::Primitive(p) => p,
-        _ => Primitive::U32,
-    }
+    e.repr.discriminant_primitive()
 }
 
 fn pad(indent: usize) -> String {
