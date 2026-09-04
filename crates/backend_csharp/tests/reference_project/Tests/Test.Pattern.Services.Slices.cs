@@ -8,6 +8,8 @@ public class TestPatternServicesSlices
     [Fact]
     public void unique_service_dispose_restores_rust_allocation_baseline()
     {
+        AllocationProbe.Settle();
+
         var baselineBytes = Interop.__test_live_bytes();
         var baselineAllocations = Interop.__test_live_allocations();
 

@@ -16,6 +16,8 @@ public class TestWireArray
     [Fact]
     public void wire_dispose_and_move_restore_rust_allocation_baseline()
     {
+        AllocationProbe.Settle();
+
         var baselineBytes = Interop.__test_live_bytes();
         var baselineAllocations = Interop.__test_live_allocations();
         var returned = Interop.wire_return_byte_array();

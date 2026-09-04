@@ -144,6 +144,8 @@ public class TestPatternVec
     [Fact]
     public void vec_dispose_and_move_restore_rust_allocation_baseline()
     {
+        AllocationProbe.Settle();
+
         var baselineBytes = Interop.__test_live_bytes();
         var baselineAllocations = Interop.__test_live_allocations();
         var disposed = Interop.pattern_vec_1();

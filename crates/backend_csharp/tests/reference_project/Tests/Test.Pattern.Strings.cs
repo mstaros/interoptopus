@@ -148,6 +148,8 @@ public class TestPatternStrings
     [Fact]
     public void pattern_string_11_preserves_rust_allocation_snapshot()
     {
+        AllocationProbe.Settle();
+
         var baselineBytes = Interop.__test_live_bytes();
         var baselineAllocations = Interop.__test_live_allocations();
 
@@ -192,6 +194,8 @@ public class TestPatternStrings
     [Fact]
     public void string_by_in_preserves_rust_allocation_snapshot()
     {
+        AllocationProbe.Settle();
+
         var baselineBytes = Interop.__test_live_bytes();
         var baselineAllocations = Interop.__test_live_allocations();
 
@@ -218,6 +222,8 @@ public class TestPatternStrings
     [Fact]
     public void string_by_ref_write_back_preserves_replacement_allocation_snapshot()
     {
+        AllocationProbe.Settle();
+
         var baselineBytes = Interop.__test_live_bytes();
         var baselineAllocations = Interop.__test_live_allocations();
         var w = new UseString { s1 = "hello".Utf8(), s2 = "world".Utf8() };

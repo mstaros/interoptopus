@@ -7,6 +7,8 @@ public class TestPatternServicesDependent
     [Fact]
     public void shared_services_restore_nested_rust_allocation_baselines()
     {
+        AllocationProbe.Settle();
+
         var baselineBytes = Interop.__test_live_bytes();
         var baselineAllocations = Interop.__test_live_allocations();
 
