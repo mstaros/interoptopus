@@ -1,5 +1,5 @@
 [package]
-name = "interoptopus_csharp"
+name = "interoptopus_csharp_mps"
 description = "The C# backend for Interoptopus."
 authors.workspace = true
 edition.workspace = true
@@ -8,6 +8,9 @@ repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
 homepage.workspace = true
+
+[lib]
+name = "interoptopus_csharp"
 
 [features]
 unstable-extensions = []
@@ -28,7 +31,7 @@ interoptopus_backends.workspace = true
 
 [dev-dependencies]
 interoptopus = { workspace = true, features = ["macros", "serde"] }
-interoptopus_csharp = { path = ".", features = ["unstable-plugins", "unstable-rt-dotnet-download", "unstable-extensions"] }
+interoptopus_csharp = { path = ".", package = "interoptopus_csharp_mps", features = ["unstable-plugins", "unstable-rt-dotnet-download", "unstable-extensions"] }
 reference_project = { workspace = true, features = ["allocation-tracking"] }
 insta.workspace = true
 tokio.workspace = true

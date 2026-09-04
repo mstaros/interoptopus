@@ -1,5 +1,5 @@
 [package]
-name = "interoptopus_proc_impl"
+name = "interoptopus_proc_impl_mps"
 description = "Macros to produce Interoptopus item info."
 authors.workspace = true
 version.workspace = true
@@ -11,6 +11,9 @@ categories = ["api-bindings", "development-tools::ffi"]
 documentation = "https://docs.rs/interoptopus_proc/"
 repository.workspace = true
 homepage.workspace = true
+
+[lib]
+name = "interoptopus_proc_impl"
 
 [lints]
 workspace = true

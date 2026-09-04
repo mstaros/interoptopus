@@ -1,5 +1,5 @@
 [package]
-name = "interoptopus_proc"
+name = "interoptopus_proc_mps"
 description = "Macros to produce Interoptopus item info."
 authors.workspace = true
 version.workspace = true
@@ -16,6 +16,7 @@ homepage.workspace = true
 workspace = true
 
 [lib]
+name = "interoptopus_proc"
 path = "src/lib.rs"
 proc-macro = true
 

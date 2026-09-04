@@ -1,5 +1,5 @@
 [package]
-name = "interoptopus"
+name = "interoptopus_mps"
 description = "The polyglot bindings generator for your library (C#, C, Python, ...). 🐙"
 authors.workspace = true
 keywords = ["ffi", "code-generation", "bindings"]
@@ -11,6 +11,9 @@ license.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/interoptopus/"
 repository.workspace = true
+
+[lib]
+name = "interoptopus"
 
 [lints]
 workspace = true

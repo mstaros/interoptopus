@@ -1,5 +1,5 @@
 [package]
-name = "interoptopus_cpython"
+name = "interoptopus_cpython_mps"
 description = "Python ctypes binding generation for Interoptopus"
 authors.workspace = true
 edition.workspace = true
@@ -8,6 +8,9 @@ repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
 homepage.workspace = true
+
+[lib]
+name = "interoptopus_cpython"
 
 [dependencies]
 interoptopus.workspace = true

@@ -189,18 +189,18 @@ version = "0.1.0"
 
 [[package]]
 name = "core_library_ffi"
-version = "0.16.4"
+version = "0.17.0"
 dependencies = [
  "core_library",
- "interoptopus",
+ "interoptopus_mps",
 ]
 
 [[package]]
 name = "core_library_ffi_build"
-version = "0.16.4"
+version = "0.17.0"
 dependencies = [
  "core_library_ffi",
- "interoptopus_csharp",
+ "interoptopus_csharp_mps",
 ]
 
 [[package]]
@@ -556,10 +556,10 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "hello_world"
-version = "0.16.4"
+version = "0.17.0"
 dependencies = [
- "interoptopus",
- "interoptopus_csharp",
+ "interoptopus_csharp_mps",
+ "interoptopus_mps",
 ]
 
 [[package]]
@@ -740,47 +740,37 @@ dependencies = [
 ]
 
 [[package]]
-name = "interoptopus"
-version = "0.16.4"
-dependencies = [
- "interoptopus_proc",
- "serde",
- "tokio",
- "trybuild",
-]
-
-[[package]]
-name = "interoptopus_backends"
-version = "0.16.4"
+name = "interoptopus_backends_mps"
+version = "0.17.0"
 dependencies = [
  "insta",
- "interoptopus",
+ "interoptopus_mps",
  "tar",
  "tera",
 ]
 
 [[package]]
-name = "interoptopus_c"
-version = "0.16.4"
+name = "interoptopus_c_mps"
+version = "0.17.0"
 dependencies = [
- "interoptopus",
+ "interoptopus_mps",
 ]
 
 [[package]]
-name = "interoptopus_cpython"
-version = "0.16.4"
+name = "interoptopus_cpython_mps"
+version = "0.17.0"
 dependencies = [
- "interoptopus",
+ "interoptopus_mps",
 ]
 
 [[package]]
-name = "interoptopus_csharp"
-version = "0.16.4"
+name = "interoptopus_csharp_mps"
+version = "0.17.0"
 dependencies = [
  "insta",
- "interoptopus",
- "interoptopus_backends",
- "interoptopus_csharp",
+ "interoptopus_backends_mps",
+ "interoptopus_csharp_mps",
+ "interoptopus_mps",
  "libloading",
  "memory-stats",
  "netcorehost",
@@ -790,21 +780,31 @@ dependencies = [
 ]
 
 [[package]]
-name = "interoptopus_proc"
-version = "0.16.4"
+name = "interoptopus_mps"
+version = "0.17.0"
 dependencies = [
- "interoptopus_proc_impl",
+ "interoptopus_proc_mps",
+ "serde",
+ "tokio",
+ "trybuild",
 ]
 
 [[package]]
-name = "interoptopus_proc_impl"
-version = "0.16.4"
+name = "interoptopus_proc_impl_mps"
+version = "0.17.0"
 dependencies = [
  "insta",
  "prettyplease",
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "interoptopus_proc_mps"
+version = "0.17.0"
+dependencies = [
+ "interoptopus_proc_impl_mps",
 ]
 
 [[package]]
@@ -1169,9 +1169,9 @@ dependencies = [
 
 [[package]]
 name = "reference_project"
-version = "0.16.4"
+version = "0.17.0"
 dependencies = [
- "interoptopus",
+ "interoptopus_mps",
  "serde",
  "serde_json",
  "tokio",

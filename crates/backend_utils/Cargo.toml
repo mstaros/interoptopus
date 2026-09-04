@@ -1,5 +1,5 @@
 [package]
-name = "interoptopus_backends"
+name = "interoptopus_backends_mps"
 description = "Utilities for backend authors"
 authors.workspace = true
 keywords = ["ffi", "code-generation", "bindings"]
@@ -10,6 +10,9 @@ rust-version.workspace = true
 license.workspace = true
 documentation = "https://docs.rs/interoptopus/"
 repository.workspace = true
+
+[lib]
+name = "interoptopus_backends"
 
 [lints]
 workspace = true
