@@ -1,5 +1,6 @@
 [package]
 name = "interoptopus_c_mps"
+publish = ["local"]
 description = "C header generation for Interoptopus"
 authors.workspace = true
 edition.workspace = true

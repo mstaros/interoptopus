@@ -1,5 +1,6 @@
 [package]
 name = "interoptopus_backends_mps"
+publish = ["local"]
 description = "Utilities for backend authors"
 authors.workspace = true
 keywords = ["ffi", "code-generation", "bindings"]

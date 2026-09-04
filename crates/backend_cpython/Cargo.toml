@@ -1,5 +1,6 @@
 [package]
 name = "interoptopus_cpython_mps"
+publish = ["local"]
 description = "Python ctypes binding generation for Interoptopus"
 authors.workspace = true
 edition.workspace = true

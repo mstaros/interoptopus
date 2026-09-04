@@ -21,17 +21,17 @@ license = "MIT"
 repository = "https://github.com/ralfbiedert/interoptopus"
 homepage = "https://interoptopus.rs"
 rust-version = "1.93"
-version = "0.17.0"
+version = "0.17.1"
 
 [workspace.dependencies]
 # Internal
-interoptopus = { path = "crates/core", package = "interoptopus_mps", version = "0.17.0", default-features = false }
-interoptopus_proc = { path = "crates/proc_macros", package = "interoptopus_proc_mps", version = "0.17.0" }
-interoptopus_proc_impl = { path = "crates/proc_macros_impl", package = "interoptopus_proc_impl_mps", version = "0.17.0" }
-interoptopus_c = { path = "crates/backend_c", package = "interoptopus_c_mps", version = "0.17.0" }
-interoptopus_cpython = { path = "crates/backend_cpython", package = "interoptopus_cpython_mps", version = "0.17.0" }
-interoptopus_csharp = { path = "crates/backend_csharp", package = "interoptopus_csharp_mps", version = "0.17.0" }
-interoptopus_backends = { path = "crates/backend_utils", package = "interoptopus_backends_mps", version = "0.17.0" }
+interoptopus = { path = "crates/core", package = "interoptopus_mps", version = "0.17.1", registry = "local", default-features = false }
+interoptopus_proc = { path = "crates/proc_macros", package = "interoptopus_proc_mps", version = "0.17.1", registry = "local" }
+interoptopus_proc_impl = { path = "crates/proc_macros_impl", package = "interoptopus_proc_impl_mps", version = "0.17.1", registry = "local" }
+interoptopus_c = { path = "crates/backend_c", package = "interoptopus_c_mps", version = "0.17.1", registry = "local" }
+interoptopus_cpython = { path = "crates/backend_cpython", package = "interoptopus_cpython_mps", version = "0.17.1", registry = "local" }
+interoptopus_csharp = { path = "crates/backend_csharp", package = "interoptopus_csharp_mps", version = "0.17.1", registry = "local" }
+interoptopus_backends = { path = "crates/backend_utils", package = "interoptopus_backends_mps", version = "0.17.1", registry = "local" }
 # Not published (no version dependency):
 reference_project = { path = "crates/reference_project" }
 

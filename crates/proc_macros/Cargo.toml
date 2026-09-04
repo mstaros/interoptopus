@@ -1,5 +1,6 @@
 [package]
 name = "interoptopus_proc_mps"
+publish = ["local"]
 description = "Macros to produce Interoptopus item info."
 authors.workspace = true
 version.workspace = true
