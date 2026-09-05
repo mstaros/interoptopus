@@ -1,11 +1,12 @@
 //! ...
 
 use crate::lang::TypeId;
-use crate::lang::types::kind::Variant;
+use crate::lang::types::kind::{Field, Variant};
+use crate::lang::meta::Visibility;
+use interoptopus::lang::meta::Docs;
 use crate::pass::Outcome::Unchanged;
 use crate::pass::{ModelResult, PassInfo, model};
 use crate::try_extract_kind;
-use interoptopus::lang;
 use std::collections::HashMap;
 
 #[derive(Default)]
@@ -41,29 +42,34 @@ impl Pass {
             let mut all_variants_available = true;
 
             for rust_variant in &rust_enum.variants {
-                let (tag, cs_variant_type_id) = match &rust_variant.kind {
-                    lang::types::VariantKind::Unit => (rust_variant.tag, None),
-                    lang::types::VariantKind::Tuple(rust_type_id) => {
-                        // Tag comes from the variant, never its position. See `Issues.md` `09b82d44`.
-                        let Some(cs_type_id) = id_map.ty(*rust_type_id) else {
-                            // Variant type not yet mapped, skip this enum for now
-                            pass_meta.lost_found.missing(self.info, crate::pass::MissingItem::RustType(*rust_type_id));
-                            all_variants_available = false;
-                            break;
-                        };
-                        (rust_variant.tag, Some(cs_type_id))
-                    }
-                };
+                let mut fields = Vec::new();
+                for payload in rust_variant.payloads() {
+                    let Some(cs_type_id) = id_map.ty(payload.ty) else {
+                        pass_meta.lost_found.missing(self.info, crate::pass::MissingItem::RustType(payload.ty));
+                        all_variants_available = false;
+                        break;
+                    };
+                    fields.push(Field {
+                        name: payload.name.unwrap_or_default().to_string(),
+                        docs: Docs::default(),
+                        visibility: Visibility::Public,
+                        ty: cs_type_id,
+                    });
+                }
+                if !all_variants_available {
+                    break;
+                }
 
-                // Asks whether the *declaration* has a payload slot, not whether it resolved to one.
-                // A `Tuple(())` variant is payload-capable even though its C# payload is absent.
-                let can_carry_payload = matches!(rust_variant.kind, lang::types::VariantKind::Tuple(_));
+                // Eligibility follows declaration shape, including a payload that resolves to void.
+                let can_carry_payload = rust_variant.has_payload();
 
                 cs_variants.push(Variant {
                     name: rust_variant.name.clone(),
                     docs: rust_variant.docs.clone(),
-                    tag,
-                    ty: cs_variant_type_id,
+                    tag: rust_variant.tag,
+                    fields,
+                    field_names: Vec::new(),
+                    case_fields: Vec::new(),
                     can_carry_payload,
                     stem: String::new(),
                     case_type: String::new(),

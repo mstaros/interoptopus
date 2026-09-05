@@ -9,7 +9,7 @@
 //! The split worth keeping: **the Rust graph decides traversal and composition; the C#
 //! model decides canonical identifiers.**
 //!
-//! This type is deliberately two methods wide. Handing `WireCodeGen` the whole model would
+//! This type exposes only the identifiers wire needs. Handing `WireCodeGen` the whole model would
 //! make the right thing easy without making the wrong thing hard, and the wrong thing is
 //! exactly what `Issues.md` `4e9a17c3` is about — `is_cs_value_type` in this same file
 //! re-derives struct-vs-class, which `types::info::struct_class` owns, and that is what
@@ -55,6 +55,15 @@ impl<'a> CsNames<'a> {
         self.types.get(cs_id).map(|ty| ty.name.as_str())
     }
 
+    /// The model's allocated case property used by a multi-field accessor.
+    #[must_use]
+    pub fn variant_case_field(&self, rust_enum_id: RsTypeId, tag: isize, index: usize) -> Option<&str> {
+        let cs_id = self.id_map.ty(rust_enum_id)?;
+        let ty = self.types.get(cs_id)?;
+        let variant = data_enum(&ty.kind)?.variants.iter().find(|variant| variant.tag == tag)?;
+        variant.case_fields.get(index).map(String::as_str)
+    }
+
     /// The allocated stem for one variant, identified by its tag.
     ///
     /// Tag, never index and never name. Index is positional and breaks under the variant
@@ -72,7 +81,7 @@ impl<'a> CsNames<'a> {
 /// reference?
 ///
 /// Kept separate from [`CsNames`] rather than added to it. That type is named for identifiers
-/// and is deliberately two methods wide; this is a different question with a different
+/// and is deliberately narrow; this is a different question with a different
 /// authority, and folding it in would dissolve the boundary `CsNames` exists to hold.
 ///
 /// The question matters more than "struct or class" suggests. C# 15 unions must declare
@@ -167,7 +176,7 @@ mod tests {
     use interoptopus::lang::meta::Docs;
 
     fn variant(name: &str, stem: &str, tag: isize) -> Variant {
-        Variant { name: name.to_string(), docs: Docs::default(), tag, ty: None, can_carry_payload: false, stem: stem.to_string(), case_type: String::new() }
+        Variant { name: name.to_string(), docs: Docs::default(), tag, fields: Vec::new(), field_names: Vec::new(), case_fields: Vec::new(), can_carry_payload: false, stem: stem.to_string(), case_type: String::new() }
     }
 
     fn data_enum_kind(variants: Vec<Variant>) -> TypeKind {

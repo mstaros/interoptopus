@@ -1,5 +1,5 @@
 use crate::lang::TypeId;
-use crate::lang::types::kind::Primitive;
+use crate::lang::types::kind::{Field, Primitive};
 use interoptopus::lang::meta::Docs;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -8,13 +8,18 @@ pub struct Variant {
     pub name: String,
     pub docs: Docs,
     pub tag: isize,
-    pub ty: Option<TypeId>,
-    /// Whether this variant's *declaration* has a payload slot, irrespective of whether that
-    /// slot resolves to anything in C#.
+    /// Resolved payload fields in declaration order; an empty name denotes a tuple slot.
+    pub fields: Vec<Field>,
+    /// Collision-free backing member names, allocated by `union_names`.
+    pub field_names: Vec<String>,
+    /// Collision-free positional property names inside the generated case type.
+    pub case_fields: Vec<String>,
+    /// Whether this variant uses a payload-capable declaration, including empty tuple/struct
+    /// shapes and payload types that resolve to no C# fields.
     ///
-    /// This is not the same question as `ty.is_some()`. `Result<(), ()>` declares `Ok(T)` and
+    /// This is not the same question as `!fields.is_empty()`. `Result<(), ()>` declares `Ok(T)` and
     /// `Err(E)` — payload-carrying positions — but `fallback.rs` resolves a `()` payload to
-    /// `None`, so both read as payloadless downstream and become indistinguishable from a true
+    /// zero fields, so both read as payloadless downstream and become indistinguishable from a true
     /// unit variant like `Color::Red`.
     ///
     /// Union eligibility must ask *can a variant carry a payload*, which is a property of the
@@ -26,7 +31,7 @@ pub struct Variant {
     ///
     /// Equals [`Variant::name`] unless a fixed union member made that impossible; see
     /// `pass::model::common::types::union_names`. Output passes must derive the factory,
-    /// `IsX`, `AsX`, payload field and unmanaged helper from this rather than from `name`,
+    /// `IsX`, `AsX` and unmanaged helper from this, and use the allocated payload names,
     /// or uniqueness is not guaranteed.
     ///
     /// Carried on the variant rather than in a side table because several output passes
@@ -39,8 +44,8 @@ pub struct Variant {
 /// One resolved payload slot of a variant, in declaration order.
 ///
 /// A tuple variant's slots are unnamed. A named variant's slots carry the declared field
-/// name. Today every variant yields at most one unnamed slot, because [`Variant::ty`] holds
-/// one optional [`TypeId`]; see `docs/csharp-multi-field-variants.md`.
+/// name. All resolved slots are stored once in [`Variant::fields`]; see
+/// `docs/csharp-multi-field-variants.md`.
 ///
 /// These are *resolved* payloads, not declared ones. `Result<(), ()>` declares `Ok(T)` but
 /// resolves the `()` to no C# payload, so it yields no slots while
@@ -56,12 +61,9 @@ pub struct Payload<'a> {
 impl Variant {
     /// The variant's resolved payload slots, in declaration order.
     ///
-    /// Read payloads through this rather than through [`Variant::ty`] directly. A bare
-    /// `v.ty` sees exactly one payload by construction, so it keeps compiling and silently
-    /// drops the rest once variants widen. This accessor is the one seam that widens with
-    /// them.
+    /// This view preserves field order and declared names without duplicating storage.
     pub fn payloads(&self) -> impl Iterator<Item = Payload<'_>> + '_ {
-        self.ty.map(|ty| Payload { ty, name: None }).into_iter()
+        self.fields.iter().map(|field| Payload { ty: field.ty, name: if field.name.is_empty() { None } else { Some(&field.name) } })
     }
 }
 
@@ -76,7 +78,7 @@ impl DataEnum {
     /// Whether this enum receives C# union projection.
     ///
     /// True when any variant *can* carry a payload. See [`Variant::can_carry_payload`] for why
-    /// that is not `ty.is_some()`; the two predicates are separated by exactly one fixture,
+    /// that is not `ty.is_some()`; the original regression is covered by
     /// `enum_union_members::eligibility_asks_can_carry_not_does_carry`.
     ///
     /// The rule is per *enum*, not per variant: an enum projected as a union gives every

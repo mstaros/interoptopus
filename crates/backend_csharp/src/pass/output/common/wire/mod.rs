@@ -21,7 +21,7 @@ use interoptopus::lang::types::{Array, Layout, Primitive, Struct, TypeKind as Rs
 /// translating primitives, `WireOnly` types, and user structs into inline C# statements.
 pub struct WireCodeGen<'a> {
     pub rs_types: &'a RsTypes,
-    /// Wire's two-method view of the resolved C# model. Deliberately not the model itself.
+    /// Wire's identifier view of the resolved C# model. Deliberately not the model itself.
     pub cs: CsNames<'a>,
     /// Whether `T?` yields `Nullable<T>` or a nullable reference. A separate question from
     /// identifiers, with a separate authority; see `Issues.md` 31248473.
@@ -59,11 +59,15 @@ impl WireCodeGen<'_> {
         stem
     }
 
-    /// Accesses the existing single-payload public accessor. Step 5 selects the
-    /// multi-field accessor contract; do not emit repeated reads of one payload.
-    fn variant_payload_value(&self, ty_id: TypeId, tag: isize, val: &str, index: usize) -> String {
-        assert_eq!(index, 0, "multi-field AsX() return contract must be selected before lifting the enum payload limit");
-        format!("{val}.As{}()", self.variant_stem(ty_id, tag))
+    /// Single-field accessors return the payload; multi-field accessors return a case.
+    fn variant_payload_value(&self, ty_id: TypeId, tag: isize, val: &str, index: usize, count: usize) -> String {
+        let accessor = format!("{val}.As{}()", self.variant_stem(ty_id, tag));
+        if count == 1 {
+            accessor
+        } else {
+            let field = self.cs.variant_case_field(ty_id, tag, index).expect("wire codegen requires the allocated case field");
+            format!("{accessor}.{field}")
+        }
     }
 
     /// Maps a Rust type to its C# managed type name.
@@ -86,7 +90,7 @@ impl WireCodeGen<'_> {
                 format!("{inner_name}?")
             }
             RsTypeKind::Struct(_) => self.model_type_name(ty_id, &ty.name),
-            RsTypeKind::Enum(_) => self.model_type_name(ty_id, &ty.name),
+            RsTypeKind::Enum(_) | RsTypeKind::TypePattern(interoptopus::lang::types::TypePattern::Utf8String) => self.model_type_name(ty_id, &ty.name),
             RsTypeKind::Array(arr) => format!("{}[]", self.cs_type_name(arr.ty)),
             RsTypeKind::TypePattern(interoptopus::lang::types::TypePattern::Option(inner)) => {
                 let inner_name = self.cs_type_name(*inner);
@@ -117,7 +121,19 @@ impl WireCodeGen<'_> {
             self.emit_deserialize(&mut lines, f.ty, &target, 0, 0);
         }
         lines.push("return result;".to_string());
-        lines.join("\n")
+        let owns_strings = s.fields.iter().any(|field| contains_owned_wire(field.ty, self.rs_types, &mut std::collections::HashSet::new()));
+        finish_deserialize_body(&lines, owns_strings)
+    }
+
+    /// Generates a complete deserializer, retaining native allocations until the value is complete.
+    #[must_use]
+    pub fn deserialize_type_body(&self, ty_id: TypeId) -> String {
+        let name = self.cs_type_name(ty_id);
+        let mut lines = vec![format!("{name} result = default;")];
+        self.emit_deserialize(&mut lines, ty_id, "result", 0, 0);
+        lines.push("return result;".to_string());
+        let owns_strings = contains_owned_wire(ty_id, self.rs_types, &mut std::collections::HashSet::new());
+        finish_deserialize_body(&lines, owns_strings)
     }
 
     /// Generates the size calculation body for a struct.
@@ -147,6 +163,9 @@ impl WireCodeGen<'_> {
             }
             RsTypeKind::WireOnly(WireOnly::String) => {
                 lines.push(format!("{p}{{ var _bytes = System.Text.Encoding.UTF8.GetBytes({val} ?? \"\"); writer.Write((uint)_bytes.Length); writer.Write(_bytes); }}"));
+            }
+            RsTypeKind::TypePattern(interoptopus::lang::types::TypePattern::Utf8String) => {
+                lines.push(format!("{p}{{ var _bytes = System.Text.Encoding.UTF8.GetBytes({val}.String); writer.Write((uint)_bytes.Length); writer.Write(_bytes); }}"));
             }
             RsTypeKind::WireOnly(WireOnly::Vec(inner_id)) => {
                 let iter = format!("_item{depth}");
@@ -212,6 +231,12 @@ impl WireCodeGen<'_> {
             RsTypeKind::WireOnly(WireOnly::String) => {
                 lines.push(format!(
                     "{p}{{ var _len = reader.ReadUInt32(); {target} = _len > 0 ? System.Text.Encoding.UTF8.GetString(reader.ReadBytes((int)_len)) : \"\"; }}"
+                ));
+            }
+            RsTypeKind::TypePattern(interoptopus::lang::types::TypePattern::Utf8String) => {
+                let name = self.model_type_name(ty_id, &ty.name);
+                lines.push(format!(
+                    "{p}{{ var _len = reader.ReadUInt32(); var _bytes = reader.ReadBytes(checked((int)_len)); if (_bytes.Length != _len) throw new System.IO.EndOfStreamException(); {target} = {name}.From(new System.Text.UTF8Encoding(false, true).GetString(_bytes)); _wireOwned.Add({target}); }}"
                 ));
             }
             RsTypeKind::WireOnly(WireOnly::Vec(inner_id)) => {
@@ -296,6 +321,9 @@ impl WireCodeGen<'_> {
             RsTypeKind::WireOnly(WireOnly::String) => {
                 lines.push(format!("{p}_size += 4 + System.Text.Encoding.UTF8.GetByteCount({val} ?? \"\");"));
             }
+            RsTypeKind::TypePattern(interoptopus::lang::types::TypePattern::Utf8String) => {
+                lines.push(format!("{p}_size += 4 + System.Text.Encoding.UTF8.GetByteCount({val}.String);"));
+            }
             RsTypeKind::WireOnly(WireOnly::Vec(inner_id)) => {
                 let iter = format!("_item{depth}");
                 let pi = pad(indent + 1);
@@ -371,7 +399,7 @@ impl WireCodeGen<'_> {
             lines.push(format!("{p}{{"));
             lines.push(format!("{pi}writer.Write(({prim_cs}){tag});"));
             for (index, payload) in variant.payloads().enumerate() {
-                let payload_val = self.variant_payload_value(ty_id, variant.tag, val, index);
+                let payload_val = self.variant_payload_value(ty_id, variant.tag, val, index, variant.payloads().count());
                 self.emit_serialize(lines, payload.ty, &payload_val, depth + 1, indent + 1);
             }
             lines.push(format!("{p}}}"));
@@ -445,7 +473,7 @@ impl WireCodeGen<'_> {
             lines.push(format!("{p}if ({val}.Is{name})", name = self.variant_stem(ty_id, variant.tag)));
             lines.push(format!("{p}{{"));
             for (index, payload) in payloads.into_iter().enumerate() {
-                let payload_val = self.variant_payload_value(ty_id, variant.tag, val, index);
+                let payload_val = self.variant_payload_value(ty_id, variant.tag, val, index, variant.payloads().count());
                 self.emit_size(lines, payload.ty, &payload_val, depth + 1, indent + 1);
             }
             lines.push(format!("{p}}}"));
@@ -600,6 +628,35 @@ fn is_cs_value_type(ty_id: TypeId, rs_types: &RsTypes, layout: &CsLayout<'_>) ->
         // payload is emitted as a class, and the old `Enum(_) => true` made wire emit
         // `.HasValue`/`.Value` on it.
         RsTypeKind::Struct(_) | RsTypeKind::Enum(_) => layout.is_value_type(ty_id).unwrap_or(false),
+        _ => false,
+    }
+}
+
+
+fn finish_deserialize_body(lines: &[String], owns_strings: bool) -> String {
+    if !owns_strings {
+        return lines.join("\n");
+    }
+    // Each newly allocated leaf is tracked once, including leaves nested in collections or cases.
+    // On success the returned value owns them; a later read failure must release all earlier leaves.
+    let body = lines.iter().map(|line| format!("    {line}")).collect::<Vec<_>>().join("\n");
+    format!("var _wireOwned = new List<IDisposable>();\ntry\n{{\n{body}\n}}\ncatch\n{{\n    foreach (var owned in _wireOwned) owned.Dispose();\n    throw;\n}}")
+}
+
+fn contains_owned_wire(ty_id: TypeId, types: &RsTypes, visited: &mut std::collections::HashSet<TypeId>) -> bool {
+    if !visited.insert(ty_id) {
+        return false;
+    }
+    let Some(ty) = types.get(&ty_id) else { return false };
+    match &ty.kind {
+        RsTypeKind::TypePattern(interoptopus::lang::types::TypePattern::Utf8String) => true,
+        RsTypeKind::Struct(s) => s.fields.iter().any(|field| contains_owned_wire(field.ty, types, visited)),
+        RsTypeKind::Enum(e) => e.variants.iter().any(|variant| variant.payloads().any(|field| contains_owned_wire(field.ty, types, visited))),
+        RsTypeKind::Array(array) => contains_owned_wire(array.ty, types, visited),
+        RsTypeKind::WireOnly(WireOnly::Vec(inner) | WireOnly::Option(inner)) | RsTypeKind::TypePattern(interoptopus::lang::types::TypePattern::Option(inner)) => {
+            contains_owned_wire(*inner, types, visited)
+        }
+        RsTypeKind::WireOnly(WireOnly::Map(key, value)) => contains_owned_wire(*key, types, visited) || contains_owned_wire(*value, types, visited),
         _ => false,
     }
 }

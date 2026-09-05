@@ -2,6 +2,8 @@
   <PropertyGroup>
     <TargetFramework>net11.0</TargetFramework>
     <OutputType>Exe</OutputType>
+    <!-- The Cargo reference harness builds this assembly, then runs it through patched corerun. -->
+    <TestHostRuntime>PatchedCoreRunRequired</TestHostRuntime>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Nullable>enable</Nullable>
     <!-- Conditional aot flag so dynamic code execution is allowed for debug builds but disabled when publishing the .exe -->

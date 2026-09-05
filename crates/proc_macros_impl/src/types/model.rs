@@ -53,18 +53,22 @@ pub struct VariantModel {
 #[allow(clippy::large_enum_variant)]
 pub enum VariantData {
     Unit,
-    Tuple(Type),
+    Tuple(Vec<Type>),
+    Named(Vec<FieldModel>),
 }
 
 impl VariantModel {
-    /// Declared payload types in field order. The parser still rejects named and
-    /// multi-field variants; wire emission uses this seam before storage widens.
+    /// Declared payload types in field order, independent of variant shape.
     pub fn payloads(&self) -> impl Iterator<Item = &Type> {
-        match &self.data {
-            VariantData::Unit => None,
-            VariantData::Tuple(ty) => Some(ty),
-        }
-        .into_iter()
+        let tuple = match &self.data {
+            VariantData::Tuple(types) => types.as_slice(),
+            _ => &[],
+        };
+        let named = match &self.data {
+            VariantData::Named(fields) => fields.as_slice(),
+            _ => &[],
+        };
+        tuple.iter().chain(named.iter().map(|field| &field.ty))
     }
 }
 
@@ -103,9 +107,10 @@ impl TypeModel {
                     .map(|variant| {
                         let data = match variant.fields {
                             Fields::Unit => VariantData::Unit,
-                            Fields::Unnamed(fields) if fields.unnamed.len() == 1 => VariantData::Tuple(fields.unnamed.into_iter().next().unwrap().ty),
-                            Fields::Unnamed(_) => return Err(syn::Error::new_spanned(variant, "Tuple variants with multiple fields are not supported")),
-                            Fields::Named(_) => return Err(syn::Error::new_spanned(variant, "Struct variants are not supported")),
+                            Fields::Unnamed(fields) => VariantData::Tuple(fields.unnamed.into_iter().map(|field| field.ty).collect()),
+                            Fields::Named(fields) => VariantData::Named(fields.named.into_iter().map(|field| {
+                                FieldModel { name: field.ident, ty: field.ty, vis: field.vis, skip: false, docs: extract_docs(&field.attrs) }
+                            }).collect()),
                         };
 
                         Ok(VariantModel { name: variant.ident, data, discriminant: variant.discriminant.map(|(_, expr)| expr), docs: extract_docs(&variant.attrs) })

@@ -1,6 +1,6 @@
 use crate::types::basic::Vec3f32;
 use crate::types::complex::Layer3;
-use crate::types::enums::{EnumNegative, EnumPayload};
+use crate::types::enums::{EnumMultiOwned, EnumMultiPayload, EnumNegative, EnumPayload};
 use interoptopus::ffi;
 
 #[ffi]
@@ -37,4 +37,32 @@ pub fn enums_4(x: Layer3<ffi::String>) -> ffi::String {
 #[ffi]
 pub fn enums_5(x: EnumNegative) -> EnumNegative {
     x
+}
+
+#[ffi]
+pub fn enums_multi_echo(x: EnumMultiPayload) -> EnumMultiPayload {
+    x
+}
+
+#[ffi]
+pub fn enums_multi_borrow(x: &EnumMultiPayload) -> u64 {
+    match x {
+        EnumMultiPayload::Tuple(small, wide, tail) | EnumMultiPayload::Named { small, wide, tail } => u64::from(*small) + wide + u64::from(*tail),
+        EnumMultiPayload::Single(value) | EnumMultiPayload::NamedSingle { number: value } => u64::from(*value),
+        _ => 0,
+    }
+}
+
+#[ffi]
+pub fn enums_multi_owned_echo(x: EnumMultiOwned) -> EnumMultiOwned {
+    x
+}
+
+#[ffi]
+pub fn enums_multi_owned_borrow(x: &EnumMultiOwned) -> u64 {
+    match x {
+        EnumMultiOwned::Tuple(first, second, count) | EnumMultiOwned::Named { first, second, count } => (first.as_str().len() + second.as_str().len()) as u64 + count,
+        EnumMultiOwned::Single(value) => value.as_str().len() as u64,
+        EnumMultiOwned::Unit => 0,
+    }
 }

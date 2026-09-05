@@ -135,16 +135,19 @@ unsafe impl TypeInfo for String {
 }
 
 unsafe impl WireIO for String {
-    fn write(&self, _: &mut impl Write) -> Result<(), SerializationError> {
-        todo!()
+    fn write(&self, out: &mut impl Write) -> Result<(), SerializationError> {
+        let text = self.as_str();
+        u32::try_from(text.len())?.write(out)?;
+        out.write_all(text.as_bytes())?;
+        Ok(())
     }
 
-    fn read(_: &mut impl Read) -> Result<Self, SerializationError> {
-        todo!()
+    fn read(input: &mut impl Read) -> Result<Self, SerializationError> {
+        std::string::String::read(input).map(Self::from_string)
     }
 
     fn live_size(&self) -> usize {
-        todo!()
+        4 + self.as_str().len()
     }
 }
 

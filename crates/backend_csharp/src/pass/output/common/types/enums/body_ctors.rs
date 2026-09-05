@@ -43,18 +43,21 @@ impl Pass {
                 .iter()
                 .map(|v| {
                     let payloads: Vec<HashMap<&str, String>> = model::common::types::union_names::payload_fields(v)
-                        .map(|(payload_ty, field)| {
+                        .enumerate()
+                        .map(|(index, (payload_ty, field))| {
                             let ty = super::resolve_service_variant(payload_ty, types, mode);
                             let type_name = types.get(ty).map(|t| t.name.clone()).unwrap_or_default();
-                            HashMap::from([("field", field), ("type", type_name)])
+                            let case_field = v.case_fields[index].clone();
+                            let parameter = if v.fields.len() == 1 { "value".to_string() } else { case_field.clone() };
+                            HashMap::from([("field", field), ("type", type_name), ("case_field", case_field), ("parameter", parameter)])
                         })
                         .collect();
-                    // Preserve the public single-payload AsX() return type during Steps 2–4.
-                    // Step 5 must choose the multi-field return shape before widening storage.
+                    // Existing one-field accessors return their payload; new multi-field
+                    // accessors return the already generated case type.
                     let (type_name, field) = match payloads.as_slice() {
                         [] => (String::new(), String::new()),
                         [payload] => (payload["type"].clone(), payload["field"].clone()),
-                        _ => panic!("multi-field AsX() return contract must be selected before lifting the enum payload limit"),
+                        _ => (v.case_type.clone(), format!("new {}({})", v.case_type, payloads.iter().map(|payload| payload["field"].as_str()).collect::<Vec<_>>().join(", "))),
                     };
                     let has_payload = !payloads.is_empty();
 

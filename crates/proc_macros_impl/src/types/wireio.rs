@@ -2,7 +2,7 @@ use proc_macro2::TokenStream;
 use quote::quote_spanned;
 use syn::spanned::Spanned;
 
-use crate::types::model::{TypeData, TypeModel, VariantModel};
+use crate::types::model::{TypeData, TypeModel, VariantData, VariantModel};
 
 /// Bind every payload in declaration order. These names are macro-local.
 fn payload_bindings(variant: &VariantModel) -> Vec<syn::Ident> {
@@ -12,10 +12,13 @@ fn payload_bindings(variant: &VariantModel) -> Vec<syn::Ident> {
 /// The same variant syntax is used to destructure a value and to construct it.
 fn variant_value(name: &syn::Ident, variant: &VariantModel, bindings: &[syn::Ident]) -> TokenStream {
     let vname = &variant.name;
-    if bindings.is_empty() {
-        quote_spanned! { vname.span() => #name::#vname }
-    } else {
-        quote_spanned! { vname.span() => #name::#vname(#(#bindings),*) }
+    match &variant.data {
+        VariantData::Unit => quote_spanned! { vname.span() => #name::#vname },
+        VariantData::Tuple(_) => quote_spanned! { vname.span() => #name::#vname(#(#bindings),*) },
+        VariantData::Named(fields) => {
+            let names = fields.iter().map(|field| field.name.as_ref().expect("named variant fields have identifiers"));
+            quote_spanned! { vname.span() => #name::#vname { #(#names: #bindings),* } }
+        }
     }
 }
 
@@ -63,9 +66,7 @@ impl TypeModel {
             TypeData::Enum(_) => false,
         };
 
-        let is_unsupported_enum = false;
-
-        let use_underscore_params = is_unsupported_enum || self.args.opaque || self.args.service || has_skipped_fields;
+        let use_underscore_params = self.args.opaque || self.args.service || has_skipped_fields;
 
         let (write_param, read_param) = if use_underscore_params {
             (quote_spanned! { name.span() => _out }, quote_spanned! { name.span() => _input })
@@ -122,7 +123,10 @@ impl TypeModel {
                     .collect();
 
                 if let Some(existing_where) = existing_where {
-                    let existing_predicates = &existing_where.predicates;
+                    let mut existing_predicates = existing_where.predicates.clone();
+                    if !existing_predicates.empty_or_trailing() {
+                        existing_predicates.push_punct(syn::token::Comma::default());
+                    }
                     if field_bounds.is_empty() {
                         quote_spanned! { self.name.span() => where #existing_predicates }
                     } else {
@@ -142,7 +146,10 @@ impl TypeModel {
                     .collect();
 
                 if let Some(existing_where) = existing_where {
-                    let existing_predicates = &existing_where.predicates;
+                    let mut existing_predicates = existing_where.predicates.clone();
+                    if !existing_predicates.empty_or_trailing() {
+                        existing_predicates.push_punct(syn::token::Comma::default());
+                    }
                     if field_bounds.is_empty() {
                         quote_spanned! { self.name.span() => where #existing_predicates }
                     } else {

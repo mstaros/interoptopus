@@ -5,6 +5,39 @@ use syn::spanned::Spanned;
 
 use crate::types::model::{TypeData, TypeModel, VariantData};
 
+fn variant_kind(variant: &crate::types::model::VariantModel) -> TokenStream {
+    match &variant.data {
+        VariantData::Unit => {
+            quote_spanned! { variant.name.span() =>
+                ::interoptopus::lang::types::VariantKind::Unit
+            }
+        }
+        VariantData::Tuple(types) => {
+            quote_spanned! { variant.name.span() =>
+                ::interoptopus::lang::types::VariantKind::Tuple(vec![#(<#types as ::interoptopus::lang::types::TypeInfo>::id()),*])
+            }
+        }
+        VariantData::Named(fields) => {
+            let fields = fields.iter().map(|field| {
+                let name = field.name.as_ref().expect("named variant fields have identifiers").to_string();
+                let ty = &field.ty;
+                let docs = field.docs.join("\n");
+                quote_spanned! { variant.name.span() =>
+                    ::interoptopus::lang::types::Field {
+                        name: #name.to_string(),
+                        docs: ::interoptopus::lang::meta::Docs::from_line(#docs),
+                        visibility: ::interoptopus::lang::meta::Visibility::Public,
+                        ty: <#ty as ::interoptopus::lang::types::TypeInfo>::id(),
+                    }
+                }
+            });
+            quote_spanned! { variant.name.span() =>
+                ::interoptopus::lang::types::VariantKind::Struct(vec![#(#fields),*])
+            }
+        }
+    }
+}
+
 impl TypeModel {
     #[expect(clippy::unnecessary_wraps)]
     pub fn emit_typeinfo_impl(&self) -> Result<TokenStream, Error> {
@@ -75,11 +108,8 @@ impl TypeModel {
                 }
             }
             TypeData::Enum(enum_data) => {
-                let variant_checks = enum_data.variants.iter().filter_map(|variant| match &variant.data {
-                    VariantData::Unit => None,
-                    VariantData::Tuple(ty) => Some({
-                        quote_spanned! { variant.name.span() => <#ty as ::interoptopus::lang::types::TypeInfo>::WIRE_SAFE }
-                    }),
+                let variant_checks = enum_data.variants.iter().flat_map(|variant| {
+                    variant.payloads().map(|ty| quote_spanned! { variant.name.span() => <#ty as ::interoptopus::lang::types::TypeInfo>::WIRE_SAFE })
                 });
 
                 let checks: Vec<_> = variant_checks.collect();
@@ -114,11 +144,8 @@ impl TypeModel {
                 }
             }
             TypeData::Enum(enum_data) => {
-                let variant_checks = enum_data.variants.iter().filter_map(|variant| match &variant.data {
-                    VariantData::Unit => None,
-                    VariantData::Tuple(ty) => Some({
-                        quote_spanned! { variant.name.span() => <#ty as ::interoptopus::lang::types::TypeInfo>::RAW_SAFE }
-                    }),
+                let variant_checks = enum_data.variants.iter().flat_map(|variant| {
+                    variant.payloads().map(|ty| quote_spanned! { variant.name.span() => <#ty as ::interoptopus::lang::types::TypeInfo>::RAW_SAFE })
                 });
 
                 let checks: Vec<_> = variant_checks.collect();
@@ -153,11 +180,8 @@ impl TypeModel {
                 }
             }
             TypeData::Enum(enum_data) => {
-                let variant_checks = enum_data.variants.iter().filter_map(|variant| match &variant.data {
-                    VariantData::Unit => None,
-                    VariantData::Tuple(ty) => Some({
-                        quote_spanned! { variant.name.span() => <#ty as ::interoptopus::lang::types::TypeInfo>::ASYNC_SAFE }
-                    }),
+                let variant_checks = enum_data.variants.iter().flat_map(|variant| {
+                    variant.payloads().map(|ty| quote_spanned! { variant.name.span() => <#ty as ::interoptopus::lang::types::TypeInfo>::ASYNC_SAFE })
                 });
 
                 let checks: Vec<_> = variant_checks.collect();
@@ -265,20 +289,7 @@ impl TypeModel {
                     };
                     offset += 1;
 
-                    let kind = match &variant.data {
-                        VariantData::Unit => {
-                            quote_spanned! { variant.name.span() =>
-                                ::interoptopus::lang::types::VariantKind::Unit
-                            }
-                        }
-                        VariantData::Tuple(ty) => {
-                            quote_spanned! { variant.name.span() =>
-                                ::interoptopus::lang::types::VariantKind::Tuple(
-                                    <#ty as ::interoptopus::lang::types::TypeInfo>::id()
-                                )
-                            }
-                        }
-                    };
+                    let kind = variant_kind(variant);
 
                     quote_spanned! { variant.name.span() =>
                         ::interoptopus::lang::types::Variant {
@@ -406,11 +417,10 @@ impl TypeModel {
                     quote_spanned! { self.name.span() => #(#registrations)* }
                 }
                 TypeData::Enum(enum_data) => {
-                    let registrations = enum_data.variants.iter().filter_map(|variant| match &variant.data {
-                        VariantData::Unit => None,
-                        VariantData::Tuple(ty) => Some(quote_spanned! { variant.name.span() =>
+                    let registrations = enum_data.variants.iter().flat_map(|variant| {
+                        variant.payloads().map(|ty| quote_spanned! { variant.name.span() =>
                             <#ty as ::interoptopus::lang::types::TypeInfo>::register(inventory);
-                        }),
+                        })
                     });
                     quote_spanned! { self.name.span() => #(#registrations)* }
                 }

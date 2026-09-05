@@ -24,9 +24,6 @@ pub enum EnumPayload {
     A,
     B(Vec3f32),
     C(u32),
-    // We don't support these for now
-    // D { x: Vec3f32 },
-    // E(u8, u8, u8),
 }
 
 #[ffi]
@@ -73,4 +70,26 @@ pub enum EnumUnionNameCollision {
     B(u32),
     BCase(u32),
     IsB(u32),
+}
+
+#[ffi]
+#[derive(Clone, Debug, PartialEq)]
+#[allow(non_snake_case)]
+pub enum EnumMultiPayload {
+    Unit,
+    Single(u32),
+    Tuple(u8, u64, u16),
+    Named { small: u8, wide: u64, tail: u16 },
+    NamedSingle { number: u32 },
+    EmptyTuple(),
+    EmptyNamed {},
+    Collisions { Value: u32, Equals: u32, Deconstruct: u32, CollisionsCase: u32 },
+}
+
+#[ffi]
+pub enum EnumMultiOwned {
+    Unit,
+    Single(ffi::String),
+    Tuple(ffi::String, ffi::String, u64),
+    Named { first: ffi::String, second: ffi::String, count: u64 },
 }

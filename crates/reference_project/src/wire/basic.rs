@@ -41,3 +41,26 @@ pub fn wire_accept_enum_2(mut x: Wire<DataEnum>) -> u32 {
         DataEnum::H(x) => x.len() as u32,
     }
 }
+
+#[ffi]
+pub enum WireMultiPayload {
+    Unit,
+    Single(String),
+    Tuple(u8, String, Vec<u16>),
+    Named { code: u64, text: String, values: Vec<u16> },
+}
+
+#[ffi]
+pub fn wire_multi_echo(mut x: Wire<WireMultiPayload>) -> Wire<WireMultiPayload> {
+    Wire::from(x.unwire())
+}
+
+#[ffi]
+pub fn enums_multi_wire_echo(mut x: Wire<crate::types::enums::EnumMultiPayload>) -> Wire<crate::types::enums::EnumMultiPayload> {
+    Wire::from(x.unwire())
+}
+
+#[ffi]
+pub fn enums_multi_owned_wire_echo(mut x: Wire<crate::types::enums::EnumMultiOwned>) -> Wire<crate::types::enums::EnumMultiOwned> {
+    Wire::from(x.unwire())
+}

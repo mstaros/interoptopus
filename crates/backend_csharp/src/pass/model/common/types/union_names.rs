@@ -68,6 +68,8 @@ pub struct VariantNames {
     pub accessor: String,
     /// Managed and unmanaged payload member names, in payload order.
     pub field: Vec<String>,
+    /// Positional property names inside this variant's case type.
+    pub case_fields: Vec<String>,
     /// Nested per-variant unmanaged helper struct.
     pub unmanaged: String,
     /// Nested case type introduced by union projection.
@@ -103,39 +105,55 @@ fn data_enum_mut(kind: &mut TypeKind) -> Option<&mut DataEnum> {
     }
 }
 
-/// Payload member names reserved by a variant's stem.
-///
-/// Reserve the historical name even for unit variants: removing that reservation in a
-/// preparatory refactor could rename a colliding sibling and change existing output.
-/// Step 5 widens this collection and allocates named fields here, not in output passes.
-fn field_names(stem: &str) -> Vec<String> {
-    vec![format!("_{stem}")]
+/// Backing names depend on arity, not on separately allocated case-property names.
+/// Historical unit reservations and single-payload fields keep their exact spelling.
+fn field_names(stem: &str, count: usize) -> Vec<String> {
+    if count <= 1 {
+        vec![format!("_{stem}")]
+    } else {
+        (0..count).map(|index| format!("_{stem}_{index}")).collect()
+    }
 }
 
-/// The variant's payloads paired with their centrally allocated member names.
-///
-/// These members occur both on the managed union and inside its per-variant unmanaged
-/// helper. The helper itself remains one struct per variant, containing every payload.
+/// The variant's payloads paired with their centrally allocated backing member names.
 pub(crate) fn payload_fields(variant: &Variant) -> impl Iterator<Item = (TypeId, String)> + '_ {
-    let fields = field_names(&variant.stem);
     variant.payloads().enumerate().map(move |(index, payload)| {
-        let field = fields.get(index).expect("multi-field member names must be allocated before lifting the enum payload limit").clone();
+        let field = variant.field_names.get(index).expect("union_names must allocate every payload member").clone();
         (payload.ty, field)
     })
 }
 
-/// Names derived from a stem that the generator already emits today.
-///
-/// Every member occupies the enum's declaration space, so a stem is only usable when
-/// its fixed members and its entire payload-field collection are free.
-fn family(stem: &str) -> Vec<String> {
+/// The factory, checks, helper and every backing field occupy the union's declaration space.
+fn family(stem: &str, count: usize) -> Vec<String> {
     let mut names = vec![stem.to_string(), format!("Is{stem}"), format!("As{stem}"), format!("Unmanaged{stem}")];
-    names.extend(field_names(stem));
+    names.extend(field_names(stem, count));
     names
 }
 
+/// Case properties preserve declared names; tuple slots use Value or Item1..ItemN.
+/// Existing one-slot tuple cases retain Value even though outer unions reserve it.
+fn case_field_names(case_type: &str, payloads: &[Option<String>], outer: &HashSet<String>) -> Vec<String> {
+    if matches!(payloads, [None]) {
+        return vec!["Value".to_string()];
+    }
+    let mut claimed = outer.clone();
+    claimed.insert(case_type.to_string());
+    claimed.extend(["Equals", "GetHashCode", "Deconstruct", "PrintMembers", "EqualityContract"].map(str::to_string));
+    payloads.iter().enumerate().map(|(index, name)| {
+        let base = name.as_deref().map_or_else(|| format!("Item{}", index + 1), |name| name.trim_start_matches("r#").to_string());
+        let mut candidate = base.clone();
+        let mut suffix = 1usize;
+        while claimed.contains(&candidate) {
+            candidate = if suffix == 1 { format!("{base}Field") } else { format!("{base}Field{suffix}") };
+            suffix += 1;
+        }
+        claimed.insert(candidate.clone());
+        candidate
+    }).collect()
+}
+
 /// Allocates the name family for one enum.
-fn resolve(enclosing: &str, stems: &[String]) -> Vec<VariantNames> {
+fn resolve(enclosing: &str, stems: &[String], payloads: &[Vec<Option<String>>]) -> Vec<VariantNames> {
     // Names that can never be taken: the union contract, plus the enclosing type itself
     // (CS0542 forbids a member matching the name of its containing type).
     let mut fixed: HashSet<String> = RESERVED.iter().map(|s| (*s).to_string()).collect();
@@ -150,7 +168,7 @@ fn resolve(enclosing: &str, stems: &[String]) -> Vec<VariantNames> {
     // allocating in declaration order would hand `ValueVariant` to the first and displace
     // the second, breaking API that had no collision.
     for (i, stem) in stems.iter().enumerate() {
-        let fam = family(stem);
+        let fam = family(stem, payloads[i].len());
         if fam.iter().all(|n| !claimed.contains(n)) {
             claimed.extend(fam);
             chosen[i] = Some(stem.clone());
@@ -165,7 +183,7 @@ fn resolve(enclosing: &str, stems: &[String]) -> Vec<VariantNames> {
         let mut n = 1usize;
         let candidate = loop {
             let cand = if n == 1 { format!("{stem}Variant") } else { format!("{stem}Variant{n}") };
-            let fam = family(&cand);
+            let fam = family(&cand, payloads[i].len());
             if fam.iter().all(|x| !claimed.contains(x)) {
                 claimed.extend(fam);
                 break cand;
@@ -178,10 +196,11 @@ fn resolve(enclosing: &str, stems: &[String]) -> Vec<VariantNames> {
     // Pass 3 -- case types. These are new, so they move on collision rather than
     // disturbing a stem that is already emitting fine. Nested types share the members'
     // declaration space, so they are checked against the same claimed set.
-    stems
+    let mut resolved: Vec<_> = stems
         .iter()
         .zip(chosen)
-        .map(|(original, stem)| {
+        .enumerate()
+        .map(|(index, (original, stem))| {
             let stem = stem.expect("every stem is assigned in pass 1 or 2");
             let mut n = 1usize;
             let case_type = loop {
@@ -196,11 +215,15 @@ fn resolve(enclosing: &str, stems: &[String]) -> Vec<VariantNames> {
             let factory = stem.clone();
             let is_check = format!("Is{stem}");
             let accessor = format!("As{stem}");
-            let field = field_names(&stem);
+            let field = field_names(&stem, payloads[index].len());
             let unmanaged = format!("Unmanaged{stem}");
-            VariantNames { renamed: &stem != original, stem, factory, is_check, accessor, field, unmanaged, case_type }
+            VariantNames { renamed: &stem != original, stem, factory, is_check, accessor, field, case_fields: Vec::new(), unmanaged, case_type }
         })
-        .collect()
+        .collect();
+    for (variant, payloads) in resolved.iter_mut().zip(payloads) {
+        variant.case_fields = case_field_names(&variant.case_type, payloads, &claimed);
+    }
+    resolved
 }
 
 impl Pass {
@@ -241,9 +264,12 @@ impl Pass {
 
             let Some(target) = data_enum_mut(&mut kind) else { continue };
             let stems: Vec<String> = target.variants.iter().map(|v| v.name.clone()).collect();
-            for (variant, resolved) in target.variants.iter_mut().zip(resolve(&enclosing, &stems)) {
+            let payloads: Vec<_> = target.variants.iter().map(|variant| variant.payloads().map(|payload| payload.name.map(str::to_string)).collect()).collect();
+            for (variant, resolved) in target.variants.iter_mut().zip(resolve(&enclosing, &stems, &payloads)) {
                 variant.stem = resolved.stem;
                 variant.case_type = resolved.case_type;
+                variant.field_names = resolved.field;
+                variant.case_fields = resolved.case_fields;
             }
 
             kinds.set(id, kind);
@@ -259,7 +285,7 @@ mod tests {
     use super::*;
 
     fn names(enclosing: &str, stems: &[&str]) -> Vec<VariantNames> {
-        resolve(enclosing, &stems.iter().map(|s| (*s).to_string()).collect::<Vec<_>>())
+        resolve(enclosing, &stems.iter().map(|s| (*s).to_string()).collect::<Vec<_>>(), &vec![vec![None]; stems.len()])
     }
 
     #[test]
@@ -380,4 +406,42 @@ mod tests {
         }
         assert!(!seen.contains("E"), "emitted name collides with the enclosing type");
     }
+
+    #[test]
+    fn multi_field_backing_names_share_the_outer_collision_scope() {
+        let r = resolve("E", &["Pair".to_string(), "Pair_0".to_string()], &[vec![None, None, None], vec![None]]);
+        assert_eq!(r[0].field, ["_Pair_0", "_Pair_1", "_Pair_2"]);
+        assert_eq!(r[0].case_fields, ["Item1", "Item2", "Item3"]);
+        assert_eq!(r[1].stem, "Pair_0Variant");
+        let mut seen: HashSet<String> = RESERVED.iter().map(|name| (*name).to_string()).collect();
+        seen.insert("E".to_string());
+        for variant in &r {
+            for name in [&variant.factory, &variant.is_check, &variant.accessor, &variant.unmanaged, &variant.case_type].into_iter().chain(&variant.field) {
+                assert!(seen.insert(name.clone()), "duplicate outer member: {name}");
+            }
+        }
+    }
+
+    #[test]
+    fn named_case_properties_reserve_record_and_union_members() {
+        let names = ["Value", "ValueField", "Equals", "GetHashCode", "Deconstruct", "PairCase", "Item1", "HasValue"];
+        let payloads = names.map(|name| Some(name.to_string())).to_vec();
+        let r = resolve("E", &["Pair".to_string()], &[payloads]);
+        assert_eq!(r[0].case_fields, ["ValueField", "ValueFieldField", "EqualsField", "GetHashCodeField", "DeconstructField", "PairCaseField", "Item1", "HasValueField"]);
+        let mut seen: HashSet<&str> = RESERVED.iter().copied().collect();
+        seen.extend(["Equals", "GetHashCode", "Deconstruct", "PrintMembers", "EqualityContract", "PairCase", "Pair", "IsPair", "AsPair", "UnmanagedPair"]);
+        for name in &r[0].case_fields {
+            assert!(seen.insert(name), "case property collides with another generated member: {name}");
+        }
+    }
+
+    #[test]
+    fn named_fields_are_independent_per_case_and_keep_declared_spelling() {
+        let r = resolve("E", &["A".to_string(), "B".to_string()], &[vec![Some("r#number".to_string())], vec![Some("number".to_string())]]);
+        assert_eq!(r[0].case_fields, ["number"]);
+        assert_eq!(r[1].case_fields, ["number"]);
+        assert_eq!(r[0].field, ["_A"]);
+        assert_eq!(r[1].field, ["_B"]);
+    }
+
 }

@@ -64,10 +64,11 @@ impl Pass {
             for variant in &data_enum.variants {
                 let payloads: Vec<HashMap<&str, String>> = variant
                     .payloads()
-                    .filter_map(|payload| {
+                    .enumerate()
+                    .filter_map(|(index, payload)| {
                         let variant_ty = super::resolve_service_variant(payload.ty, types, mode);
                         let ty_name = types.get(variant_ty).map(|t| t.name.clone())?;
-                        Some(HashMap::from([("type", ty_name)]))
+                        Some(HashMap::from([("type", ty_name), ("case_field", variant.case_fields[index].clone())]))
                     })
                     .collect();
 

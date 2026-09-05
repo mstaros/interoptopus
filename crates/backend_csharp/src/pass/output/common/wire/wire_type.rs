@@ -91,17 +91,14 @@ impl Pass {
                     let mut ser = Vec::new();
                     codegen.emit_serialize(&mut ser, inner_rust_id, "value", 0, 0);
 
-                    let mut deser = Vec::new();
-                    deser.push(format!("{inner_name} result = default;"));
-                    codegen.emit_deserialize(&mut deser, inner_rust_id, "result", 0, 0);
-                    deser.push("return result;".to_string());
+                    let deserialize_body = codegen.deserialize_type_body(inner_rust_id);
 
                     let mut size_lines = Vec::new();
                     size_lines.push("var _size = 0;".to_string());
                     codegen.emit_size(&mut size_lines, inner_rust_id, "value", 0, 0);
                     size_lines.push("return _size;".to_string());
 
-                    (false, vec![], ser.join("\n"), deser.join("\n"), size_lines.join("\n"))
+                    (false, vec![], ser.join("\n"), deserialize_body, size_lines.join("\n"))
                 };
 
                 let mut context = Context::new();

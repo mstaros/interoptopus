@@ -306,3 +306,56 @@ fn enum_payloads_reject_unknown_tags_and_truncation() {
         assert!(WireChoice::read(&mut &*bytes).is_err(), "invalid wire enum accepted: {bytes:?}");
     }
 }
+
+#[interoptopus::ffi]
+#[derive(Debug, PartialEq)]
+enum WireFields {
+    Unit = -129,
+    Tuple(u8, u64, u16),
+    Named { small: u8, text: String, last: u16 } = 256,
+    EmptyTuple(),
+    EmptyNamed {},
+}
+
+#[test]
+fn multi_field_wire_is_ordered_packed_and_uses_the_declared_tag_width() -> Result<(), SerializationError> {
+    for (value, expected) in [
+        (WireFields::Unit, vec![0x7f, 0xff]),
+        (WireFields::Tuple(0xab, 0x0102_0304_0506_0708, 0xcdef), vec![0x80, 0xff, 0xab, 8, 7, 6, 5, 4, 3, 2, 1, 0xef, 0xcd]),
+        (WireFields::Named { small: 7, text: "aß".to_string(), last: 0x1234 }, vec![0, 1, 7, 3, 0, 0, 0, b'a', 0xc3, 0x9f, 0x34, 0x12]),
+        (WireFields::EmptyTuple(), vec![1, 1]),
+        (WireFields::EmptyNamed {}, vec![2, 1]),
+    ] {
+        let mut bytes = Vec::new();
+        value.write(&mut bytes)?;
+        assert_eq!(bytes, expected);
+        assert_eq!(value.live_size(), bytes.len());
+        let mut input = bytes.as_slice();
+        assert_eq!(WireFields::read(&mut input)?, value);
+        assert!(input.is_empty());
+        for len in 0..bytes.len() {
+            assert!(WireFields::read(&mut &bytes[..len]).is_err(), "truncated {value:?} accepted at {len} bytes");
+        }
+    }
+    assert!(WireFields::read(&mut &[0u8, 0][..]).is_err());
+    Ok(())
+}
+
+#[test]
+fn owned_utf8_wire_matches_standard_string_and_rejects_invalid_input() -> Result<(), SerializationError> {
+    for text in ["", "aß\0🌍"] {
+        let owned = interoptopus::ffi::String::from_string(text.to_string());
+        let mut bytes = Vec::new();
+        owned.write(&mut bytes)?;
+        let mut expected = Vec::new();
+        text.to_string().write(&mut expected)?;
+        assert_eq!(bytes, expected);
+        assert_eq!(owned.live_size(), bytes.len());
+        assert_eq!(interoptopus::ffi::String::read(&mut bytes.as_slice())?.as_str(), text);
+        for len in 0..bytes.len() {
+            assert!(interoptopus::ffi::String::read(&mut &bytes[..len]).is_err());
+        }
+    }
+    assert!(interoptopus::ffi::String::read(&mut &[1, 0, 0, 0, 0xff][..]).is_err());
+    Ok(())
+}

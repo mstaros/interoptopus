@@ -459,13 +459,16 @@ fn is_no_older_than(artifact: &Path, source: &Path) -> Result<bool, Box<dyn Erro
 /// they happen. Capturing with `output()` would hide exactly what a red test needs to be
 /// actionable, leaving the reader an exit code and nothing else.
 fn run_with_timeout(command: &mut std::process::Command, timeout: Duration) -> Result<std::process::ExitStatus, Box<dyn Error>> {
+    let executable = command.get_program().to_string_lossy().into_owned();
     let mut child = command.spawn().map_err(|e| -> Box<dyn Error> {
         if e.kind() == std::io::ErrorKind::NotFound {
-            "`dotnet` is not on PATH. This test needs a .NET 11 preview SDK and fails rather than skips, \
-             so a missing toolchain cannot quietly stop the C# suite from running."
-                .into()
+            format!(
+                "`{executable}` was not found. The C# suite requires a .NET 11 preview 7 SDK and a configured patched runtime; \
+                 a missing toolchain is a failure, not a skipped test."
+            )
+            .into()
         } else {
-            format!("failed to start `dotnet`: {e}").into()
+            format!("failed to start `{executable}`: {e}").into()
         }
     })?;
 
@@ -477,7 +480,7 @@ fn run_with_timeout(command: &mut std::process::Command, timeout: Duration) -> R
         if Instant::now() >= deadline {
             let _ = child.kill();
             let _ = child.wait();
-            return Err(format!("`dotnet` exceeded {}s and was killed", timeout.as_secs()).into());
+            return Err(format!("`{executable}` exceeded {}s and was killed", timeout.as_secs()).into());
         }
         sleep(DOTNET_POLL);
     }

@@ -4,26 +4,26 @@ chat_url: 'https://claude.ai/chat/dbb65026-426d-4a54-89ee-4cfad6ee63d1'
 
 # Multi-field and named enum variants
 
-**Status: Steps 1–4 implemented; Step 5 pending.**
+**Status: Steps 1–5 implemented.**
 
 ## Objective
 
-Lift the two rejections at `proc_macros_impl/src/types/model.rs:95-96` so that ordinary Rust enums cross the boundary:
+The two former parser rejections are removed. Ordinary tuple and named Rust variants now cross the boundary:
 
 ```rust
-enum E { A(u32, u32) }        // "Tuple variants with multiple fields are not supported"
-enum E { A { x: u32 } }       // "Struct variants are not supported"
+enum E { A(u32, u32) }
+enum E { A { x: u32 } }
 ```
 
-Both are rejected today. Neither is exotic Rust; the named form is arguably the more common way to write a payload-carrying variant.
+Both forms are covered together by native, generated C#, and wire roundtrips. The implementation follows the supplied `D:\repos\Unions\src\Unions\UnionSpecification.md`: generated cases are the values of the union; `HasValue`, `Value`, and `TryGetValue` agree, and case patterns are exhaustive.
 
 ## Why this is a generator gap
 
-Interoptopus is a general Rust-to-C# binding generator. The one-payload-per-variant ceiling is a limit on what any consumer can express, not a missing convenience for a particular one. A consumer hitting it can work around it by declaring a struct per variant and carrying that as the single payload — the bytes on the wire are identical either way, because the C-compatible layout of a multi-field variant *is* an anonymous struct. So the question this document answers is not "is the data expressible" but "who authors the struct": the consumer, once per variant, forever, or the generator.
+Interoptopus is a general Rust-to-C# binding generator. The former one-payload ceiling limited what any consumer could express. Wrapping several fields in a user-defined struct was a workaround, but ordinary Rust variants should not require it. Serialized fields have the same ordered, padding-free wire representation. Native layout is a separate concern: the per-variant sequential helper includes the discriminant before all fields; introducing an extra nested payload struct can change alignment and offsets. The mixed-alignment fixture verifies the actual Rust layout.
 
-The limit is not a footgun. Both rejections are clean compile errors with plain messages, so no consumer can accidentally ship a broken binding through them. The cost is that the generator turns you away at the door rather than emitting the natural shape.
+The old parser rejected both forms cleanly. Step 5 accepts them only after storage, naming, generated methods, ownership conversions and wire traversal handle every field.
 
-## Where the limit lives
+## Where the limit lived
 
 `crates/core/src/lang/types/enums.rs:12`:
 
@@ -36,9 +36,9 @@ pub enum VariantKind {
 
 Core is backend-agnostic. `_old/backend_c` and `_old/backend_cpython` emit `// TODO - OMITTED DATA VARIANT - BINDINGS ARE BROKEN` for a typed variant at all, which is the historical reason the model normalised to one payload: C's tagged-union payload arm is a struct. Those crates are dead and do not compile against today's core, so there is exactly one live backend to keep in step.
 
-`proc_macros_impl/src/types/model.rs:93-96` enforces it at parse time, and `emit.rs:271-276` maps `VariantData` to `VariantKind`.
+The parser formerly enforced the limit and `emit.rs` mapped one type per variant. Storage is now `VariantKind::Tuple(Vec<TypeId>)` or `VariantKind::Struct(Vec<Field>)`; backend variants store one resolved field collection. The derived `payloads()` views preserve declaration order and names without duplicating payload state.
 
-## Already arity-agnostic — verified, no change needed
+## Existing output contracts retained
 
 Read of all eight templates under `templates/common/types/enums/` plus `body_union_members.rs`:
 
@@ -49,9 +49,11 @@ Read of all eight templates under `templates/common/types/enums/` plus `body_uni
 - **`body_from_call.cs`** gates on `TypePattern::Result` only and is out of scope entirely.
 - **`union_names` already allocates and collision-resolves per-variant names** — `stem`, `factory`, `is_check`, `accessor`, `field`, `unmanaged`, `case_type`, with `every_emitted_name_is_unique` as the invariant. The machinery exists; it is per-variant rather than per-field.
 
-## Not arity-agnostic — the actual work
+## Migration sites
 
-| Site | Today | Needs |
+The table records the original single-payload implementation and the completed migration scope.
+
+| Site | Before | Migration |
 |---|---|---|
 | `core .../enums.rs:12` | `Tuple(TypeId)` | carry N, and field names for the named form |
 | `backend_csharp .../kind/enums.rs:6` | `Variant { ty: Option<TypeId>, .. }` | N payload ids |
@@ -69,27 +71,31 @@ Read of all eight templates under `templates/common/types/enums/` plus `body_uni
 | `body_case_types.cs` | `({{ payload }} Value)` | N named parameters |
 | `body_union_members.cs` | `new {{ v.case_type }}(_{{ v.stem }})` | N arguments |
 
-Two of these are decisions rather than mechanical widening, and are called out below.
+The two public C# contract decisions are resolved additively below.
 
 ### `EnumException<T>` takes one type parameter
 
-`body_exception_for_variant.cs` emits `return new EnumException<{{ v.type }}>(_{{ v.name }});`. For N fields there is no single `T`. The natural resolution is to construct the case type and use `EnumException<{{ v.case_type }}>`, which is uniform across arities including the current single-payload one — but it changes the generic argument on an existing public member for every payload-carrying variant, so it is a breaking change to consumers that name it. Preparatory Steps 2–4 preserve the existing `EnumException<TPayload>` behavior and byte-identical output. The multi-field contract must be selected before Step 5.
+`body_exception_for_variant.cs` emits `return new EnumException<{{ v.type }}>(_{{ v.name }});`. For N fields there is no single `T`. The natural resolution is to construct the case type and use `EnumException<{{ v.case_type }}>`, which is uniform across arities including the current single-payload one — but it changes the generic argument on an existing public member for every payload-carrying variant, so it is a breaking change to consumers that name it. Preparatory Steps 2–4 preserve the existing `EnumException<TPayload>` behavior and byte-identical output. Step 5 selects the additive contract below.
 
-- [ ] Select the multi-field exception contract: preserve `EnumException<TPayload>` for existing single-payload variants and use `EnumException<TCase>` for new multi-field variants, or use `EnumException<TCase>` uniformly and accept the breaking change for consumers that catch or name the current generic exception. No new exception type is needed.
+- [x] Selected additive exception contract: preserve `EnumException<TPayload>` for single-payload variants and use `EnumException<TCase>` for new multi-field variants, using their existing generated case types. No new exception type is needed.
 
-- [ ] Select the `AsVariant()` return shape for multi-field variants before Step 5. Existing single-payload accessors return their payload type; a generated case type or a C# tuple would express multiple fields. The preparatory constructor and exception passes reject unsupported arities explicitly until these contracts are selected, so widening storage cannot silently discard fields.
+- [x] Selected additive `AsVariant()` contract: single-payload accessors retain their payload return type; multi-field accessors return the existing generated case type. Its positional properties also supply wire access to each field. The preparatory arity guards are removed after implementing this path.
 
 ### Named variants introduce a field-name authority
 
-`union_names::family(&stem)` now reserves a payload-member collection, and output passes read those names through `payload_fields()`. Existing nonempty payloads still have exactly one member. The earlier wording proposed N unmanaged helper names as well, but `body_unmanaged_variant.cs` emits one sequential helper struct per variant and `body_unmanaged.cs` overlays that helper once at offset zero; the helper contains N payload members. Its identity therefore remains per variant. The named form in Step 5 additionally needs the *field names themselves* allocated and collision-resolved:
+`union_names` allocates both field-name scopes. Backing members remain `_Stem` for one payload and become `_Stem_0`, `_Stem_1`, etc. for multiple payloads. The unmanaged helper and its offset-zero overlay remain one per variant, with these members inside the sequential helper.
 
-- against `RESERVED` — a field named `Value`, `HasValue`, `Unmanaged`, `Dispose` and so on;
-- against sibling members of the enclosing union;
-- against each other after any casing transformation.
+Case properties retain `Value` for existing one-slot tuple cases. New tuple cases use `Item1` through `ItemN`; named cases preserve declared spelling (without a Rust raw-identifier prefix). Collisions receive `Field`, then numbered suffixes. The allocator checks:
 
-`proc_macros_impl/src/types/validation.rs:47-53` already rejects struct fields whose name is in `FORBIDDEN_NAMES` (136 entries, gated by the compile-fail test `tests/ui/proc/ty/forbidden_field.rs`), and `:57-59` does the same for variant names. That covers C# keywords but not collisions with generated members, which is what `union_names` exists for.
+- the union's reserved names and every sibling generated member;
+- the enclosing case type and record members such as `Equals`, `GetHashCode`, and `Deconstruct`;
+- previously allocated properties in the same case.
 
-This is the same defect family as `Issues.md` `4e9a17c3`, `7c8cb22e`, `31248473` and `c33b9cf5` — a naming question answered in more than one place. Design it into `union_names` deliberately rather than deriving names at an emission site.
+Factories, case constructors, accessors, exception creation, and wire serialization/size use those allocated names. Both outer-member and case-property uniqueness invariants are tested. Different cases may reuse a property name.
+
+`proc_macros_impl/src/types/validation.rs:47-53` already rejects struct fields whose name is in `FORBIDDEN_NAMES` (136 entries, gated by the compile-fail test `tests/ui/proc/ty/forbidden_field.rs`), and the same policy applies to variant names and named variant fields. That covers C# keywords but not collisions with generated members, which is what `union_names` exists for.
+
+This follows the same naming authority required by `Issues.md` `4e9a17c3`, `7c8cb22e`, `31248473` and `c33b9cf5` — a naming question answered in more than one place. No emission site independently sanitizes a field name.
 
 ## Staging
 
@@ -107,7 +113,7 @@ Deliberately *not* done as originally written here, which called for a second st
 
 - [x] **Step 4 — migrate `wireio` and `wire`.** The proc-macro model exposes a derived payload iterator; WireIO bounds and `write` / `read` / `live_size` iterate bindings in field order. C# wire serialize / deserialize / size consume `Variant::payloads()` instead of matching single-payload storage. Still N<=1. The serializer and sizer explicitly guard the pending multi-field accessor contract. Snapshot unchanged.
 
-- [ ] **Step 5 — lift both rejections.** Accept `Fields::Unnamed(n)` and `Fields::Named` in `model.rs`, allocate field names through `union_names`, and widen the single-payload storage itself — `VariantKind::Tuple(TypeId)` and `Variant::ty`. Because step 1 derived `payloads()` rather than duplicating the field, there is no second copy to reconcile: the accessor starts yielding N slots. Complete the pending per-field names and the accessor/exception contracts, then remove the preparatory arity guards. Add reference-project fixtures for both forms and accept the snapshot. This is the only step that changes output.
+- [x] **Step 5 — lift both rejections.** Accepted `Fields::Unnamed(n)` and `Fields::Named`, including empty tuple/named shapes; widened core and backend storage; allocated per-field names; emitted both selected contracts. Every bound, dependency registration, conversion and wire operation visits all fields. Reference fixtures cover mixed alignment, all payload shapes, collisions, managed-only strings/vectors and owned strings. The reviewed snapshot adds only the new fixture output plus the inventory hash update; existing single-payload C# contracts remain unchanged.
 
 Steps 1-4 are refactors with a byte-identical snapshot as the safety net, and any of them can be abandoned without leaving a broken tree. Step 5 is the only one that needs review of generated C#.
 
@@ -120,14 +126,24 @@ Steps 1-4 are refactors with a byte-identical snapshot as the safety net, and an
 ## Validation
 
 - [x] Step 2 reference output is byte-identical: `reference_project::interop` passed on 2026-09-05 without changing snapshots.
-- [x] The regenerated bindings compiled and their C# suite passed through `reference_project::csharp_suite`. The project targets `net11.0` with inherited `LangVersion=preview`. The focused nextest run passed 2 tests; 85 unrelated tests were filtered. The harness launches `dotnet run`; that evidence alone does not prove an explicit patched-runtime launch.
+- [x] The regenerated bindings compiled and their C# suite passed through `reference_project::csharp_suite`. The project targets `net11.0` with inherited `LangVersion=preview`. The focused nextest run passed 2 tests; 85 unrelated tests were filtered. At Step 2 the harness launched `dotnet run`; that evidence alone did not prove an explicit patched-runtime launch.
 - [x] Source search confirms all eleven output consumers and both model consumers use the payload view, directly or through `payload_fields()`; the existing union eligibility rule still reads `can_carry_payload`.
 - [x] Steps 3–4 naming checks passed 12/12; existing C# wire checks passed 20/20, including the wire plugin round trip (2026-09-05).
 - [x] Rust wire checks passed 23/23, including signed/explicit tags, exact unit and tuple payload bytes, live-size agreement, unknown tags and truncated input.
 - [x] Steps 3–4 reference generation and C# execution passed 2/2; the committed reference snapshot remains byte-identical. Exact commit validation re-runs the reference and core wire gates.
 
-## Unverified
 
-- Named and multi-field Rust variants remain rejected until Step 5. Named-field allocation and the accessor/exception contracts remain Step 5 work.
-- [ ] Verify the generated C# runtime suite under an explicitly configured patched runtime before validating Step 5 behavior. `Directory.Build.props` selects preview language features, but the current xUnit harness, project and targets do not select `corerun` or `TestHostRuntime=patched-required`. The user target remains C# 15 / .NET 11 preview 7 with the patched runtime.
-- Whether any consumer outside this repository names `EnumException<T>` on a generated enum, which determines the consumer impact of a uniform case-type exception contract in Step 5.
+- [x] Step 5 metadata/order/registration, later-field safety flags, generic payload bounds, and native alignment checks passed. The generic fixture also covers an existing `where` clause without a trailing comma.
+- [x] Step 5 Rust wire checks passed 25/25, including mixed-width signed tags, every truncated prefix, empty payload shapes, and owned UTF-8 interoperability with the standard string format.
+- [x] Step 5 generated C# passed 237/237 xUnit tests, including 14 new facts, on 2026-09-05. Runtime operation `1d4ce8b9413a3aee3babbda5b08c88b9` launched `D:\repos\runtime-async-dynamicmethod\artifacts\tests\coreclr\windows.x64.Release\Tests\Core_Root\corerun.exe` explicitly and reported .NET 11.0.0-dev, win-x64; the build used SDK `11.0.100-preview.7.26381.103`.
+- [x] Patched-runtime selection is enforced by the reference harness and `TestHostRuntime=PatchedCoreRunRequired`. `CSHARPMPC_PATCHED_CORERUN` may select a host; otherwise the bounded adjacent runtime checkout is resolved. An invalid explicit path or missing patched artifacts fails, with no stock-runtime fallback.
+- [x] C# checks cover exhaustive case patterns, agreement of `Value`/`HasValue`/`TryGetValue`, default/null guards, single-payload exception compatibility, repeated borrows, active-field move/disposal, and raw/managed/owned wire roundtrips. Sixteen malformed later-field reads return native allocation counts to the pre-read baseline.
+- [x] The reference snapshot was reviewed and accepted: all 29,197 original lines remain in order after normalizing the four API-hash occurrences; 1,631 added lines belong to the new fixtures and their functions/wire wrappers. The hash changed from `aa8ee21da66c9c72` to `9a370e2a9fcbf4ec`.
+
+### Owned-string wire completion
+
+The new roundtrip exposed a pre-existing gap: `ffi::String` declared `WIRE_SAFE=true`, but Rust `WireIO` contained `todo!()` and C# had no UTF-8 pattern mapping. These existing methods now implement the standard u32-byte-length/UTF-8 format. C# serialization borrows `Utf8String.String`; deserialization uses `Utf8String.From`, rejects short/invalid UTF-8 input, and tracks each newly allocated native string until the whole value has been constructed. A later-field read failure disposes those allocations; successful reads transfer ownership to the returned value.
+
+### Exact checkpoint gate
+
+Transaction `WSMCP-d06966127c45a25f25d7b93d` records the exact gate operation and integrated commit. Required targets re-run the core tests with `unstable-plugins` enabled and the reference snapshot plus explicitly patched C# suite. The gate also runs workspace Clippy and workspace nextest and requires zero uncovered changes. Package publication is a separate follow-up; this implementation does not change package versions.

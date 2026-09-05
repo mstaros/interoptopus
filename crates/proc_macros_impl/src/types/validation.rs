@@ -3,7 +3,7 @@ use syn::Error;
 use crate::forbidden::is_forbidden_name;
 use crate::types::{
     args::FfiTypeArgs,
-    model::{TypeData, TypeModel},
+    model::{TypeData, TypeModel, VariantData},
 };
 
 impl TypeModel {
@@ -57,6 +57,15 @@ impl TypeModel {
                 for variant in &enum_data.variants {
                     if is_forbidden_name(variant.name.to_string()) {
                         return Err(Error::new_spanned(&variant.name, format!("Using the name '{}' can cause conflicts in generated code.", variant.name)));
+                    }
+                    if let VariantData::Named(fields) = &variant.data {
+                        for field in fields {
+                            if let Some(field_name) = &field.name
+                                && is_forbidden_name(field_name.to_string().trim_start_matches("r#"))
+                            {
+                                return Err(Error::new_spanned(field_name, format!("Using the name '{field_name}' can cause conflicts in generated code.")));
+                            }
+                        }
                     }
                 }
             }

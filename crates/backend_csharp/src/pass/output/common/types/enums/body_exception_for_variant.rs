@@ -47,15 +47,16 @@ impl Pass {
                             HashMap::from([("field", field), ("type", type_name)])
                         })
                         .collect();
-                    // Existing consumers catch EnumException<TPayload>. A collection does not
-                    // silently change that contract to EnumException<TCase> during Steps 2–4.
-                    assert!(payloads.len() <= 1, "multi-field exception contract must be selected before lifting the enum payload limit");
+                    // Preserve EnumException<TPayload> for existing one-field cases.
                     let has_payload = !payloads.is_empty();
+                    let is_multi = payloads.len() > 1;
 
                     let mut m = HashMap::new();
                     m.insert("name", Value::normal_string(&v.stem));
                     m.insert("id", Value::from(v.tag as i64));
                     m.insert("has_payload", Value::from(has_payload));
+                    m.insert("is_multi", Value::from(is_multi));
+                    m.insert("case_type", Value::normal_string(&v.case_type));
                     m.insert("payloads", Value::from(payloads));
                     m
                 })

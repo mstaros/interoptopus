@@ -146,12 +146,19 @@ fn field(name: &str, ty: TypeId) -> Field {
 /// payload to `None`. `Result<(), ()>` still declares `Ok(T)`/`Err(E)`; erasing that would make
 /// it indistinguishable from a unit-only enum and strip its union projection.
 fn payload_variant(name: &str, tag: isize, ty: Option<TypeId>) -> Variant {
-    Variant { name: name.to_string(), docs: Docs::default(), tag, ty, can_carry_payload: true, stem: String::new(), case_type: String::new() }
+    Variant {
+        name: name.to_string(), docs: Docs::default(), tag,
+        fields: ty.map(|ty| crate::lang::types::kind::Field {
+            name: String::new(), docs: Docs::default(), visibility: crate::lang::meta::Visibility::Public, ty,
+        }).into_iter().collect(),
+        field_names: Vec::new(), case_fields: Vec::new(), can_carry_payload: true,
+        stem: String::new(), case_type: String::new(),
+    }
 }
 
 /// A synthesised variant with no payload slot at all — `None`, `Panic`, `Null`.
 fn unit_variant(name: &str, tag: isize) -> Variant {
-    Variant { name: name.to_string(), docs: Docs::default(), tag, ty: None, can_carry_payload: false, stem: String::new(), case_type: String::new() }
+    Variant { name: name.to_string(), docs: Docs::default(), tag, fields: Vec::new(), field_names: Vec::new(), case_fields: Vec::new(), can_carry_payload: false, stem: String::new(), case_type: String::new() }
 }
 
 /// Resolves a Rust type to an optional C# variant payload.

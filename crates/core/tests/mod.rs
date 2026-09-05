@@ -13,6 +13,7 @@ mod proc {
 }
 
 mod types {
+    mod enums;
     mod cstr_ptr;
     mod layout;
     mod option;
