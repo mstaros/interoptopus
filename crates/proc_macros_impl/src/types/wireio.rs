@@ -399,11 +399,16 @@ impl TypeModel {
                         let vname = &v.name;
                         let bindings = payload_bindings(v);
                         let pattern = variant_value(name, v, &bindings);
-                        let sizes = v.payloads().zip(&bindings).map(|(ty, binding)| quote_spanned! { vname.span() =>
+                        let sizes: Vec<_> = v.payloads().zip(&bindings).map(|(ty, binding)| quote_spanned! { vname.span() =>
                             <#ty as ::interoptopus::lang::types::WireIO>::live_size(#binding)
-                        });
+                        }).collect();
+                        let size = if sizes.is_empty() {
+                            quote_spanned! { vname.span() => 0 }
+                        } else {
+                            quote_spanned! { vname.span() => #(#sizes)+* }
+                        };
                         quote_spanned! { vname.span() =>
-                            #pattern => 0 #(+ #sizes)*,
+                            #pattern => #size,
                         }
                     });
                     quote_spanned! { self.name.span() =>

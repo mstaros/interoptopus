@@ -408,11 +408,11 @@ impl WireCodeGen<'_> {
                 self.emit_deserialize(lines, payload.ty, &payload_var, depth + 1, indent + 2);
                 payload_vars.push(payload_var);
             }
-            if !payload_vars.is_empty() {
+            if payload_vars.is_empty() {
+                lines.push(format!("{pi2}{target} = {enum_name}.{};", self.variant_stem(ty_id, variant.tag)));
+            } else {
                 let arguments = payload_vars.join(", ");
                 lines.push(format!("{pi2}{target} = {enum_name}.{}({arguments});", self.variant_stem(ty_id, variant.tag)));
-            } else {
-                lines.push(format!("{pi2}{target} = {enum_name}.{};", self.variant_stem(ty_id, variant.tag)));
             }
             lines.push(format!("{pi}}}"));
         }
