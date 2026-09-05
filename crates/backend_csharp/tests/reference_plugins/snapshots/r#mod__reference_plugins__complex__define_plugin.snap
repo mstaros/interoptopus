@@ -325,7 +325,7 @@ public static unsafe class Trampoline
 
     public static long QueryU64(long id)
     {
-        if (id == QUERY_API_GUARD_HASH) return unchecked((long)0x266D06BA1C4C3699);
+        if (id == QUERY_API_GUARD_HASH) return unchecked((long)0xC103842BB5FA7998);
         return 0;
     }
 
