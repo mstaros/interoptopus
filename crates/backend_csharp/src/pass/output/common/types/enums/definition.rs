@@ -7,7 +7,7 @@
 use crate::lang::TypeId;
 use crate::lang::types::kind::{TypeKind, TypePattern};
 use crate::pass::{OutputResult, PassInfo, format_docs, model, output};
-use interoptopus_backends::template::Context;
+use interoptopus_backends::template::{Context, Value};
 use std::collections::HashMap;
 
 #[derive(Default)]
@@ -73,16 +73,22 @@ impl Pass {
             let is_union_projected = projection.is_union(ty);
             let struct_or_class = if is_struct { "struct" } else { "class" };
 
-            let variants: Vec<HashMap<&str, String>> = data_enum
+            let variants: Vec<HashMap<&str, Value>> = data_enum
                 .variants
                 .iter()
                 .filter_map(|v| {
-                    let ty = super::resolve_service_variant(v.ty?, types, mode);
-                    let ty_name = types.get(ty).map(|t| &t.name)?;
-                    let mut m = HashMap::new();
-                    m.insert("name", v.stem.clone());
-                    m.insert("type", ty_name.clone());
-                    Some(m)
+                    let payloads: Vec<HashMap<&str, String>> = v
+                        .payloads()
+                        .filter_map(|payload| {
+                            let ty = super::resolve_service_variant(payload.ty, types, mode);
+                            let ty_name = types.get(ty).map(|t| &t.name)?;
+                            Some(HashMap::from([("name", v.stem.clone()), ("type", ty_name.clone())]))
+                        })
+                        .collect();
+                    if payloads.is_empty() {
+                        return None;
+                    }
+                    Some(HashMap::from([("payloads", Value::from(payloads))]))
                 })
                 .collect();
 

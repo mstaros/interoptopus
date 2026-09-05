@@ -101,12 +101,15 @@ impl Pass {
                 };
                 variants
                     .iter()
-                    .filter(|v| v.ty.is_some_and(|ty| disposable.is_disposable(ty).unwrap_or(false)))
-                    .map(|v| {
-                        let mut m = HashMap::new();
-                        m.insert("name", Value::normal_string(&format!("_{}", v.stem)));
-                        m.insert("tag", Value::from(v.tag as i64));
-                        m
+                    .flat_map(|v| {
+                        v.payloads()
+                            .filter(|payload| disposable.is_disposable(payload.ty).unwrap_or(false))
+                            .map(move |_| {
+                                let mut m = HashMap::new();
+                                m.insert("name", Value::normal_string(&format!("_{}", v.stem)));
+                                m.insert("tag", Value::from(v.tag as i64));
+                                m
+                            })
                     })
                     .collect()
             } else {

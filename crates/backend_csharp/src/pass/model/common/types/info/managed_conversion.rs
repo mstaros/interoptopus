@@ -91,19 +91,17 @@ impl Pass {
                         TypePattern::Option(_, e) | TypePattern::Result(_, _, e) => {
                             let mut has_into = false;
                             let mut pending = false;
-                            for variant in &e.variants {
-                                if let Some(variant_ty) = variant.ty {
-                                    let resolved = resolve_ptr_to_service(variant_ty, types);
-                                    match self.managed_conversion.get(&resolved) {
-                                        Some(ManagedConversion::Into) => {
-                                            has_into = true;
-                                            break;
-                                        }
-                                        Some(_) => {}
-                                        None => {
-                                            pending = true;
-                                            break;
-                                        }
+                            for payload in e.variants.iter().flat_map(|v| v.payloads()) {
+                                let resolved = resolve_ptr_to_service(payload.ty, types);
+                                match self.managed_conversion.get(&resolved) {
+                                    Some(ManagedConversion::Into) => {
+                                        has_into = true;
+                                        break;
+                                    }
+                                    Some(_) => {}
+                                    None => {
+                                        pending = true;
+                                        break;
                                     }
                                 }
                             }
@@ -128,18 +126,16 @@ impl Pass {
                     } else {
                         let mut has_into = false;
                         let mut pending = false;
-                        for variant in &data_enum.variants {
-                            if let Some(variant_ty) = variant.ty {
-                                match self.managed_conversion.get(&variant_ty) {
-                                    Some(ManagedConversion::Into) => {
-                                        has_into = true;
-                                        break;
-                                    }
-                                    Some(_) => {}
-                                    None => {
-                                        pending = true;
-                                        break;
-                                    }
+                        for payload in data_enum.variants.iter().flat_map(|v| v.payloads()) {
+                            match self.managed_conversion.get(&payload.ty) {
+                                Some(ManagedConversion::Into) => {
+                                    has_into = true;
+                                    break;
+                                }
+                                Some(_) => {}
+                                None => {
+                                    pending = true;
+                                    break;
                                 }
                             }
                         }

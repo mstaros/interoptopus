@@ -41,7 +41,7 @@ impl Pass {
                     let mut m = HashMap::new();
                     m.insert("name", Value::normal_string(&v.stem));
                     m.insert("id", Value::from(v.tag as i64));
-                    m.insert("has_payload", Value::from(v.ty.is_some()));
+                    m.insert("has_payload", Value::from(v.payloads().next().is_some()));
                     m
                 })
                 .collect();

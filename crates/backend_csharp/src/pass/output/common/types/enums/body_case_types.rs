@@ -62,14 +62,18 @@ impl Pass {
             let mut rendered_case_types = Vec::new();
 
             for variant in &data_enum.variants {
-                let payload = variant.ty.and_then(|raw_ty| {
-                    let variant_ty = super::resolve_service_variant(raw_ty, types, mode);
-                    types.get(variant_ty).map(|t| t.name.clone())
-                });
+                let payloads: Vec<HashMap<&str, String>> = variant
+                    .payloads()
+                    .filter_map(|payload| {
+                        let variant_ty = super::resolve_service_variant(payload.ty, types, mode);
+                        let ty_name = types.get(variant_ty).map(|t| t.name.clone())?;
+                        Some(HashMap::from([("type", ty_name)]))
+                    })
+                    .collect();
 
                 let mut context = Context::new();
                 context.insert("case_type", &variant.case_type);
-                context.insert("payload", &payload);
+                context.insert("payloads", &payloads);
 
                 let rendered = templates.render("common/types/enums/body_case_types.cs", &context)?;
                 rendered_case_types.push(rendered);

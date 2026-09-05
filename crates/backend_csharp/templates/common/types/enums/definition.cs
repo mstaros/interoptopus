@@ -11,6 +11,8 @@
     bool _hasValue;
     {%- endif %}
     {%- for variant in variants %}
-    {{ variant.type }} _{{ variant.name }};
+    {%- for payload in variant.payloads %}
+    {{ payload.type }} _{{ payload.name }};
+    {%- endfor %}
     {%- endfor %}
 }

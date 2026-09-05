@@ -3,7 +3,7 @@
 use crate::lang::TypeId;
 use crate::lang::types::kind::{TypeKind, TypePattern};
 use crate::pass::{OutputResult, PassInfo, model, output};
-use interoptopus_backends::template::Context;
+use interoptopus_backends::template::{Context, Value};
 use std::collections::HashMap;
 
 #[derive(Default)]
@@ -40,19 +40,27 @@ impl Pass {
             let name = &ty.name;
             let to_unmanaged = managed.to_unmanaged_name(*type_id);
 
-            let variants: Vec<HashMap<&str, String>> = data_enum
+            let variants: Vec<HashMap<&str, Value>> = data_enum
                 .variants
                 .iter()
                 .filter_map(|v| {
-                    let variant_ty = super::resolve_service_variant(v.ty?, types, mode);
-                    let suffix = managed.to_unmanaged_suffix(variant_ty);
-                    let to_unmanaged = super::guard_null_payload(suffix, nullable, variant_ty, name, &v.stem);
-
-                    let mut m = HashMap::new();
-                    m.insert("name", v.stem.clone());
-                    m.insert("id", v.tag.to_string());
-                    m.insert("to_unmanaged", to_unmanaged);
-                    Some(m)
+                    let payloads: Vec<HashMap<&str, String>> = v
+                        .payloads()
+                        .map(|payload| {
+                            let variant_ty = super::resolve_service_variant(payload.ty, types, mode);
+                            let suffix = managed.to_unmanaged_suffix(variant_ty);
+                            let to_unmanaged = super::guard_null_payload(suffix, nullable, variant_ty, name, &v.stem);
+                            HashMap::from([("name", v.stem.clone()), ("to_unmanaged", to_unmanaged)])
+                        })
+                        .collect();
+                    if payloads.is_empty() {
+                        return None;
+                    }
+                    Some(HashMap::from([
+                        ("name", Value::normal_string(&v.stem)),
+                        ("id", Value::from(v.tag)),
+                        ("payloads", Value::from(payloads)),
+                    ]))
                 })
                 .collect();
 

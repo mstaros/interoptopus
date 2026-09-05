@@ -8,7 +8,9 @@ internal Unmanaged AsUnmanaged()
     var _unmanaged = new Unmanaged();
     _unmanaged._variant = _variant;
     {%- for v in variants %}
-    if (_variant == {{ v.id }}) _unmanaged._{{ v.name }}._{{ v.name }} = _{{ v.name }}{{ v.as_unmanaged }};
+    {%- for payload in v.payloads %}
+    if (_variant == {{ v.id }}) _unmanaged._{{ v.name }}._{{ payload.name }} = _{{ payload.name }}{{ payload.as_unmanaged }};
+    {%- endfor %}
     {%- endfor %}
     return _unmanaged;
 }

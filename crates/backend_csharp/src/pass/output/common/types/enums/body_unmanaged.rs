@@ -37,18 +37,26 @@ impl Pass {
 
             let name = &ty.name;
 
-            let variants: Vec<HashMap<&str, String>> = data_enum
+            let variants: Vec<HashMap<&str, Value>> = data_enum
                 .variants
                 .iter()
                 .filter_map(|v| {
-                    let variant_ty = super::resolve_service_variant(v.ty?, types, mode);
-                    let to_managed = managed.to_managed_suffix(variant_ty).to_string();
-
-                    let mut m = HashMap::new();
-                    m.insert("name", v.stem.clone());
-                    m.insert("id", v.tag.to_string());
-                    m.insert("to_managed", to_managed);
-                    Some(m)
+                    let payloads: Vec<HashMap<&str, String>> = v
+                        .payloads()
+                        .map(|payload| {
+                            let variant_ty = super::resolve_service_variant(payload.ty, types, mode);
+                            let to_managed = managed.to_managed_suffix(variant_ty).to_string();
+                            HashMap::from([("name", v.stem.clone()), ("to_managed", to_managed)])
+                        })
+                        .collect();
+                    if payloads.is_empty() {
+                        return None;
+                    }
+                    Some(HashMap::from([
+                        ("name", Value::normal_string(&v.stem)),
+                        ("id", Value::from(v.tag)),
+                        ("payloads", Value::from(payloads)),
+                    ]))
                 })
                 .collect();
 
@@ -67,18 +75,21 @@ impl Pass {
                 .variants
                 .iter()
                 .map(|v| {
-                    let to_managed = v
-                        .ty
-                        .map(|ty| super::resolve_service_variant(ty, types, mode))
-                        .map(|ty| managed.to_managed_suffix(ty).to_string())
-                        .unwrap_or_default();
+                    let payloads: Vec<HashMap<&str, String>> = v
+                        .payloads()
+                        .map(|payload| {
+                            let variant_ty = super::resolve_service_variant(payload.ty, types, mode);
+                            let to_managed = managed.to_managed_suffix(variant_ty).to_string();
+                            HashMap::from([("name", v.stem.clone()), ("to_managed", to_managed)])
+                        })
+                        .collect();
 
                     let mut m = HashMap::new();
                     m.insert("name", Value::normal_string(&v.stem));
                     m.insert("id", Value::from(v.tag as i64));
                     m.insert("case_type", Value::normal_string(&v.case_type));
-                    m.insert("has_payload", Value::from(v.ty.is_some()));
-                    m.insert("to_managed", Value::normal_string(&to_managed));
+                    m.insert("has_payload", Value::from(!payloads.is_empty()));
+                    m.insert("payloads", Value::from(payloads));
                     m
                 })
                 .collect();

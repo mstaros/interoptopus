@@ -37,18 +37,21 @@ impl Pass {
             let mut rendered_variants = Vec::new();
 
             for variant in &data_enum.variants {
-                let Some(raw_ty) = variant.ty else {
+                let payloads: Vec<HashMap<&str, String>> = variant
+                    .payloads()
+                    .filter_map(|payload| {
+                        let variant_ty = super::resolve_service_variant(payload.ty, types, mode);
+                        let variant_type = unmanaged_names.name(variant_ty)?;
+                        Some(HashMap::from([("name", variant.stem.clone()), ("unmanaged_name", variant_type.to_string())]))
+                    })
+                    .collect();
+                if payloads.is_empty() {
                     continue;
-                };
-                let variant_ty = super::resolve_service_variant(raw_ty, types, mode);
-
-                let Some(variant_type) = unmanaged_names.name(variant_ty) else {
-                    continue;
-                };
+                }
 
                 let mut context = Context::new();
                 context.insert("variant", &variant.stem);
-                context.insert("unmanaged_name", variant_type);
+                context.insert("payloads", &payloads);
                 context.insert("discriminant_type", data_enum.discriminant_type.cs_name());
 
                 let rendered = templates.render("common/types/enums/body_unmanaged_variant.cs", &context)?;

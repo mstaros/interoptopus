@@ -4,7 +4,7 @@ chat_url: 'https://claude.ai/chat/dbb65026-426d-4a54-89ee-4cfad6ee63d1'
 
 # Multi-field and named enum variants
 
-**Status: Step 1 implemented; Steps 2–5 pending.**
+**Status: Steps 1–2 implemented; Steps 3–5 pending.**
 
 ## Objective
 
@@ -77,6 +77,8 @@ Two of these are decisions rather than mechanical widening, and are called out b
 
 - [ ] Select the multi-field exception contract: preserve `EnumException<TPayload>` for existing single-payload variants and use `EnumException<TCase>` for new multi-field variants, or use `EnumException<TCase>` uniformly and accept the breaking change for consumers that catch or name the current generic exception. No new exception type is needed.
 
+- [ ] Select the `AsVariant()` return shape for multi-field variants before Step 5. Existing single-payload accessors return their payload type; a generated case type or a C# tuple would express multiple fields. The preparatory constructor and exception passes reject unsupported arities explicitly until these contracts are selected, so widening storage cannot silently discard fields.
+
 ### Named variants introduce a field-name authority
 
 `union_names::family(&stem)` produces exactly one `field` and one `unmanaged` per variant. Multi-field needs N of each, which is mechanical. The named form additionally needs the *field names themselves* allocated and collision-resolved:
@@ -93,19 +95,19 @@ This is the same defect family as `Issues.md` `4e9a17c3`, `7c8cb22e`, `31248473`
 
 Additive migration. The reference-project snapshot is the gate for steps 1-4: output must be byte-identical, because nothing about the emitted C# changes until step 5.
 
-- [x] **Step 1 — open the N-payload seam.** Add a `Payload<'a> { ty, name }` view type and a `Variant::payloads()` accessor to both `core` and `backend_csharp`, derived from the existing single-payload storage. No consumer reads it yet; snapshot unchanged.
+- [x] **Step 1 — open the N-payload seam.** Add a `Payload<'a> { ty, name }` view type and a `Variant::payloads()` accessor to both `core` and `backend_csharp`, derived from the existing single-payload storage. Step 2 now consumes this view; the single-payload storage is unchanged.
 
 Deliberately *not* done as originally written here, which called for a second stored field populated alongside the first. Duplicated stored state leaks into `PartialEq`, `Hash`, serde and every construction site, and the two copies drift. A derived accessor gives step 2 the same migration surface — one place to widen — at none of that cost. When step 5 replaces the storage, `payloads()` changes behind its callers rather than being reconciled with them.
 
 `backend_csharp`'s payloads are *resolved*, not declared: `Result<(), ()>` declares `Ok(T)` but resolves `()` to no C# payload, so it yields no slots while `can_carry_payload` stays true. Union eligibility asks the latter. Step 2 migrates passes that depend on this distinction, so preserve it rather than collapsing the two questions.
 
-- [ ] **Step 2 — migrate `backend_csharp` output passes.** One pass at a time to read the N-payload field, still length 1. Eleven output passes: `definition`, `body_ctors`, `body_unmanaged`, `body_unmanaged_variant`, `body_to_unmanaged`, `body_as_unmanaged`, `body_case_types`, `body_union_members`, `body_tostring`, `body_exception_for_variant`, and `body` (disposal). Migrate the payload-dependent model decisions in `managed_conversion` and `projection` as well. Templates gain nested loops that iterate exactly once. Snapshot unchanged; preserve the existing single-payload exception contract.
+- [x] **Step 2 — migrate `backend_csharp` output passes.** The output passes read the N-payload view, still at most length 1. Eleven output passes: `definition`, `body_ctors`, `body_unmanaged`, `body_unmanaged_variant`, `body_to_unmanaged`, `body_as_unmanaged`, `body_case_types`, `body_union_members`, `body_tostring`, `body_exception_for_variant`, and `body` (disposal). Migrate the payload-dependent model decisions in `managed_conversion` and `projection` as well. Templates now iterate the payload collection; existing nonempty collections have exactly one slot. Snapshot unchanged; preserve the existing single-payload exception contract.
 
 - [ ] **Step 3 — migrate `union_names`.** `field` and `unmanaged` become per-field collections, still length 1. Extend `every_emitted_name_is_unique` to walk them. Snapshot unchanged.
 
 - [ ] **Step 4 — migrate `wireio` and `wire`.** `write` / `read` / `live_size` destructure N bindings; `wire/mod.rs`'s three `VariantKind` matches carry N. Still N=1. Snapshot unchanged.
 
-- [ ] **Step 5 — lift both rejections.** Accept `Fields::Unnamed(n)` and `Fields::Named` in `model.rs`, allocate field names through `union_names`, and widen the single-payload storage itself — `VariantKind::Tuple(TypeId)` and `Variant::ty`. Because step 1 derived `payloads()` rather than duplicating the field, there is no second copy to reconcile: the accessor starts yielding N slots and its migrated callers need no further change. Add reference-project fixtures for both forms and accept the snapshot. This is the only step that changes output.
+- [ ] **Step 5 — lift both rejections.** Accept `Fields::Unnamed(n)` and `Fields::Named` in `model.rs`, allocate field names through `union_names`, and widen the single-payload storage itself — `VariantKind::Tuple(TypeId)` and `Variant::ty`. Because step 1 derived `payloads()` rather than duplicating the field, there is no second copy to reconcile: the accessor starts yielding N slots. Complete the pending per-field names and the accessor/exception contracts, then remove the preparatory arity guards. Add reference-project fixtures for both forms and accept the snapshot. This is the only step that changes output.
 
 Steps 1-4 are refactors with a byte-identical snapshot as the safety net, and any of them can be abandoned without leaving a broken tree. Step 5 is the only one that needs review of generated C#.
 
@@ -115,8 +117,14 @@ Steps 1-4 are refactors with a byte-identical snapshot as the safety net, and an
 - **Reviving `_old/backend_c` or `_old/backend_cpython`.** They do not compile against today's core and use a different `VariantKind` shape.
 - **Changing the `Value` contract.** It is `object?` over case types and is already correct for any arity.
 
+## Validation
+
+- [x] Step 2 reference output is byte-identical: `reference_project::interop` passed on 2026-09-05 without changing snapshots.
+- [x] The regenerated bindings compiled and their C# suite passed through `reference_project::csharp_suite` on C# 15 / .NET 11 preview 7 with the patched runtime. The focused nextest run passed 2 tests; 85 unrelated tests were filtered.
+- [x] Source search confirms all eleven output consumers and both model consumers use `payloads()`; the existing union eligibility rule still reads `can_carry_payload`.
+
 ## Unverified
 
-- The 2026-09-05 status check did not rerun a build, generation, or snapshot test. Steps 2–5 still require their stated validation gates. The original design was based on a static read of `core/src/lang/types/enums.rs`, `proc_macros_impl/src/types/{model,emit,wireio,validation}.rs`, `backend_csharp`'s enum model and output passes, and all eight templates under `templates/common/types/enums/`.
-- The per-pass line counts for Step 2 are not measured. The 2026-09-05 source scan added the omitted disposal, managed-conversion, and projection consumers to that step.
+- Steps 3–5 still require their stated validation gates. Named and multi-field Rust variants remain rejected until Step 5.
+- Named-field allocation and the per-field naming migration remain Step 3 work.
 - Whether any consumer outside this repository names `EnumException<T>` on a generated enum, which determines the consumer impact of a uniform case-type exception contract in Step 5.

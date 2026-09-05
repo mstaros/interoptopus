@@ -82,7 +82,8 @@ impl Pass {
                 TypeKind::DataEnum(de) => de
                     .variants
                     .iter()
-                    .any(|v| v.ty.is_some_and(|t| matches!(types.get(t).map(|x| &x.kind), Some(TypeKind::WireOnly(_))))),
+                    .flat_map(|v| v.payloads())
+                    .any(|payload| matches!(types.get(payload.ty).map(|x| &x.kind), Some(TypeKind::WireOnly(_)))),
                 _ => false,
             };
 

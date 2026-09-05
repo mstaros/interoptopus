@@ -2,5 +2,7 @@
 internal unsafe struct Unmanaged{{ variant }}
 {
     internal {{ discriminant_type }} _variant;
-    internal {{ unmanaged_name }} _{{ variant }};
+    {%- for payload in payloads %}
+    internal {{ payload.unmanaged_name }} _{{ payload.name }};
+    {%- endfor %}
 }

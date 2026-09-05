@@ -18,7 +18,7 @@ public unsafe struct Unmanaged
         {
             {%- for v in all_variants %}
             {%- if v.has_payload %}
-            {{ v.id }} => new {{ name }}(new {{ v.case_type }}(_{{ v.name }}._{{ v.name }}{{ v.to_managed }})),
+            {{ v.id }} => new {{ name }}(new {{ v.case_type }}({% for payload in v.payloads %}_{{ v.name }}._{{ payload.name }}{{ payload.to_managed }}{% if not loop.last %}, {% endif %}{% endfor %})),
             {%- else %}
             {{ v.id }} => new {{ name }}(new {{ v.case_type }}()),
             {%- endif %}
@@ -29,7 +29,9 @@ public unsafe struct Unmanaged
         var _managed = new {{ name }}();
         _managed._variant = _variant;
         {%- for v in variants %}
-        if (_variant == {{ v.id }}) _managed._{{ v.name }} = _{{ v.name }}._{{ v.name }}{{ v.to_managed }};
+        {%- for payload in v.payloads %}
+        if (_variant == {{ v.id }}) _managed._{{ payload.name }} = _{{ v.name }}._{{ payload.name }}{{ payload.to_managed }};
+        {%- endfor %}
         {%- endfor %}
         return _managed;
         {%- endif %}

@@ -42,18 +42,29 @@ impl Pass {
                 .variants
                 .iter()
                 .map(|v| {
-                    let has_payload = v.ty.is_some();
-                    let type_name =
-                        v.ty.map(|ty| super::resolve_service_variant(ty, types, mode))
-                            .and_then(|ty| types.get(ty).map(|t| &t.name))
-                            .cloned()
-                            .unwrap_or_default();
+                    let payloads: Vec<HashMap<&str, String>> = v
+                        .payloads()
+                        .map(|payload| {
+                            let ty = super::resolve_service_variant(payload.ty, types, mode);
+                            let type_name = types.get(ty).map(|t| t.name.clone()).unwrap_or_default();
+                            HashMap::from([("name", v.stem.clone()), ("type", type_name)])
+                        })
+                        .collect();
+                    // Preserve the public single-payload AsX() return type during Steps 2–4.
+                    // Step 5 must choose the multi-field return shape before widening storage.
+                    let type_name = match payloads.as_slice() {
+                        [] => String::new(),
+                        [payload] => payload["type"].clone(),
+                        _ => panic!("multi-field AsX() return contract must be selected before lifting the enum payload limit"),
+                    };
+                    let has_payload = !payloads.is_empty();
 
                     let mut m = HashMap::new();
                     m.insert("name", Value::normal_string(&v.stem));
                     m.insert("id", Value::from(v.tag as i64));
                     m.insert("has_payload", Value::from(has_payload));
                     m.insert("type", Value::normal_string(&type_name));
+                    m.insert("payloads", Value::from(payloads));
                     m.insert("case_type", Value::normal_string(&v.case_type));
                     m.insert("docs", Value::normal_string(&format_docs(&v.docs.lines)));
                     m
