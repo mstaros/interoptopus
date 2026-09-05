@@ -4,7 +4,7 @@ chat_url: 'https://claude.ai/chat/dbb65026-426d-4a54-89ee-4cfad6ee63d1'
 
 # Multi-field and named enum variants
 
-**Status: Steps 1–2 implemented; Steps 3–5 pending.**
+**Status: Steps 1–4 implemented; Step 5 pending.**
 
 ## Objective
 
@@ -81,7 +81,7 @@ Two of these are decisions rather than mechanical widening, and are called out b
 
 ### Named variants introduce a field-name authority
 
-`union_names::family(&stem)` produces exactly one `field` and one `unmanaged` per variant. Multi-field needs N of each, which is mechanical. The named form additionally needs the *field names themselves* allocated and collision-resolved:
+`union_names::family(&stem)` now reserves a payload-member collection, and output passes read those names through `payload_fields()`. Existing nonempty payloads still have exactly one member. The earlier wording proposed N unmanaged helper names as well, but `body_unmanaged_variant.cs` emits one sequential helper struct per variant and `body_unmanaged.cs` overlays that helper once at offset zero; the helper contains N payload members. Its identity therefore remains per variant. The named form in Step 5 additionally needs the *field names themselves* allocated and collision-resolved:
 
 - against `RESERVED` — a field named `Value`, `HasValue`, `Unmanaged`, `Dispose` and so on;
 - against sibling members of the enclosing union;
@@ -103,9 +103,9 @@ Deliberately *not* done as originally written here, which called for a second st
 
 - [x] **Step 2 — migrate `backend_csharp` output passes.** The output passes read the N-payload view, still at most length 1. Eleven output passes: `definition`, `body_ctors`, `body_unmanaged`, `body_unmanaged_variant`, `body_to_unmanaged`, `body_as_unmanaged`, `body_case_types`, `body_union_members`, `body_tostring`, `body_exception_for_variant`, and `body` (disposal). Migrate the payload-dependent model decisions in `managed_conversion` and `projection` as well. Templates now iterate the payload collection; existing nonempty collections have exactly one slot. Snapshot unchanged; preserve the existing single-payload exception contract.
 
-- [ ] **Step 3 — migrate `union_names`.** `field` and `unmanaged` become per-field collections, still length 1. Extend `every_emitted_name_is_unique` to walk them. Snapshot unchanged.
+- [x] **Step 3 — migrate `union_names`.** `field` is a payload-member collection, still length 1. `payload_fields()` pairs resolved payload types with centrally allocated member names for nine output consumers and eight templates. `every_emitted_name_is_unique` walks the whole collection, including sibling and reserved-name checks. The per-variant `UnmanagedVariant` helper/overlay remains unchanged; its members use the same field collection. Historical unit-variant reservations are preserved. Snapshot unchanged.
 
-- [ ] **Step 4 — migrate `wireio` and `wire`.** `write` / `read` / `live_size` destructure N bindings; `wire/mod.rs`'s three `VariantKind` matches carry N. Still N=1. Snapshot unchanged.
+- [x] **Step 4 — migrate `wireio` and `wire`.** The proc-macro model exposes a derived payload iterator; WireIO bounds and `write` / `read` / `live_size` iterate bindings in field order. C# wire serialize / deserialize / size consume `Variant::payloads()` instead of matching single-payload storage. Still N<=1. The serializer and sizer explicitly guard the pending multi-field accessor contract. Snapshot unchanged.
 
 - [ ] **Step 5 — lift both rejections.** Accept `Fields::Unnamed(n)` and `Fields::Named` in `model.rs`, allocate field names through `union_names`, and widen the single-payload storage itself — `VariantKind::Tuple(TypeId)` and `Variant::ty`. Because step 1 derived `payloads()` rather than duplicating the field, there is no second copy to reconcile: the accessor starts yielding N slots. Complete the pending per-field names and the accessor/exception contracts, then remove the preparatory arity guards. Add reference-project fixtures for both forms and accept the snapshot. This is the only step that changes output.
 
@@ -120,11 +120,14 @@ Steps 1-4 are refactors with a byte-identical snapshot as the safety net, and an
 ## Validation
 
 - [x] Step 2 reference output is byte-identical: `reference_project::interop` passed on 2026-09-05 without changing snapshots.
-- [x] The regenerated bindings compiled and their C# suite passed through `reference_project::csharp_suite` on C# 15 / .NET 11 preview 7 with the patched runtime. The focused nextest run passed 2 tests; 85 unrelated tests were filtered.
-- [x] Source search confirms all eleven output consumers and both model consumers use `payloads()`; the existing union eligibility rule still reads `can_carry_payload`.
+- [x] The regenerated bindings compiled and their C# suite passed through `reference_project::csharp_suite`. The project targets `net11.0` with inherited `LangVersion=preview`. The focused nextest run passed 2 tests; 85 unrelated tests were filtered. The harness launches `dotnet run`; that evidence alone does not prove an explicit patched-runtime launch.
+- [x] Source search confirms all eleven output consumers and both model consumers use the payload view, directly or through `payload_fields()`; the existing union eligibility rule still reads `can_carry_payload`.
+- [x] Steps 3–4 naming checks passed 12/12; existing C# wire checks passed 20/20, including the wire plugin round trip (2026-09-05).
+- [x] Rust wire checks passed 23/23, including signed/explicit tags, exact unit and tuple payload bytes, live-size agreement, unknown tags and truncated input.
+- [x] Steps 3–4 reference generation and C# execution passed 2/2; the committed reference snapshot remains byte-identical. Exact commit validation re-runs the reference and core wire gates.
 
 ## Unverified
 
-- Steps 3–5 still require their stated validation gates. Named and multi-field Rust variants remain rejected until Step 5.
-- Named-field allocation and the per-field naming migration remain Step 3 work.
+- Named and multi-field Rust variants remain rejected until Step 5. Named-field allocation and the accessor/exception contracts remain Step 5 work.
+- [ ] Verify the generated C# runtime suite under an explicitly configured patched runtime before validating Step 5 behavior. `Directory.Build.props` selects preview language features, but the current xUnit harness, project and targets do not select `corerun` or `TestHostRuntime=patched-required`. The user target remains C# 15 / .NET 11 preview 7 with the patched runtime.
 - Whether any consumer outside this repository names `EnumException<T>` on a generated enum, which determines the consumer impact of a uniform case-type exception contract in Step 5.

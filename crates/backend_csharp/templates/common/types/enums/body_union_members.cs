@@ -9,7 +9,7 @@ public object? Value =>
 {%- if is_struct %} !_hasValue ? null :{% endif %} _variant switch
 {
     {%- for v in variants %}
-    {{ v.tag }} => new {{ v.case_type }}({% for payload in v.payloads %}_{{ payload.name }}{% if not loop.last %}, {% endif %}{% endfor %}),
+    {{ v.tag }} => new {{ v.case_type }}({% for payload in v.payloads %}{{ payload.field }}{% if not loop.last %}, {% endif %}{% endfor %}),
     {%- endfor %}
     _ => null,
 };
@@ -17,7 +17,7 @@ public object? Value =>
 
 public bool TryGetValue(out {{ v.case_type }} value)
 {
-    if ({% if is_struct %}_hasValue && {% endif %}_variant == {{ v.tag }}) { value = new {{ v.case_type }}({% for payload in v.payloads %}_{{ payload.name }}{% if not loop.last %}, {% endif %}{% endfor %}); return true; }
+    if ({% if is_struct %}_hasValue && {% endif %}_variant == {{ v.tag }}) { value = new {{ v.case_type }}({% for payload in v.payloads %}{{ payload.field }}{% if not loop.last %}, {% endif %}{% endfor %}); return true; }
     value = default;
     return false;
 }

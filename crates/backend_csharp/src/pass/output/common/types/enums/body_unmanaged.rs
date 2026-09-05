@@ -41,12 +41,11 @@ impl Pass {
                 .variants
                 .iter()
                 .filter_map(|v| {
-                    let payloads: Vec<HashMap<&str, String>> = v
-                        .payloads()
-                        .map(|payload| {
-                            let variant_ty = super::resolve_service_variant(payload.ty, types, mode);
+                    let payloads: Vec<HashMap<&str, String>> = model::common::types::union_names::payload_fields(v)
+                        .map(|(payload_ty, field)| {
+                            let variant_ty = super::resolve_service_variant(payload_ty, types, mode);
                             let to_managed = managed.to_managed_suffix(variant_ty).to_string();
-                            HashMap::from([("name", v.stem.clone()), ("to_managed", to_managed)])
+                            HashMap::from([("field", field), ("to_managed", to_managed)])
                         })
                         .collect();
                     if payloads.is_empty() {
@@ -75,12 +74,11 @@ impl Pass {
                 .variants
                 .iter()
                 .map(|v| {
-                    let payloads: Vec<HashMap<&str, String>> = v
-                        .payloads()
-                        .map(|payload| {
-                            let variant_ty = super::resolve_service_variant(payload.ty, types, mode);
+                    let payloads: Vec<HashMap<&str, String>> = model::common::types::union_names::payload_fields(v)
+                        .map(|(payload_ty, field)| {
+                            let variant_ty = super::resolve_service_variant(payload_ty, types, mode);
                             let to_managed = managed.to_managed_suffix(variant_ty).to_string();
-                            HashMap::from([("name", v.stem.clone()), ("to_managed", to_managed)])
+                            HashMap::from([("field", field), ("to_managed", to_managed)])
                         })
                         .collect();
 

@@ -69,7 +69,7 @@ impl Pass {
                     m.insert("stem", Value::normal_string(&v.stem));
                     m.insert("case_type", Value::normal_string(&v.case_type));
                     m.insert("tag", Value::from(v.tag));
-                    let payloads: Vec<_> = v.payloads().map(|_| HashMap::from([("name", v.stem.clone())])).collect();
+                    let payloads: Vec<_> = model::common::types::union_names::payload_fields(v).map(|(_, field)| HashMap::from([("field", field)])).collect();
                     m.insert("payloads", Value::from(payloads));
                     m
                 })

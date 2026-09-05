@@ -271,3 +271,38 @@ fn tuple_roundtrip() -> Result<(), SerializationError> {
 
     Ok(())
 }
+
+#[interoptopus::ffi]
+#[derive(Debug, PartialEq)]
+enum WireChoice {
+    Empty = -2,
+    Number(u16),
+    Text(String) = 3,
+}
+
+#[test]
+fn enum_payloads_preserve_tags_bytes_and_live_size() -> Result<(), SerializationError> {
+    for (value, expected) in [
+        (WireChoice::Empty, vec![0xfe]),
+        (WireChoice::Number(0x1234), vec![0xff, 0x34, 0x12]),
+        (WireChoice::Text("aß".to_string()), vec![3, 3, 0, 0, 0, b'a', 0xc3, 0x9f]),
+        (WireChoice::Text(String::new()), vec![3, 0, 0, 0, 0]),
+    ] {
+        let mut bytes = Vec::new();
+        value.write(&mut bytes)?;
+        assert_eq!(bytes, expected);
+        assert_eq!(value.live_size(), bytes.len());
+
+        let mut input = bytes.as_slice();
+        assert_eq!(WireChoice::read(&mut input)?, value);
+        assert!(input.is_empty(), "reading a variant must consume exactly its tag and payload");
+    }
+    Ok(())
+}
+
+#[test]
+fn enum_payloads_reject_unknown_tags_and_truncation() {
+    for bytes in [&[0u8][..], &[0xff], &[0xff, 0x34], &[3, 1, 0, 0, 0]] {
+        assert!(WireChoice::read(&mut &*bytes).is_err(), "invalid wire enum accepted: {bytes:?}");
+    }
+}

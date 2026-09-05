@@ -42,19 +42,18 @@ impl Pass {
                 .variants
                 .iter()
                 .map(|v| {
-                    let payloads: Vec<HashMap<&str, String>> = v
-                        .payloads()
-                        .map(|payload| {
-                            let ty = super::resolve_service_variant(payload.ty, types, mode);
+                    let payloads: Vec<HashMap<&str, String>> = model::common::types::union_names::payload_fields(v)
+                        .map(|(payload_ty, field)| {
+                            let ty = super::resolve_service_variant(payload_ty, types, mode);
                             let type_name = types.get(ty).map(|t| t.name.clone()).unwrap_or_default();
-                            HashMap::from([("name", v.stem.clone()), ("type", type_name)])
+                            HashMap::from([("field", field), ("type", type_name)])
                         })
                         .collect();
                     // Preserve the public single-payload AsX() return type during Steps 2–4.
                     // Step 5 must choose the multi-field return shape before widening storage.
-                    let type_name = match payloads.as_slice() {
-                        [] => String::new(),
-                        [payload] => payload["type"].clone(),
+                    let (type_name, field) = match payloads.as_slice() {
+                        [] => (String::new(), String::new()),
+                        [payload] => (payload["type"].clone(), payload["field"].clone()),
                         _ => panic!("multi-field AsX() return contract must be selected before lifting the enum payload limit"),
                     };
                     let has_payload = !payloads.is_empty();
@@ -64,6 +63,7 @@ impl Pass {
                     m.insert("id", Value::from(v.tag as i64));
                     m.insert("has_payload", Value::from(has_payload));
                     m.insert("type", Value::normal_string(&type_name));
+                    m.insert("field", Value::normal_string(&field));
                     m.insert("payloads", Value::from(payloads));
                     m.insert("case_type", Value::normal_string(&v.case_type));
                     m.insert("docs", Value::normal_string(&format_docs(&v.docs.lines)));

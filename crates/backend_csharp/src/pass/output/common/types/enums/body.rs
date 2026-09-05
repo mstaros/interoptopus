@@ -102,11 +102,11 @@ impl Pass {
                 variants
                     .iter()
                     .flat_map(|v| {
-                        v.payloads()
-                            .filter(|payload| disposable.is_disposable(payload.ty).unwrap_or(false))
-                            .map(move |_| {
+                        model::common::types::union_names::payload_fields(v)
+                            .filter(|(payload_ty, _)| disposable.is_disposable(*payload_ty).unwrap_or(false))
+                            .map(move |(_, field)| {
                                 let mut m = HashMap::new();
-                                m.insert("name", Value::normal_string(&format!("_{}", v.stem)));
+                                m.insert("name", Value::normal_string(&field));
                                 m.insert("tag", Value::from(v.tag as i64));
                                 m
                             })

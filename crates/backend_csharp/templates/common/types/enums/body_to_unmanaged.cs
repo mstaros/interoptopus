@@ -9,7 +9,7 @@ internal Unmanaged {{ to_unmanaged }}()
     _unmanaged._variant = _variant;
     {%- for v in variants %}
     {%- for payload in v.payloads %}
-    if (_variant == {{ v.id }}) _unmanaged._{{ v.name }}._{{ payload.name }} = _{{ payload.name }}{{ payload.to_unmanaged }};
+    if (_variant == {{ v.id }}) _unmanaged._{{ v.name }}.{{ payload.field }} = {{ payload.field }}{{ payload.to_unmanaged }};
     {%- endfor %}
     {%- endfor %}
     return _unmanaged;

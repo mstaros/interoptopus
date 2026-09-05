@@ -13,7 +13,7 @@ pub mod wire_type;
 
 use self::cs_names::{CsLayout, CsNames, CsProjection};
 use interoptopus::inventory::{TypeId, Types as RsTypes};
-use interoptopus::lang::types::{Array, Layout, Primitive, Struct, TypeKind as RsTypeKind, VariantKind, WireOnly};
+use interoptopus::lang::types::{Array, Layout, Primitive, Struct, TypeKind as RsTypeKind, WireOnly};
 
 /// Generates C# serialization code for the wire format by walking Rust types.
 ///
@@ -57,6 +57,13 @@ impl WireCodeGen<'_> {
             panic!("wire codegen: model/output synchronization invariant violated - no resolved stem for variant tag {tag} of Rust enum {ty_id}");
         };
         stem
+    }
+
+    /// Accesses the existing single-payload public accessor. Step 5 selects the
+    /// multi-field accessor contract; do not emit repeated reads of one payload.
+    fn variant_payload_value(&self, ty_id: TypeId, tag: isize, val: &str, index: usize) -> String {
+        assert_eq!(index, 0, "multi-field AsX() return contract must be selected before lifting the enum payload limit");
+        format!("{val}.As{}()", self.variant_stem(ty_id, tag))
     }
 
     /// Maps a Rust type to its C# managed type name.
@@ -359,16 +366,13 @@ impl WireCodeGen<'_> {
 
         for (index, variant) in e.variants.iter().enumerate() {
             let kw = if index == 0 { "if" } else { "else if" };
-            let (tag, payload) = match &variant.kind {
-                VariantKind::Unit => (variant.tag, None),
-                VariantKind::Tuple(t) => (variant.tag, Some(*t)),
-            };
+            let tag = variant.tag;
             lines.push(format!("{p}{kw} ({val}.Is{name})", name = self.variant_stem(ty_id, variant.tag)));
             lines.push(format!("{p}{{"));
             lines.push(format!("{pi}writer.Write(({prim_cs}){tag});"));
-            if let Some(payload_id) = payload {
-                let payload_val = format!("{val}.As{}()", self.variant_stem(ty_id, variant.tag));
-                self.emit_serialize(lines, payload_id, &payload_val, depth + 1, indent + 1);
+            for (index, payload) in variant.payloads().enumerate() {
+                let payload_val = self.variant_payload_value(ty_id, variant.tag, val, index);
+                self.emit_serialize(lines, payload.ty, &payload_val, depth + 1, indent + 1);
             }
             lines.push(format!("{p}}}"));
         }
@@ -393,18 +397,20 @@ impl WireCodeGen<'_> {
 
         for (index, variant) in e.variants.iter().enumerate() {
             let kw = if index == 0 { "if" } else { "else if" };
-            let (tag, payload) = match &variant.kind {
-                VariantKind::Unit => (variant.tag, None),
-                VariantKind::Tuple(t) => (variant.tag, Some(*t)),
-            };
+            let tag = variant.tag;
             lines.push(format!("{pi}{kw} ({tag_var} == ({prim_cs}){tag})", prim_cs = cs_primitive_name(prim)));
             lines.push(format!("{pi}{{"));
-            if let Some(payload_id) = payload {
-                let payload_cs = self.cs_type_name(payload_id);
-                let payload_var = format!("_p{depth}");
+            let mut payload_vars = Vec::new();
+            for (index, payload) in variant.payloads().enumerate() {
+                let payload_cs = self.cs_type_name(payload.ty);
+                let payload_var = if index == 0 { format!("_p{depth}") } else { format!("_p{depth}_{index}") };
                 lines.push(format!("{pi2}{payload_cs} {payload_var} = default;"));
-                self.emit_deserialize(lines, payload_id, &payload_var, depth + 1, indent + 2);
-                lines.push(format!("{pi2}{target} = {enum_name}.{}({payload_var});", self.variant_stem(ty_id, variant.tag)));
+                self.emit_deserialize(lines, payload.ty, &payload_var, depth + 1, indent + 2);
+                payload_vars.push(payload_var);
+            }
+            if !payload_vars.is_empty() {
+                let arguments = payload_vars.join(", ");
+                lines.push(format!("{pi2}{target} = {enum_name}.{}({arguments});", self.variant_stem(ty_id, variant.tag)));
             } else {
                 lines.push(format!("{pi2}{target} = {enum_name}.{};", self.variant_stem(ty_id, variant.tag)));
             }
@@ -432,14 +438,16 @@ impl WireCodeGen<'_> {
         lines.push(format!("{p}_size += {};", cs_primitive_size(prim)));
 
         for variant in &e.variants {
-            let payload = match &variant.kind {
-                VariantKind::Unit => continue,
-                VariantKind::Tuple(t) => *t,
-            };
+            let payloads: Vec<_> = variant.payloads().collect();
+            if payloads.is_empty() {
+                continue;
+            }
             lines.push(format!("{p}if ({val}.Is{name})", name = self.variant_stem(ty_id, variant.tag)));
             lines.push(format!("{p}{{"));
-            let payload_val = format!("{val}.As{}()", self.variant_stem(ty_id, variant.tag));
-            self.emit_size(lines, payload, &payload_val, depth + 1, indent + 1);
+            for (index, payload) in payloads.into_iter().enumerate() {
+                let payload_val = self.variant_payload_value(ty_id, variant.tag, val, index);
+                self.emit_size(lines, payload.ty, &payload_val, depth + 1, indent + 1);
+            }
             lines.push(format!("{p}}}"));
         }
     }

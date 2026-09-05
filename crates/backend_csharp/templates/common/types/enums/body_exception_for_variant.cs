@@ -7,7 +7,7 @@ public Exception ExceptionForVariant()
     {%- for v in variants %}
     {%- if v.has_payload %}
     {%- for payload in v.payloads %}
-    if (_variant == {{ v.id }}) return new EnumException<{{ payload.type }}>(_{{ payload.name }});
+    if (_variant == {{ v.id }}) return new EnumException<{{ payload.type }}>({{ payload.field }});
     {%- endfor %}
     {%- else %}
     if (_variant == {{ v.id }}) return new EnumException();

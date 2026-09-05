@@ -25,7 +25,7 @@
 //! See `docs/csharp-unions.md`, item 1.
 
 use crate::lang::TypeId;
-use crate::lang::types::kind::{DataEnum, TypeKind, TypePattern};
+use crate::lang::types::kind::{DataEnum, TypeKind, TypePattern, Variant};
 use crate::pass::Outcome::Unchanged;
 use crate::pass::{ModelResult, PassInfo, model};
 use std::collections::HashSet;
@@ -66,8 +66,8 @@ pub struct VariantNames {
     pub is_check: String,
     /// `public T {accessor}()`.
     pub accessor: String,
-    /// Managed payload field.
-    pub field: String,
+    /// Managed and unmanaged payload member names, in payload order.
+    pub field: Vec<String>,
     /// Nested per-variant unmanaged helper struct.
     pub unmanaged: String,
     /// Nested case type introduced by union projection.
@@ -103,12 +103,35 @@ fn data_enum_mut(kind: &mut TypeKind) -> Option<&mut DataEnum> {
     }
 }
 
+/// Payload member names reserved by a variant's stem.
+///
+/// Reserve the historical name even for unit variants: removing that reservation in a
+/// preparatory refactor could rename a colliding sibling and change existing output.
+/// Step 5 widens this collection and allocates named fields here, not in output passes.
+fn field_names(stem: &str) -> Vec<String> {
+    vec![format!("_{stem}")]
+}
+
+/// The variant's payloads paired with their centrally allocated member names.
+///
+/// These members occur both on the managed union and inside its per-variant unmanaged
+/// helper. The helper itself remains one struct per variant, containing every payload.
+pub(crate) fn payload_fields(variant: &Variant) -> impl Iterator<Item = (TypeId, String)> + '_ {
+    let fields = field_names(&variant.stem);
+    variant.payloads().enumerate().map(move |(index, payload)| {
+        let field = fields.get(index).expect("multi-field member names must be allocated before lifting the enum payload limit").clone();
+        (payload.ty, field)
+    })
+}
+
 /// Names derived from a stem that the generator already emits today.
 ///
-/// All five occupy the enum's declaration space, so a stem is only usable when every
-/// member of its family is free.
-fn family(stem: &str) -> [String; 5] {
-    [stem.to_string(), format!("Is{stem}"), format!("As{stem}"), format!("_{stem}"), format!("Unmanaged{stem}")]
+/// Every member occupies the enum's declaration space, so a stem is only usable when
+/// its fixed members and its entire payload-field collection are free.
+fn family(stem: &str) -> Vec<String> {
+    let mut names = vec![stem.to_string(), format!("Is{stem}"), format!("As{stem}"), format!("Unmanaged{stem}")];
+    names.extend(field_names(stem));
+    names
 }
 
 /// Allocates the name family for one enum.
@@ -170,7 +193,11 @@ fn resolve(enclosing: &str, stems: &[String]) -> Vec<VariantNames> {
                 n += 1;
             };
 
-            let [factory, is_check, accessor, field, unmanaged] = family(&stem);
+            let factory = stem.clone();
+            let is_check = format!("Is{stem}");
+            let accessor = format!("As{stem}");
+            let field = field_names(&stem);
+            let unmanaged = format!("Unmanaged{stem}");
             VariantNames { renamed: &stem != original, stem, factory, is_check, accessor, field, unmanaged, case_type }
         })
         .collect()
@@ -241,7 +268,7 @@ mod tests {
         assert_eq!(r[0].factory, "Red");
         assert_eq!(r[0].is_check, "IsRed");
         assert_eq!(r[0].accessor, "AsRed");
-        assert_eq!(r[0].field, "_Red");
+        assert_eq!(r[0].field, ["_Red"]);
         assert_eq!(r[0].unmanaged, "UnmanagedRed");
         assert_eq!(r[0].case_type, "RedCase");
         assert!(r.iter().all(|v| !v.renamed));
@@ -328,14 +355,14 @@ mod tests {
         // of this pass missed them entirely, emitting `_` for every payload field.
         let r = names("ResultUintError", &["Ok", "Err", "Panic", "Null"]);
         assert_eq!(r[0].factory, "Ok");
-        assert_eq!(r[0].field, "_Ok");
+        assert_eq!(r[0].field, ["_Ok"]);
         assert_eq!(r[0].unmanaged, "UnmanagedOk");
-        assert_eq!(r[1].field, "_Err");
+        assert_eq!(r[1].field, ["_Err"]);
         assert!(r.iter().all(|v| !v.renamed));
 
         let o = names("OptionUint", &["Some", "None"]);
-        assert_eq!(o[0].field, "_Some");
-        assert_eq!(o[1].field, "_None");
+        assert_eq!(o[0].field, ["_Some"]);
+        assert_eq!(o[1].field, ["_None"]);
         assert!(o.iter().all(|v| !v.renamed));
     }
 
@@ -344,7 +371,7 @@ mod tests {
         let r = names("E", &["Value", "ValueVariant", "B", "BCase", "Foo", "IsFoo", "UnmanagedFoo", "E", "variant"]);
         let mut seen = HashSet::new();
         for v in &r {
-            for n in [&v.factory, &v.is_check, &v.accessor, &v.field, &v.unmanaged, &v.case_type] {
+            for n in [&v.factory, &v.is_check, &v.accessor, &v.unmanaged, &v.case_type].into_iter().chain(&v.field) {
                 assert!(seen.insert(n.clone()), "duplicate emitted name: {n}");
             }
         }

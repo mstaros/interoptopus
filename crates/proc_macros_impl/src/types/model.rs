@@ -56,6 +56,18 @@ pub enum VariantData {
     Tuple(Type),
 }
 
+impl VariantModel {
+    /// Declared payload types in field order. The parser still rejects named and
+    /// multi-field variants; wire emission uses this seam before storage widens.
+    pub fn payloads(&self) -> impl Iterator<Item = &Type> {
+        match &self.data {
+            VariantData::Unit => None,
+            VariantData::Tuple(ty) => Some(ty),
+        }
+        .into_iter()
+    }
+}
+
 impl TypeModel {
     pub fn from_derive_input(input: DeriveInput, args: FfiTypeArgs) -> syn::Result<Self> {
         let docs = extract_docs(&input.attrs);

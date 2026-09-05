@@ -40,12 +40,11 @@ impl Pass {
                 .variants
                 .iter()
                 .map(|v| {
-                    let payloads: Vec<HashMap<&str, String>> = v
-                        .payloads()
-                        .map(|payload| {
-                            let ty = super::resolve_service_variant(payload.ty, types, mode);
+                    let payloads: Vec<HashMap<&str, String>> = model::common::types::union_names::payload_fields(v)
+                        .map(|(payload_ty, field)| {
+                            let ty = super::resolve_service_variant(payload_ty, types, mode);
                             let type_name = types.get(ty).map(|t| t.name.clone()).unwrap_or_default();
-                            HashMap::from([("name", v.stem.clone()), ("type", type_name)])
+                            HashMap::from([("field", field), ("type", type_name)])
                         })
                         .collect();
                     // Existing consumers catch EnumException<TPayload>. A collection does not

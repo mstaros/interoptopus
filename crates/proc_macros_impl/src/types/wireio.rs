@@ -2,7 +2,22 @@ use proc_macro2::TokenStream;
 use quote::quote_spanned;
 use syn::spanned::Spanned;
 
-use crate::types::model::{TypeData, TypeModel, VariantData};
+use crate::types::model::{TypeData, TypeModel, VariantModel};
+
+/// Bind every payload in declaration order. These names are macro-local.
+fn payload_bindings(variant: &VariantModel) -> Vec<syn::Ident> {
+    variant.payloads().enumerate().map(|(index, _)| quote::format_ident!("__inner{index}", span = variant.name.span())).collect()
+}
+
+/// The same variant syntax is used to destructure a value and to construct it.
+fn variant_value(name: &syn::Ident, variant: &VariantModel, bindings: &[syn::Ident]) -> TokenStream {
+    let vname = &variant.name;
+    if bindings.is_empty() {
+        quote_spanned! { vname.span() => #name::#vname }
+    } else {
+        quote_spanned! { vname.span() => #name::#vname(#(#bindings),*) }
+    }
+}
 
 /// Compute the wire discriminant tag for each variant of an enum.
 /// Mirrors Rust auto-numbering: explicit discriminants reset the counter,
@@ -123,10 +138,7 @@ impl TypeModel {
                 let field_bounds: Vec<_> = enum_data
                     .variants
                     .iter()
-                    .filter_map(|v| match &v.data {
-                        VariantData::Unit => None,
-                        VariantData::Tuple(ty) => Some(quote_spanned! { v.name.span() => #ty: ::interoptopus::lang::types::WireIO, }),
-                    })
+                    .flat_map(|v| v.payloads().map(|ty| quote_spanned! { v.name.span() => #ty: ::interoptopus::lang::types::WireIO, }))
                     .collect();
 
                 if let Some(existing_where) = existing_where {
@@ -202,18 +214,16 @@ impl TypeModel {
                 let arms = enum_data.variants.iter().zip(tags.iter()).map(|(v, tag)| {
                     let vname = &v.name;
                     let tag_lit = proc_macro2::Literal::isize_unsuffixed(*tag);
-                    match &v.data {
-                        VariantData::Unit => quote_spanned! { vname.span() =>
-                            #name::#vname => {
-                                <#wire_ty as ::interoptopus::lang::types::WireIO>::write(&(#tag_lit as #wire_ty), out)?;
-                            }
-                        },
-                        VariantData::Tuple(ty) => quote_spanned! { vname.span() =>
-                            #name::#vname(__inner) => {
-                                <#wire_ty as ::interoptopus::lang::types::WireIO>::write(&(#tag_lit as #wire_ty), out)?;
-                                <#ty as ::interoptopus::lang::types::WireIO>::write(__inner, out)?;
-                            }
-                        },
+                    let bindings = payload_bindings(v);
+                    let pattern = variant_value(name, v, &bindings);
+                    let writes = v.payloads().zip(&bindings).map(|(ty, binding)| quote_spanned! { vname.span() =>
+                        <#ty as ::interoptopus::lang::types::WireIO>::write(#binding, out)?;
+                    });
+                    quote_spanned! { vname.span() =>
+                        #pattern => {
+                            <#wire_ty as ::interoptopus::lang::types::WireIO>::write(&(#tag_lit as #wire_ty), out)?;
+                            #(#writes)*
+                        }
                     }
                 });
 
@@ -301,16 +311,16 @@ impl TypeModel {
                 let arms = enum_data.variants.iter().zip(tags.iter()).map(|(v, tag)| {
                     let vname = &v.name;
                     let tag_lit = proc_macro2::Literal::isize_unsuffixed(*tag);
-                    match &v.data {
-                        VariantData::Unit => quote_spanned! { vname.span() =>
-                            x if x == (#tag_lit as #wire_ty) => ::std::result::Result::Ok(#name::#vname),
-                        },
-                        VariantData::Tuple(ty) => quote_spanned! { vname.span() =>
-                            x if x == (#tag_lit as #wire_ty) => {
-                                let __inner = <#ty as ::interoptopus::lang::types::WireIO>::read(input)?;
-                                ::std::result::Result::Ok(#name::#vname(__inner))
-                            }
-                        },
+                    let bindings = payload_bindings(v);
+                    let value = variant_value(name, v, &bindings);
+                    let reads = v.payloads().zip(&bindings).map(|(ty, binding)| quote_spanned! { vname.span() =>
+                        let #binding = <#ty as ::interoptopus::lang::types::WireIO>::read(input)?;
+                    });
+                    quote_spanned! { vname.span() =>
+                        x if x == (#tag_lit as #wire_ty) => {
+                            #(#reads)*
+                            ::std::result::Result::Ok(#value)
+                        }
                     }
                 });
 
@@ -383,17 +393,17 @@ impl TypeModel {
             TypeData::Enum(enum_data) => {
                 let name = &self.name;
                 let wire_ty = crate::types::discriminant::wire_type_tokens(&enum_data.discriminant, self.name.span());
-                let has_tuple = enum_data.variants.iter().any(|v| matches!(v.data, VariantData::Tuple(_)));
-                if has_tuple {
+                let has_payload = enum_data.variants.iter().any(|v| v.payloads().next().is_some());
+                if has_payload {
                     let arms = enum_data.variants.iter().map(|v| {
                         let vname = &v.name;
-                        match &v.data {
-                            VariantData::Unit => quote_spanned! { vname.span() =>
-                                #name::#vname => 0,
-                            },
-                            VariantData::Tuple(ty) => quote_spanned! { vname.span() =>
-                                #name::#vname(__inner) => <#ty as ::interoptopus::lang::types::WireIO>::live_size(__inner),
-                            },
+                        let bindings = payload_bindings(v);
+                        let pattern = variant_value(name, v, &bindings);
+                        let sizes = v.payloads().zip(&bindings).map(|(ty, binding)| quote_spanned! { vname.span() =>
+                            <#ty as ::interoptopus::lang::types::WireIO>::live_size(#binding)
+                        });
+                        quote_spanned! { vname.span() =>
+                            #pattern => 0 #(+ #sizes)*,
                         }
                     });
                     quote_spanned! { self.name.span() =>

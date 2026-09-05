@@ -12,7 +12,7 @@
     {%- endif %}
     {%- for variant in variants %}
     {%- for payload in variant.payloads %}
-    {{ payload.type }} _{{ payload.name }};
+    {{ payload.type }} {{ payload.field }};
     {%- endfor %}
     {%- endfor %}
 }

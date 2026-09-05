@@ -43,13 +43,12 @@ impl Pass {
                 .variants
                 .iter()
                 .filter_map(|v| {
-                    let payloads: Vec<HashMap<&str, String>> = v
-                        .payloads()
-                        .map(|payload| {
-                            let variant_ty = super::resolve_service_variant(payload.ty, types, mode);
+                    let payloads: Vec<HashMap<&str, String>> = model::common::types::union_names::payload_fields(v)
+                        .map(|(payload_ty, field)| {
+                            let variant_ty = super::resolve_service_variant(payload_ty, types, mode);
                             let suffix = managed.as_unmanaged_suffix(variant_ty);
                             let as_unmanaged = super::guard_null_payload(suffix, nullable, variant_ty, name, &v.stem);
-                            HashMap::from([("name", v.stem.clone()), ("as_unmanaged", as_unmanaged)])
+                            HashMap::from([("field", field), ("as_unmanaged", as_unmanaged)])
                         })
                         .collect();
                     if payloads.is_empty() {

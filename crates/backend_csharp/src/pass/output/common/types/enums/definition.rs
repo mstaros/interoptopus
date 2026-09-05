@@ -77,12 +77,11 @@ impl Pass {
                 .variants
                 .iter()
                 .filter_map(|v| {
-                    let payloads: Vec<HashMap<&str, String>> = v
-                        .payloads()
-                        .filter_map(|payload| {
-                            let ty = super::resolve_service_variant(payload.ty, types, mode);
+                    let payloads: Vec<HashMap<&str, String>> = model::common::types::union_names::payload_fields(v)
+                        .filter_map(|(payload_ty, field)| {
+                            let ty = super::resolve_service_variant(payload_ty, types, mode);
                             let ty_name = types.get(ty).map(|t| &t.name)?;
-                            Some(HashMap::from([("name", v.stem.clone()), ("type", ty_name.clone())]))
+                            Some(HashMap::from([("field", field), ("type", ty_name.clone())]))
                         })
                         .collect();
                     if payloads.is_empty() {

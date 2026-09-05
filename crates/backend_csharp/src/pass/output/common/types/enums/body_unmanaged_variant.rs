@@ -37,12 +37,11 @@ impl Pass {
             let mut rendered_variants = Vec::new();
 
             for variant in &data_enum.variants {
-                let payloads: Vec<HashMap<&str, String>> = variant
-                    .payloads()
-                    .filter_map(|payload| {
-                        let variant_ty = super::resolve_service_variant(payload.ty, types, mode);
+                let payloads: Vec<HashMap<&str, String>> = model::common::types::union_names::payload_fields(variant)
+                    .filter_map(|(payload_ty, field)| {
+                        let variant_ty = super::resolve_service_variant(payload_ty, types, mode);
                         let variant_type = unmanaged_names.name(variant_ty)?;
-                        Some(HashMap::from([("name", variant.stem.clone()), ("unmanaged_name", variant_type.clone())]))
+                        Some(HashMap::from([("field", field), ("unmanaged_name", variant_type.clone())]))
                     })
                     .collect();
                 if payloads.is_empty() {
