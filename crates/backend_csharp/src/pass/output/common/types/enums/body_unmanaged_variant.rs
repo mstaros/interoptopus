@@ -42,7 +42,7 @@ impl Pass {
                     .filter_map(|payload| {
                         let variant_ty = super::resolve_service_variant(payload.ty, types, mode);
                         let variant_type = unmanaged_names.name(variant_ty)?;
-                        Some(HashMap::from([("name", variant.stem.clone()), ("unmanaged_name", variant_type.to_string())]))
+                        Some(HashMap::from([("name", variant.stem.clone()), ("unmanaged_name", variant_type.clone())]))
                     })
                     .collect();
                 if payloads.is_empty() {

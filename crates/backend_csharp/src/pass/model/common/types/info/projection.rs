@@ -19,7 +19,7 @@
 //! only on difference converges correctly under the same fixed-point contract.
 
 use crate::lang::TypeId;
-use crate::lang::types::kind::{TypeKind, TypePattern};
+use crate::lang::types::kind::{TypeKind, TypePattern, Variant};
 use crate::pass::Outcome::Unchanged;
 use crate::pass::{ModelResult, PassInfo, model};
 use std::collections::HashMap;
@@ -82,7 +82,7 @@ impl Pass {
                 TypeKind::DataEnum(de) => de
                     .variants
                     .iter()
-                    .flat_map(|v| v.payloads())
+                    .flat_map(Variant::payloads)
                     .any(|payload| matches!(types.get(payload.ty).map(|x| &x.kind), Some(TypeKind::WireOnly(_)))),
                 _ => false,
             };
