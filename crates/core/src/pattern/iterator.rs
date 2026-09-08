@@ -4,11 +4,11 @@
 //! be `Send + 'static`: borrowed collections must first provide an owning
 //! traversal (for example one retaining an `Arc` to its source).
 //!
-//! C# generates consuming `Where`, `Take`, and `Any` extensions. Every stage
+//! C# generates `Rust.Linq.IRustEnumerable<T>` wrappers and query extensions. Each native stage
 //! transfers ownership; the previous wrapper becomes unusable. Evaluation is
-//! deferred until `Any`, which short-circuits and releases the entire pipeline.
-//! Dispose an unfinished query. This is a single-pass iterator, not a replayable
-//! `IEnumerable`. The initial C# projection supports scalars, plain enums, and
+//! deferred until `Any` or enumeration. Terminal evaluation releases the pipeline.
+//! Dispose unfinished queries and enumerators. Native sources remain single-pass
+//! even through `IEnumerable<T>`. The C# projection supports scalars, plain enums, and
 //! structs composed of those values. Borrowed and owning elements are rejected.
 //!
 //! ```
@@ -59,11 +59,14 @@ impl Drop for Callback {
 
 /// An owned FFI iterator. Its function pointers are specialized for its element type.
 ///
-/// The ABI is five pointer-sized fields, in the order below. Foreign code must
+/// The ABI is six pointer-sized fields, in the order below. Foreign code must
 /// move the descriptor, never copy ownership, and serialize access to its state.
 /// Predicates receive a borrowed element pointer valid only during the callback.
 /// Return 0 to reject, 1 to accept, or -1 to stop with a managed exception.
-/// The error context returned by `any_fn` remains rooted until `drop_fn`.
+/// The error context returned by `any_fn` or `next_fn` remains rooted until `drop_fn`.
+/// `next_fn` copies one element into caller storage of at least `size_of::<T>()`
+/// bytes. The backend must allow only element representations safe to copy;
+/// Rust drops the original element before returning, including on panic.
 #[repr(C)]
 pub struct Iterator<T> {
     data: *mut c_void,
@@ -71,6 +74,7 @@ pub struct Iterator<T> {
     take_fn: unsafe extern "C" fn(*mut c_void, u64),
     any_fn: unsafe extern "C" fn(*mut c_void, *mut *const c_void) -> i32,
     drop_fn: unsafe extern "C" fn(*mut c_void),
+    next_fn: unsafe extern "C" fn(*mut c_void, *mut c_void, *mut *const c_void) -> i32,
     element: PhantomData<T>,
 }
 
@@ -95,6 +99,7 @@ impl<T: Send + 'static> Iterator<T> {
             take_fn: take::<T>,
             any_fn: any::<T>,
             drop_fn: destroy::<T>,
+            next_fn: next::<T>,
             element: PhantomData,
         }
     }
@@ -144,6 +149,27 @@ unsafe extern "C" fn destroy<T>(data: *mut c_void) {
     }));
 }
 
+// Copies a value's representation into caller-provided storage, retaining no Rust
+// references in the foreign result. Backends must restrict this to copyable FFI
+// representations and provide at least size_of::<T>() writable bytes.
+unsafe extern "C" fn next<T>(data: *mut c_void, output: *mut c_void, error: *mut *const c_void) -> i32 {
+    unsafe { error.write(std::ptr::null()) };
+    match catch_unwind(AssertUnwindSafe(|| {
+        let state = unsafe { &mut *data.cast::<State<T>>() };
+        state.items.as_mut().expect("owned iterator state").next().map(|item| item.map(|item| {
+            unsafe { std::ptr::copy_nonoverlapping(std::ptr::from_ref(&item).cast::<u8>(), output.cast::<u8>(), std::mem::size_of::<T>()) };
+        }))
+    })) {
+        Ok(None) => 0,
+        Ok(Some(Ok(()))) => 1,
+        Ok(Some(Err(context))) => {
+            unsafe { error.write(context as *const c_void) };
+            -1
+        }
+        Err(_) => -2,
+    }
+}
+
 impl<T> Drop for Iterator<T> {
     fn drop(&mut self) {
         if !self.data.is_null() {
@@ -160,7 +186,7 @@ unsafe impl<T: TypeInfo> TypeInfo for Iterator<T> {
     const SERVICE_CTOR_SAFE: bool = false;
 
     fn id() -> TypeId {
-        TypeId::new(0x6149260D64AC4B71B6D0AD613F9DF28C).derive_id(T::id())
+        TypeId::new(0x6149260D64AC4B71B6D0AD613F9DF28D).derive_id(T::id())
     }
 
     fn kind() -> TypeKind {
@@ -231,6 +257,33 @@ mod tests {
         assert_eq!(releases.load(Ordering::SeqCst), 0);
         drop(iter);
         assert_eq!(releases.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn next_copies_values_and_reports_end() {
+        let iter = Iterator::new([12_u32, 34].into_iter());
+        let mut value = 0_u32;
+        let mut error = std::ptr::null();
+        for expected in [12, 34] {
+            assert_eq!(unsafe { (iter.next_fn)(iter.data, std::ptr::from_mut(&mut value).cast(), &mut error) }, 1);
+            assert_eq!(value, expected);
+            assert!(error.is_null());
+        }
+        assert_eq!(unsafe { (iter.next_fn)(iter.data, std::ptr::from_mut(&mut value).cast(), &mut error) }, 0);
+        assert_eq!(value, 34);
+    }
+
+    #[test]
+    fn next_contains_item_destructor_panics() {
+        struct PanicOnDrop(u32);
+        impl Drop for PanicOnDrop {
+            fn drop(&mut self) { panic!("copied item destructor panic: {}", self.0); }
+        }
+        let iter = Iterator::new(std::iter::once(PanicOnDrop(7)));
+        let mut value = 0_u32;
+        let mut error = std::ptr::null();
+        assert_eq!(unsafe { (iter.next_fn)(iter.data, std::ptr::from_mut(&mut value).cast(), &mut error) }, -2);
+        assert!(error.is_null());
     }
 
     #[test]

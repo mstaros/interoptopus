@@ -76,9 +76,66 @@ marshalling remain responsible for callback state and disposal.
 This changes the generated public API: callers naming an old `NameDelegate` type
 should use the corresponding `Func` or `Action`. Inline lambda calls retain their syntax.
 
-## Rust-owned queries
+## Rust.Linq queries
 
-Return an `ffi::Iterator<T>` from a registered Rust function or service method:
+The Rust library backend emits a shared `Rust.Linq.cs` file alongside the library
+bindings. Import `Rust.Linq` and call `ToRust()` on any `IEnumerable<T>`:
+
+```csharp
+using System.Collections.Generic;
+using System.Linq;
+using Rust.Linq;
+
+IEnumerable<int> values = new[] { 1, 2, 3, 4 };
+using IRustEnumerable<int> query = values.ToRust()
+    .Where(x => x > 1)
+    .Take(2);
+bool found = query.Any(x => x == 3);
+```
+
+`ToRust()` returns `IRustEnumerable<T>`, which extends `IEnumerable<T>` and
+`IDisposable`. It does not enumerate or copy the source. The query operators
+extend this more specific interface, so `System.Linq` and `Rust.Linq` can be
+imported together, including projects with implicit `System.Linq` imports.
+Plain `IEnumerable<T>.Where(...)` remains normal LINQ; `ToRust().Where(...)`
+selects this API. Queries also work with `foreach`, `ToArray()`, and other
+existing consumers of `IEnumerable<T>`.
+
+### Execution and ownership
+
+Generated `ffi::Iterator<T>` wrappers implement `IRustEnumerable<T>` directly.
+`ToRust()` preserves that object, even when it has been upcast to
+`IEnumerable<T>`. Its `Where`, `Take`, and `Any` operators execute through
+Rust function pointers. Predicates are ordinary `Func<T, bool>` callbacks:
+Rust invokes the C# lambda; the binding does not compile lambdas into Rust.
+
+Other `IEnumerable<T>` sources use deferred managed LINQ. This includes arbitrary
+managed element types such as strings and user classes, without FFI marshalling.
+`ToRust()` selects the query API; it does not promise native execution or move a
+managed collection into Rust. The managed adapter does not take ownership of its
+source, and its `Dispose()` is a no-op. Its repeatability and resource lifetime
+follow the original enumerable and the usual enumerator disposal rules.
+Existing Rust collection wrappers that only implement `IEnumerable<T>` also use
+this fallback; native operator execution requires the iterator binding below.
+
+Native iterator queries remain owning and single-pass. `Where` and `Take`
+transfer ownership to the returned query. `Any` consumes and releases it.
+`GetEnumerator()` transfers ownership to an enumerator without evaluating any
+element; `MoveNext()` advances the Rust traversal. Exhaustion, an exception, or
+enumerator disposal releases the native state and retained predicates. A
+`foreach` break therefore cleans up correctly. Dispose unfinished queries with
+`using`; earlier moved wrappers cannot be reused, though disposing them is harmless.
+Explicit disposal is necessary if a predicate captures its own query or enumerator.
+`Reset()` is unsupported.
+
+A predicate exception stops native traversal and is rethrown after cleanup.
+Negative `Take` counts behave like zero. Managed callbacks are rooted until the
+native query is released.
+
+### Exposing a Rust traversal
+
+Return an owning `ffi::Iterator<T>` from a registered Rust function or service
+method:
 
 ```rust
 use interoptopus::ffi;
@@ -89,41 +146,39 @@ pub fn numbers() -> ffi::Iterator<u32> {
 }
 ```
 
-Register the export with `function!(numbers)` as usual. The Rust library backend
-automatically emits `IteratorUint` and its extension class in the namespace selected
-by the output dispatch. Import that namespace in C#:
+Register the export with `function!(numbers)` as usual. The generated
+`IteratorUint` wrapper lives in the namespace selected by output dispatch;
+query extensions live in `Rust.Linq`:
 
 ```csharp
-using var query = Interop.numbers()
-    .Where(x => x % 2 == 0)
-    .Take(2);
+using Rust.Linq;
+
+using var query = Interop.numbers().Where(x => x % 2 == 0).Take(2);
 bool found = query.Any(x => x > 3);
 ```
 
-`Where` accepts `Func<T, bool>`. `Where` and `Take` are deferred; `Any`
-evaluates in Rust, short-circuits, and releases the pipeline. Negative `Take`
-counts behave like zero. Managed predicates are retained until the query is
-released. A predicate exception stops traversal and is rethrown by `Any` after
-cleanup. Each element reaching a managed predicate requires a native-to-managed
-callback; this does not compile C# lambdas into Rust code.
-
-Queries are owning, single-pass objects. Every operator consumes its receiver;
-use its returned stage and dispose unfinished queries with `using`. Earlier
-wrappers cannot be reused, although disposing them is harmless. This also applies
-when passing a query by value back into Rust. Unlike `IEnumerable<T>`, a consumed
-query cannot be enumerated again. Explicit disposal is required for abandoned
-queries whose predicate captures its own query wrapper.
-
 The Rust source must be `Send + 'static`. A traversal over a shared collection
-can retain an `Arc` to that collection and produce owned elements; a traversal
-borrowing a local collection cannot be exported. The source remains in Rust and
-is not materialized by the binding layer.
+can retain an `Arc` and produce owned elements. It cannot borrow a local
+collection. The binding does not materialize the source collection.
 
-This first version supports `Where`, `Take`, `Any()`, and `Any(predicate)`
-for scalars, plain enums, and structs composed of those values. Pointer, slice,
-string, array, payload-enum, and owning-wrapper elements are rejected during
-generation. Element structs are copied through their generated unmanaged
-representation before invoking the predicate.
+Native elements currently support scalars, plain enums, and structs composed of
+those values. Pointer, slice, string, array, payload-enum, and owning-wrapper
+elements are rejected during generation. Native elements are copied through
+their unmanaged representation for C# predicates and enumeration. These
+restrictions do not apply to the managed `ToRust()` fallback.
 
-The initial operators use `std::iter`. Additional operators can use `itertools`
-as an ordinary dependency; no itertools fork is required.
+This version provides `Where`, `Take`, `Any()`, and `Any(predicate)`.
+Operators return `IRustEnumerable<T>`; use that type for query variables.
+Passing a native query back to an FFI function that takes `IteratorUint`
+requires casting the native query to that concrete wrapper type.
+
+`Rust.Linq.cs` contains no library-specific code. Compile one copy per C#
+compilation. If several binding assemblies share one query API, put that file in
+a common referenced assembly and exclude their duplicate copies. Its provider
+hooks are public for generated implementations across assemblies and hidden from
+normal editor completion.
+
+The iterator ABI now includes a sixth function pointer for enumeration.
+Regenerate bindings and rebuild the native library together; the type identity
+and API hash change detects stale bindings. Initial operators use `std::iter`;
+later operators can use `itertools` as an ordinary dependency, without a fork.

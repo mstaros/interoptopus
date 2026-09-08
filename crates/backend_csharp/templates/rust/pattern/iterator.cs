@@ -1,7 +1,7 @@
 /// An owned, single-pass Rust iterator. Where and Take move ownership to the
 /// returned stage. Any consumes the query; dispose a query that is not consumed.
 [NativeMarshalling(typeof(MarshallerMeta))]
-public sealed partial class {{ name }} : IDisposable
+public sealed partial class {{ name }} : global::Rust.Linq.IRustEnumerable<{{ managed_element_type }}>
 {
     private readonly object _gate = new();
     private Unmanaged _native;
@@ -103,6 +103,113 @@ public sealed partial class {{ name }} : IDisposable
         return result != 0;
     }
 
+
+    global::Rust.Linq.IRustEnumerable<{{ managed_element_type }}> global::Rust.Linq.IRustEnumerable<{{ managed_element_type }}>.WhereCore(global::System.Func<{{ managed_element_type }}, bool> predicate)
+        => WhereCore(predicate);
+    global::Rust.Linq.IRustEnumerable<{{ managed_element_type }}> global::Rust.Linq.IRustEnumerable<{{ managed_element_type }}>.TakeCore(int count)
+        => TakeCore(count);
+    bool global::Rust.Linq.IRustEnumerable<{{ managed_element_type }}>.AnyCore() => AnyCore();
+
+    /// Transfers this single-pass traversal to an enumerator without evaluating it.
+    public global::System.Collections.Generic.IEnumerator<{{ managed_element_type }}> GetEnumerator()
+    {
+        var enumerator = new Enumerator();
+        enumerator.Native = IntoUnmanaged();
+        return enumerator;
+    }
+
+    global::System.Collections.IEnumerator global::System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+
+    private sealed class Enumerator : global::System.Collections.Generic.IEnumerator<{{ managed_element_type }}>
+    {
+        internal Unmanaged Native;
+        private readonly object _gate = new();
+        private bool _running;
+        private bool _disposed;
+        private bool _hasCurrent;
+        private {{ managed_element_type }} _current;
+
+        ~Enumerator() { Dispose(); }
+
+        public {{ managed_element_type }} Current
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    if (!_hasCurrent) throw new InvalidOperationException("The enumerator has no current element.");
+                    return _current;
+                }
+            }
+        }
+
+        object global::System.Collections.IEnumerator.Current => Current;
+
+        public unsafe bool MoveNext()
+        {
+            Unmanaged native;
+            lock (_gate)
+            {
+                if (_running) throw new InvalidOperationException("Rust iterator enumeration is not reentrant.");
+                if (_disposed) return false;
+                _running = true;
+                _hasCurrent = false;
+                native = Native;
+            }
+            bool yielded = false;
+            try
+            {
+                // Do not hold the monitor across user predicates. Dispose may be
+                // called by the predicate itself, including from another thread.
+                {{ unmanaged_element_type }} item = default;
+                IntPtr context = IntPtr.Zero;
+                int result = ((delegate* unmanaged[Cdecl]<IntPtr, IntPtr, IntPtr*, int>)native._next)(native._data, (IntPtr)(&item), &context);
+                if (context != IntPtr.Zero)
+                    (GCHandle.FromIntPtr(context).Target as PredicateState)?.Error?.Throw();
+                if (result < 0) throw new InvalidOperationException("Rust iterator evaluation failed.");
+                lock (_gate)
+                {
+                    if (_disposed || result == 0) return false;
+                    _current = {{ copied_element }};
+                    _hasCurrent = true;
+                    yielded = true;
+                    return true;
+                }
+            }
+            finally
+            {
+                bool release;
+                lock (_gate)
+                {
+                    _running = false;
+                    if (!yielded) _disposed = true;
+                    release = _disposed;
+                }
+                if (release) Dispose();
+            }
+        }
+
+        public void Reset() => throw new NotSupportedException("Rust iterators are single-pass.");
+
+        public unsafe void Dispose()
+        {
+            Unmanaged native;
+            lock (_gate)
+            {
+                _disposed = true;
+                _hasCurrent = false;
+                _current = default;
+                // Retain native state until an active MoveNext has returned from Rust.
+                if (_running) return;
+                native = Native;
+                Native = default;
+            }
+            if (native._data != IntPtr.Zero)
+                ((delegate* unmanaged[Cdecl]<IntPtr, void>)native._drop)(native._data);
+            GC.SuppressFinalize(this);
+        }
+    }
+
     private sealed class PredicateState
     {
         internal readonly global::System.Func<{{ managed_element_type }}, bool> Predicate;
@@ -142,6 +249,7 @@ public sealed partial class {{ name }} : IDisposable
         internal IntPtr _take;
         internal IntPtr _any;
         internal IntPtr _drop;
+        internal IntPtr _next;
 
         internal {{ name }} IntoManaged() => new {{ name }} { _native = this };
     }
@@ -176,29 +284,3 @@ public sealed partial class {{ name }} : IDisposable
     }
 }
 
-/// Query operators backed by the Rust traversal. Each operation consumes its receiver.
-public static class {{ name }}Extensions
-{
-    public static {{ name }} Where(this {{ name }} source, global::System.Func<{{ managed_element_type }}, bool> predicate)
-    {
-        ArgumentNullException.ThrowIfNull(source);
-        return source.WhereCore(predicate);
-    }
-
-    public static {{ name }} Take(this {{ name }} source, int count)
-    {
-        ArgumentNullException.ThrowIfNull(source);
-        return source.TakeCore(count);
-    }
-
-    public static bool Any(this {{ name }} source)
-    {
-        ArgumentNullException.ThrowIfNull(source);
-        return source.AnyCore();
-    }
-
-    public static bool Any(this {{ name }} source, global::System.Func<{{ managed_element_type }}, bool> predicate)
-    {
-        return source.Where(predicate).Any();
-    }
-}

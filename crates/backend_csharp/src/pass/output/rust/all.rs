@@ -86,6 +86,11 @@ impl Pass {
             output.add_buffer_with_overwrite(file.target.file_name(), final_, file.target.overwrite_policy());
         }
 
+        if output.buffer("Rust.Linq.cs").is_some() {
+            return Err(crate::Error::from("Rust.Linq.cs is reserved for generated query support; choose another dispatch output file."));
+        }
+        let linq = templates.render("rust/pattern/linq.cs", &Context::new())?;
+        output.add_buffer("Rust.Linq.cs", linq);
         Ok(())
     }
 }

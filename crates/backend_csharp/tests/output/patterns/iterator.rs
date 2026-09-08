@@ -23,9 +23,13 @@ pub fn numbers() -> ffi::Iterator<u32> {
 fn registered_iterator_generates_extensions_and_standard_func() {
     let inventory = RustInventory::new().register(function!(numbers)).validate();
     let output = RustLibrary::builder(inventory).build().process().unwrap().to_string();
-    assert!(output.contains("Where(this IteratorUint source, global::System.Func<uint, bool> predicate)"));
-    assert!(output.contains("Take(this IteratorUint source, int count)"));
-    assert!(output.contains("Any(this IteratorUint source)"));
+    assert!(output.contains("namespace Rust.Linq;"));
+    assert!(output.contains("ToRust<T>(this IEnumerable<T> source)"));
+    assert!(output.contains("Where<T>(this IRustEnumerable<T> source, Func<T, bool> predicate)"));
+    assert!(output.contains("Take<T>(this IRustEnumerable<T> source, int count)"));
+    assert!(output.contains("Any<T>(this IRustEnumerable<T> source)"));
+    assert!(output.contains("class IteratorUint : global::Rust.Linq.IRustEnumerable<uint>"));
+    assert!(!output.contains("class IteratorUintExtensions"));
     assert!(output.contains("delegate* unmanaged[Cdecl]"));
 }
 

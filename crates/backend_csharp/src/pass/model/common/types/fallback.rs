@@ -112,7 +112,7 @@ impl Pass {
                 lang::types::TypePattern::Iterator(_) => {
                     let Some(cs_ptr) = id_map.ty(<*mut std::ffi::c_void>::id()) else { continue };
                     TypeKind::Composite(Composite {
-                        fields: ["data", "where_fn", "take_fn", "any_fn", "drop_fn"].into_iter().map(|name| field(name, cs_ptr)).collect(),
+                        fields: ["data", "where_fn", "take_fn", "any_fn", "drop_fn", "next_fn"].into_iter().map(|name| field(name, cs_ptr)).collect(),
                         repr: Repr::c(),
                     })
                 }

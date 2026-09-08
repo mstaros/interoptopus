@@ -43,6 +43,7 @@ build.txt
 # Project-specific
 Interop.cs
 Interop.Common.cs
+Rust.Linq.cs
 Interop.Plugin.cs
 Interop.User.cs
 website/public

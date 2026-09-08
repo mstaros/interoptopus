@@ -64,6 +64,12 @@ impl Pass {
                 let mut context = Context::new();
                 context.insert("name", &ty.name);
                 context.insert("read_element", &read_element);
+                let unmanaged_element = if item_conversion == Some(ManagedConversion::To) {
+                    format!("{}.Unmanaged", element.name)
+                } else { element.name.clone() };
+                let copied_element = if item_conversion == Some(ManagedConversion::To) { "item.ToManaged()" } else { "item" };
+                context.insert("unmanaged_element_type", &unmanaged_element);
+                context.insert("copied_element", copied_element);
                 context.insert("managed_element_type", managed_element);
                 rendered.push(output_master.templates().render("rust/pattern/iterator.cs", &context)?);
             }
