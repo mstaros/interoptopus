@@ -160,10 +160,13 @@ internal partial struct WireBuffer
 {% if not plugin_mode %}
 internal partial class WireInterop {
     [LibraryImport(Interop.NativeLib, EntryPoint = "{{ create_entry_point }}")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
     {{ _fns_decorators_all | indent }}
     public static unsafe partial IntPtr interoptopus_wire_create(int size, out int out_len, out int out_capacity);
 
     [LibraryImport(Interop.NativeLib, EntryPoint = "{{ destroy_entry_point }}")]
+
+    [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
     {{ _fns_decorators_all | indent }}
     public static partial void interoptopus_wire_destroy(IntPtr data, int len, int capacity);
 }

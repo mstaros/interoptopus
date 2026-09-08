@@ -29,6 +29,7 @@ public partial class {{ name }} : IDisposable
 {% if clone_elements %}    internal partial class InteropHelper
     {
         [LibraryImport(Interop.NativeLib, EntryPoint = "{{ clone_element_entry_point }}")]
+        [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
         internal static partial long interoptopus_vec_clone_element(IntPtr source, out {{ unmanaged_element_type }} value);
     }
 
