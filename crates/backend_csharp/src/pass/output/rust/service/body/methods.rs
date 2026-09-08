@@ -4,9 +4,8 @@
 //! Original functions produce a base forwarding method. Overloads produce either a
 //! regular overloaded method or an async method, depending on their `OverloadKind`.
 //!
-//! All decisions about which overloads to include have already been made by the
-//! `service::method::overload` model pass — this output pass simply renders what
-//! the model provides.
+//! Model overloads come from `service::method::overload`. Direct span overloads use
+//! the same representation and return-lifetime checks as the native import pass.
 
 use crate::lang::ServiceId;
 use crate::lang::functions::FunctionKind;
@@ -52,7 +51,7 @@ impl Pass {
 
                 // Expose the span import on the service as well as on Interop.
                 if matches!(method_fn.kind, FunctionKind::Original)
-                    && !types.get(method_fn.signature.rval).is_some_and(|ty| matches!(ty.kind, TypeKind::TypePattern(TypePattern::TaskHandle)))
+                    && output::rust::fns::rust::span_return_is_independent(method_fn.signature.rval, types)
                     && !method_fn.signature.arguments.iter().any(|arg| types.get(arg.ty).is_some_and(|ty| matches!(ty.kind, TypeKind::TypePattern(TypePattern::AsyncCallback(_)))))
                 {
                     let mut args = build_args(&method_fn.signature.arguments[1..], types);

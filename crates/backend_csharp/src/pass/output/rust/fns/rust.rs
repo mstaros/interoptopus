@@ -5,7 +5,7 @@ use crate::lang::types::kind::{Primitive, TypeKind, TypePattern};
 use crate::output::{FileType, Output};
 use crate::pass::{OutputResult, PassInfo, format_docs, model, output};
 use interoptopus_backends::template::Context;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Default)]
 pub struct Config {}
@@ -81,7 +81,7 @@ impl Pass {
                 imports.push(import);
 
                 // A span borrows memory only until this synchronous import returns.
-                if matches!(rval_type.kind, TypeKind::TypePattern(TypePattern::TaskHandle))
+                if !span_return_is_independent(function.signature.rval, types)
                     || function.signature.arguments.iter().any(|arg| {
                         types.get(arg.ty).is_some_and(|ty| matches!(ty.kind, TypeKind::TypePattern(TypePattern::AsyncCallback(_))))
                     })
@@ -161,4 +161,27 @@ pub(crate) fn span_element<'a>(
         && managed_conversion.managed_conversion(element) == Some(ManagedConversion::AsIs)
         && !matches!(element_ty.kind, TypeKind::Delegate(_) | TypeKind::TypePattern(TypePattern::CStrPointer)))
         .then_some((element_ty, mutable))
+}
+
+/// Temporary span pins cannot back returned borrowed views, even inside owned containers.
+pub(crate) fn span_return_is_independent(id: crate::lang::TypeId, types: &model::common::types::all::Pass) -> bool {
+    fn independent(id: crate::lang::TypeId, types: &model::common::types::all::Pass, visiting: &mut HashSet<crate::lang::TypeId>) -> bool {
+        if !visiting.insert(id) {
+            return false;
+        }
+        let safe = match types.get(id).map(|ty| &ty.kind) {
+            Some(TypeKind::Primitive(_)) => true,
+            Some(TypeKind::Composite(c)) => c.fields.iter().all(|field| independent(field.ty, types, visiting)),
+            Some(TypeKind::Array(a)) => independent(a.ty, types, visiting),
+            Some(TypeKind::DataEnum(e) | TypeKind::TypePattern(TypePattern::Option(_, e) | TypePattern::Result(_, _, e))) => {
+                e.variants.iter().flat_map(crate::lang::types::kind::Variant::payloads).all(|payload| independent(payload.ty, types, visiting))
+            }
+            Some(TypeKind::TypePattern(TypePattern::Vec(element))) => independent(*element, types, visiting),
+            Some(TypeKind::TypePattern(TypePattern::Utf8String | TypePattern::Wire(_) | TypePattern::Bool | TypePattern::CChar | TypePattern::Version)) => true,
+            _ => false,
+        };
+        visiting.remove(&id);
+        safe
+    }
+    independent(id, types, &mut HashSet::new())
 }

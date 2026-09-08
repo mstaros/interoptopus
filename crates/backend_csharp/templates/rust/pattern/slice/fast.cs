@@ -48,14 +48,14 @@ public partial class {{ name }} : IEnumerable<{{ element_type }}>, IDisposable
         get
         {
             if (i < 0 || (ulong)i >= _len) throw new IndexOutOfRangeException();
-            return Unsafe.Read<{{ element_type }}>((void*)IntPtr.Add(_data, i * Unsafe.SizeOf<{{ element_type }}>()));
+            return (({{ element_type }}*)_data)[i];
         }
 {% if is_mut %}
         {{ _fns_decorators_all | indent(width = 8) }}
         set
         {
             if (i < 0 || (ulong)i >= _len) throw new IndexOutOfRangeException();
-            Unsafe.Write<{{ element_type }}>((void*)IntPtr.Add(_data, i * Unsafe.SizeOf<{{ element_type }}>()), value);
+            (({{ element_type }}*)_data)[i] = value;
         }
 {% endif %}
     }

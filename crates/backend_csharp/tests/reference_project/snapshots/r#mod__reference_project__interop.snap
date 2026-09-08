@@ -4312,7 +4312,7 @@ public partial class SliceBool : IEnumerable<Bool>, IDisposable
         get
         {
             if (i < 0 || (ulong)i >= _len) throw new IndexOutOfRangeException();
-            return Unsafe.Read<Bool>((void*)IntPtr.Add(_data, i * Unsafe.SizeOf<Bool>()));
+            return ((Bool*)_data)[i];
         }
 
     }
@@ -4497,7 +4497,7 @@ public partial class SliceByte : IEnumerable<byte>, IDisposable
         get
         {
             if (i < 0 || (ulong)i >= _len) throw new IndexOutOfRangeException();
-            return Unsafe.Read<byte>((void*)IntPtr.Add(_data, i * Unsafe.SizeOf<byte>()));
+            return ((byte*)_data)[i];
         }
 
     }
@@ -4682,7 +4682,7 @@ public partial class SliceInt : IEnumerable<int>, IDisposable
         get
         {
             if (i < 0 || (ulong)i >= _len) throw new IndexOutOfRangeException();
-            return Unsafe.Read<int>((void*)IntPtr.Add(_data, i * Unsafe.SizeOf<int>()));
+            return ((int*)_data)[i];
         }
 
     }
@@ -4877,14 +4877,14 @@ public partial class SliceMutByte : IEnumerable<byte>, IDisposable
         get
         {
             if (i < 0 || (ulong)i >= _len) throw new IndexOutOfRangeException();
-            return Unsafe.Read<byte>((void*)IntPtr.Add(_data, i * Unsafe.SizeOf<byte>()));
+            return ((byte*)_data)[i];
         }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         set
         {
             if (i < 0 || (ulong)i >= _len) throw new IndexOutOfRangeException();
-            Unsafe.Write<byte>((void*)IntPtr.Add(_data, i * Unsafe.SizeOf<byte>()), value);
+            ((byte*)_data)[i] = value;
         }
 
     }
@@ -5079,14 +5079,14 @@ public partial class SliceMutUint : IEnumerable<uint>, IDisposable
         get
         {
             if (i < 0 || (ulong)i >= _len) throw new IndexOutOfRangeException();
-            return Unsafe.Read<uint>((void*)IntPtr.Add(_data, i * Unsafe.SizeOf<uint>()));
+            return ((uint*)_data)[i];
         }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         set
         {
             if (i < 0 || (ulong)i >= _len) throw new IndexOutOfRangeException();
-            Unsafe.Write<uint>((void*)IntPtr.Add(_data, i * Unsafe.SizeOf<uint>()), value);
+            ((uint*)_data)[i] = value;
         }
 
     }
@@ -5615,7 +5615,7 @@ public partial class SliceUint : IEnumerable<uint>, IDisposable
         get
         {
             if (i < 0 || (ulong)i >= _len) throw new IndexOutOfRangeException();
-            return Unsafe.Read<uint>((void*)IntPtr.Add(_data, i * Unsafe.SizeOf<uint>()));
+            return ((uint*)_data)[i];
         }
 
     }
@@ -26422,7 +26422,7 @@ public partial class SliceEnumDocumented : IEnumerable<EnumDocumented>, IDisposa
         get
         {
             if (i < 0 || (ulong)i >= _len) throw new IndexOutOfRangeException();
-            return Unsafe.Read<EnumDocumented>((void*)IntPtr.Add(_data, i * Unsafe.SizeOf<EnumDocumented>()));
+            return ((EnumDocumented*)_data)[i];
         }
 
     }
