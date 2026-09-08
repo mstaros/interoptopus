@@ -132,6 +132,81 @@ A predicate exception stops native traversal and is rethrown after cleanup.
 Negative `Take` counts behave like zero. Managed callbacks are rooted until the
 native query is released.
 
+### Async queries
+
+The generated support uses the framework `System.Linq.AsyncEnumerable` APIs
+(.NET 10 or later; this fork's reference project targets .NET 11). Import both
+`System.Linq` and `Rust.Linq`. An async predicate transitions the query to the
+standard `IAsyncEnumerable<T>` interface:
+
+```csharp
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Rust.Linq;
+
+using var source = Interop.numbers().Where(x => x > 1); // This filter runs in Rust.
+var query = source
+    .Where(async x => { await Task.Yield(); return x % 2 == 0; })
+    .Take(5);
+
+await foreach (var value in query)
+    Console.WriteLine(value);
+```
+
+`Where(Func<T, Task<bool>>)` accepts ordinary async lambdas and existing
+Task-returning delegates. It also works on subsequent `IAsyncEnumerable<T>`
+stages. For cooperative cancellation, use the two-argument overload:
+
+```csharp
+using var source = Interop.numbers();
+var query = source.Where(async (x, token) =>
+{
+    await Task.Delay(1, token);
+    return x > 2;
+});
+bool found = await query.AnyAsync(cancellationToken);
+```
+
+The token-aware predicate is `Func<T, CancellationToken, ValueTask<bool>>`,
+matching framework async LINQ. A predicate may await an already-generated Rust
+service method, such as `await service.ReturnAfterMs(x, 1, token)`. There is no
+extra native callback protocol for async predicates: C# awaits the predicate
+between native pulls. Only the current value is copied; the collection remains
+in Rust. Synchronous stages before the transition keep their native dispatch;
+subsequent stages use framework async LINQ.
+
+`IRustEnumerable<T>` supports `await foreach` through a generated
+`GetAsyncEnumerator` extension. Use `source.ToAsyncEnumerable()` when an API
+requires the actual `IAsyncEnumerable<T>` interface or to call framework
+operators such as `Select`, `ToArrayAsync`, and `CountAsync`.
+`source.AnyAsync()` supports synchronous, Task-returning, and token-aware
+predicates; it returns `ValueTask<bool>`. Call `.AsTask()` if a consumer
+specifically needs `Task<bool>`. After the transition, normal framework
+`AnyAsync`, `Take`, and other operators compose without duplicate signatures.
+
+Async pipelines are deferred and follow standard async enumeration ownership.
+Keep the original native source in a `using` scope until the pipeline has
+finished. Starting enumeration transfers its native ownership; exhaustion,
+early `await foreach` exit, failure, and cooperative cancellation dispose the
+active enumerator. Creating an async query, disposing an enumerator before its
+first move, or applying `Take(0)` may never start the source. In those cases,
+the original source still owns the native state and its `using` scope releases
+it. Async query objects themselves are standard `IAsyncEnumerable<T>`, so use
+`var query`, not `using var query`. Managed sources retain their ordinary
+repeatability. Native sources remain single-pass.
+
+Predicates are awaited sequentially. A predicate that does not accept or
+observe cancellation must finish before enumeration can unwind; pass the token
+through to the awaited operation when prompt cancellation matters.
+Synchronous native traversal is still synchronous and is not interrupted by a
+token. These adapters neither move work onto a background thread nor export
+Rust `Stream` values. They require no native ABI change.
+
+The new `Where` overloads make a bare `null` or an always-throwing lambda
+ambiguous. Give those expressions their intended delegate type, for example
+`source.Where((Func<uint, bool>)(_ => throw new Exception()))`.
+
 ### Exposing a Rust traversal
 
 Return an owning `ffi::Iterator<T>` from a registered Rust function or service
@@ -167,7 +242,7 @@ elements are rejected during generation. Native elements are copied through
 their unmanaged representation for C# predicates and enumeration. These
 restrictions do not apply to the managed `ToRust()` fallback.
 
-This version provides `Where`, `Take`, `Any()`, and `Any(predicate)`.
+The synchronous API provides `Where`, `Take`, `Any()`, and `Any(predicate)`.
 Operators return `IRustEnumerable<T>`; use that type for query variables.
 Passing a native query back to an FFI function that takes `IteratorUint`
 requires casting the native query to that concrete wrapper type.

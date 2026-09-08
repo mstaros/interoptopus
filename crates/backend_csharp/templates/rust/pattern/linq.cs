@@ -4,6 +4,8 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Rust.Linq;
 
@@ -56,6 +58,147 @@ public static class RustEnumerable
         ArgumentNullException.ThrowIfNull(predicate);
         using var query = source.WhereCore(predicate);
         return query.AnyCore();
+    }
+
+
+    /// Views this source as a standard async sequence. Native traversal stays
+    /// synchronous; async predicates await in C# between individual native pulls.
+    /// Ownership remains with the source until enumeration starts.
+    public static IAsyncEnumerable<T> ToAsyncEnumerable<T>(this IRustEnumerable<T> source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        return new AsyncSource<T>(source);
+    }
+
+    /// Enables await foreach directly on an IRustEnumerable.
+    public static IAsyncEnumerator<T> GetAsyncEnumerator<T>(
+        this IRustEnumerable<T> source, CancellationToken cancellationToken = default)
+        => source.ToAsyncEnumerable().GetAsyncEnumerator(cancellationToken);
+
+    /// Awaits each predicate in sequence without blocking or buffering the source.
+    public static IAsyncEnumerable<T> Where<T>(
+        this IRustEnumerable<T> source, Func<T, Task<bool>> predicate)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(predicate);
+        return source.ToAsyncEnumerable().Where(predicate);
+    }
+
+    /// The enumeration token is passed to each predicate for cooperative cancellation.
+    public static IAsyncEnumerable<T> Where<T>(
+        this IRustEnumerable<T> source, Func<T, CancellationToken, ValueTask<bool>> predicate)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(predicate);
+        return global::System.Linq.AsyncEnumerable.Where(source.ToAsyncEnumerable(), predicate);
+    }
+
+    /// Adapts Task-returning predicates to the framework async LINQ operators.
+    /// The cancellation-aware ValueTask overloads are supplied by System.Linq.
+    public static IAsyncEnumerable<T> Where<T>(
+        this IAsyncEnumerable<T> source, Func<T, Task<bool>> predicate)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(predicate);
+        return global::System.Linq.AsyncEnumerable.Where(
+            source, (item, _) => new ValueTask<bool>(predicate(item)));
+    }
+
+    public static ValueTask<bool> AnyAsync<T>(
+        this IRustEnumerable<T> source, CancellationToken cancellationToken = default)
+        => global::System.Linq.AsyncEnumerable.AnyAsync(source.ToAsyncEnumerable(), cancellationToken);
+
+    public static ValueTask<bool> AnyAsync<T>(
+        this IRustEnumerable<T> source, Func<T, bool> predicate,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(predicate);
+        return global::System.Linq.AsyncEnumerable.AnyAsync(
+            source.ToAsyncEnumerable(), predicate, cancellationToken);
+    }
+
+    public static ValueTask<bool> AnyAsync<T>(
+        this IRustEnumerable<T> source, Func<T, Task<bool>> predicate,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(predicate);
+        return source.ToAsyncEnumerable().AnyAsync(predicate, cancellationToken);
+    }
+
+    public static ValueTask<bool> AnyAsync<T>(
+        this IRustEnumerable<T> source, Func<T, CancellationToken, ValueTask<bool>> predicate,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(predicate);
+        return global::System.Linq.AsyncEnumerable.AnyAsync(
+            source.ToAsyncEnumerable(), predicate, cancellationToken);
+    }
+
+    public static ValueTask<bool> AnyAsync<T>(
+        this IAsyncEnumerable<T> source, Func<T, Task<bool>> predicate,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(predicate);
+        return global::System.Linq.AsyncEnumerable.AnyAsync(
+            source, (item, _) => new ValueTask<bool>(predicate(item)), cancellationToken);
+    }
+
+
+    private sealed class AsyncSource<T> : IAsyncEnumerable<T>
+    {
+        private readonly IRustEnumerable<T> _source;
+        internal AsyncSource(IRustEnumerable<T> source) { _source = source; }
+
+        public IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return new AsyncEnumerator<T>(_source.GetEnumerator(), cancellationToken);
+        }
+    }
+
+    // Each native pull is synchronous and completes inline. Check cancellation
+    // before and after the pull; no Task.Run or blocking wait is involved.
+    private sealed class AsyncEnumerator<T> : IAsyncEnumerator<T>
+    {
+        private IEnumerator<T>? _inner;
+        private readonly CancellationToken _cancellationToken;
+
+        internal AsyncEnumerator(IEnumerator<T> inner, CancellationToken cancellationToken)
+        {
+            _inner = inner;
+            _cancellationToken = cancellationToken;
+        }
+
+        public T Current => (_inner ?? throw new ObjectDisposedException(nameof(AsyncEnumerator<T>))).Current;
+
+        public ValueTask<bool> MoveNextAsync()
+        {
+            var inner = _inner;
+            if (inner is null) return ValueTask.FromResult(false);
+            try
+            {
+                _cancellationToken.ThrowIfCancellationRequested();
+                bool hasNext = inner.MoveNext();
+                _cancellationToken.ThrowIfCancellationRequested();
+                if (!hasNext) DisposeAsync();
+                return ValueTask.FromResult(hasNext);
+            }
+            catch
+            {
+                DisposeAsync();
+                throw;
+            }
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            Interlocked.Exchange(ref _inner, null)?.Dispose();
+            return ValueTask.CompletedTask;
+        }
     }
 
     private sealed class ManagedEnumerable<T> : IRustEnumerable<T>
