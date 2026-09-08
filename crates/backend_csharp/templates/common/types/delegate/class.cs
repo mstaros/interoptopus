@@ -1,14 +1,16 @@
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 internal delegate {{ rval_unmanaged_name }} {{ name }}Native({% for arg in args %}{{ arg.unmanaged_name }} {{ arg.name }}, {% endfor %}IntPtr callback_data);
+{% if custom_delegate %}
 /// Managed delegate signature for <see cref="{{ name }}"/>.
 {{ visibility }} delegate {{ rval_managed }} {{ name }}Delegate({% for arg in args %}{{ arg.managed_type }} {{ arg.name }}{% if not loop.last %}, {% endif %}{% endfor %});
+{% endif %}
 
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 delegate void {{ name }}Destructor(IntPtr data);
 
 {{ visibility }} partial class {{ name }}
 {
-    private {{ name }}Delegate _managed;
+    private {{ managed_delegate }} _managed;
     private {{ name }}Native _native;
     private IntPtr _ptr;
     private IntPtr _data;
@@ -16,7 +18,7 @@ delegate void {{ name }}Destructor(IntPtr data);
     private Exception _exception;
 }
 
-/// A named callback that bridges a managed <see cref="{{ name }}Delegate"/> and an
+/// A named callback that bridges a managed delegate and an
 /// unmanaged function pointer. When created from a managed delegate, exceptions
 /// thrown inside the callback are captured and re-thrown on <see cref="Dispose"/>.
 ///
@@ -39,7 +41,7 @@ delegate void {{ name }}Destructor(IntPtr data);
 
     /// Wraps a managed delegate so it can be passed to Rust as a callback.
     {{ _fns_decorators_all | indent }}
-    public unsafe {{ name }}({{ name }}Delegate managed)
+    public unsafe {{ name }}({{ managed_delegate }} managed)
     {
         ArgumentNullException.ThrowIfNull(managed);
         _managed = managed;

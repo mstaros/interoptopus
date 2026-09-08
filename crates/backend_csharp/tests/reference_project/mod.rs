@@ -122,6 +122,17 @@ fn interop() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // Standard delegate overloads must coexist with the owning callback class, without
+    // redundant public named signatures for compatible callbacks.
+    assert!(interop.contains("global::System.Func<uint, uint> callback"));
+    assert!(interop.contains("global::System.Func<bool, bool> callback"));
+    assert!(interop.contains("global::System.Action<IntPtr> callback"));
+    for name in ["MyCallback", "MyCallbackVoid", "SumDelegate1", "SumDelegate2", "BoolCallback", "ValueCallback"] {
+        assert!(!common.contains(&format!(" {name}Delegate(")), "redundant named delegate for {name}");
+    }
+    assert!(common.contains("public delegate int ManyArgsCallbackDelegate("));
+    assert!(interop.contains("ManyArgsCallbackDelegate callback"));
+
     insta::assert_snapshot!(multibuf);
 
     Ok(())

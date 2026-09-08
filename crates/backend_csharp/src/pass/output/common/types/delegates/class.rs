@@ -94,6 +94,10 @@ impl Pass {
 
                 let mut context = Context::new();
                 context.insert("name", name);
+                let standard_delegate = delegate.standard_name(|id| types.get(id));
+                let managed_delegate = standard_delegate.clone().unwrap_or_else(|| format!("{name}Delegate"));
+                context.insert("managed_delegate", &managed_delegate);
+                context.insert("custom_delegate", &standard_delegate.is_none());
                 context.insert("is_void", &is_void);
                 context.insert("visibility", &ty.visibility.to_string());
                 context.insert("rval_managed", &rval_managed);

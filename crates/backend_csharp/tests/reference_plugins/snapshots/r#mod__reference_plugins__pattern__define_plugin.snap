@@ -58,15 +58,14 @@ public partial struct Bool
 
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 internal delegate int SumDelegate2Native(int x, int y, IntPtr callback_data);
-/// Managed delegate signature for <see cref="SumDelegate2"/>.
-public delegate int SumDelegate2Delegate(int x, int y);
+
 
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 delegate void SumDelegate2Destructor(IntPtr data);
 
 public partial class SumDelegate2
 {
-    private SumDelegate2Delegate _managed;
+    private global::System.Func<int, int, int> _managed;
     private SumDelegate2Native _native;
     private IntPtr _ptr;
     private IntPtr _data;
@@ -74,7 +73,7 @@ public partial class SumDelegate2
     private Exception _exception;
 }
 
-/// A named callback that bridges a managed <see cref="SumDelegate2Delegate"/> and an
+/// A named callback that bridges a managed delegate and an
 /// unmanaged function pointer. When created from a managed delegate, exceptions
 /// thrown inside the callback are captured and re-thrown on <see cref="Dispose"/>.
 ///
@@ -102,7 +101,7 @@ public partial class SumDelegate2 : IDisposable
 
     /// Wraps a managed delegate so it can be passed to Rust as a callback.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public unsafe SumDelegate2(SumDelegate2Delegate managed)
+    public unsafe SumDelegate2(global::System.Func<int, int, int> managed)
     {
         ArgumentNullException.ThrowIfNull(managed);
         _managed = managed;
@@ -311,15 +310,14 @@ public partial class SumDelegate2 : IDisposable
 
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 internal delegate uint MyCallbackNative(uint value, IntPtr callback_data);
-/// Managed delegate signature for <see cref="MyCallback"/>.
-public delegate uint MyCallbackDelegate(uint value);
+
 
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 delegate void MyCallbackDestructor(IntPtr data);
 
 public partial class MyCallback
 {
-    private MyCallbackDelegate _managed;
+    private global::System.Func<uint, uint> _managed;
     private MyCallbackNative _native;
     private IntPtr _ptr;
     private IntPtr _data;
@@ -327,7 +325,7 @@ public partial class MyCallback
     private Exception _exception;
 }
 
-/// A named callback that bridges a managed <see cref="MyCallbackDelegate"/> and an
+/// A named callback that bridges a managed delegate and an
 /// unmanaged function pointer. When created from a managed delegate, exceptions
 /// thrown inside the callback are captured and re-thrown on <see cref="Dispose"/>.
 ///
@@ -355,7 +353,7 @@ public partial class MyCallback : IDisposable
 
     /// Wraps a managed delegate so it can be passed to Rust as a callback.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public unsafe MyCallback(MyCallbackDelegate managed)
+    public unsafe MyCallback(global::System.Func<uint, uint> managed)
     {
         ArgumentNullException.ThrowIfNull(managed);
         _managed = managed;

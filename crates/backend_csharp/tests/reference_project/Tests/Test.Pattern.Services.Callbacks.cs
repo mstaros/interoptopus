@@ -87,4 +87,21 @@ public class TestPatternServicesCallbacks
         using var cb = new MyCallback(_ => throw new InvalidOperationException("boom"));
         Assert.Throws<InvalidOperationException>(() => cb.Call(0));
     }
+    [Fact]
+    public void standard_func_variables_work_for_services_and_constructors()
+    {
+        uint offset = 10;
+        Func<uint, uint> callback = value => value + offset;
+        using var service = ServiceCallbacks.CreateWithCallback(callback);
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        offset = 20;
+        Assert.Equal(25u, service.InvokeStoredCallback(5));
+
+        uint observed = 99;
+        Func<uint, uint> observe = value => { observed = value; return value; };
+        service.CallbackSimple(observe);
+        Assert.Equal(0u, observed);
+    }
+
 }

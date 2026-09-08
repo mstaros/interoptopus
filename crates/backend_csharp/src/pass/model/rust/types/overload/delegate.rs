@@ -1,7 +1,7 @@
 //! Creates `DelegateKind::Signature` sibling types for each `DelegateKind::Class` delegate.
 //!
 //! For every `Delegate { kind: Class, signature }` that is fully resolved, this pass
-//! creates a new type representing the bare C# delegate (`{Name}Delegate`) with
+//! creates a signature sibling named Func/Action when compatible, or {Name}Delegate with
 //! `DelegateKind::Signature`. This sibling is used by the body overload pass to build
 //! overload signatures that accept C# delegates directly instead of the wrapper class.
 
@@ -57,7 +57,13 @@ impl Pass {
                 continue;
             };
 
-            let sig_name = format!("{class_name}Delegate");
+            // Names of argument and return types may resolve on a later model iteration.
+            if types.get(delegate.signature.rval).is_none()
+                || delegate.signature.arguments.iter().any(|arg| types.get(arg.ty).is_none())
+            {
+                continue;
+            }
+            let sig_name = delegate.standard_name(|id| types.get(id)).unwrap_or_else(|| format!("{class_name}Delegate"));
 
             // Derive a new TypeId for the signature sibling
             let sig_id = TypeId::from_id(class_id.id().derive(0x_646C_6774_5F73_6962)); // "dlgt_sib"

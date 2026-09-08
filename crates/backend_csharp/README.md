@@ -39,7 +39,7 @@ fn generate_bindings() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-This produces an `Interop.cs` file in `bindings/` with `[DllImport("my_lib")]` declarations
+This produces an `Interop.cs` file in `bindings/` with `[LibraryImport("my_lib")]` declarations
 and idiomatic C# wrappers for all registered items.
 
 For multi-file output or custom namespaces, use a [`Dispatch`](https://docs.rs/interoptopus_csharp/latest/interoptopus_csharp/dispatch/struct.Dispatch.html):
@@ -56,4 +56,22 @@ let dispatch = Dispatch::custom(|item, _| match item.emission {
 });
 ```
 
+## Callbacks
 
+Named Rust callbacks declared with `callback!` generate `System.Func<...>` parameters
+when they return a value, and `System.Action<...>` parameters when they return `()`.
+This is the default for callback constructors, exported function overloads, and service
+methods. Both inline lambdas and existing `Func`/`Action` variables can be passed directly.
+
+For example, `callback!(Transform(value: u32) -> u32)` accepts a C#
+`Func<uint, uint>`, while `callback!(Visit(value: u32))` accepts an `Action<uint>`.
+Callbacks without arguments use `Func<TResult>` or `Action`. Scalar Rust/FFI
+booleans use `bool` in these standard delegate signatures.
+
+Signatures with more than sixteen input parameters, or by-reference parameters or
+returns, retain custom named delegates. Bare `extern "C" fn` delegates retain their
+native calling-convention declarations. The owning callback wrapper and native
+marshalling remain responsible for callback state and disposal.
+
+This changes the generated public API: callers naming an old `NameDelegate` type
+should use the corresponding `Func` or `Action`. Inline lambda calls retain their syntax.

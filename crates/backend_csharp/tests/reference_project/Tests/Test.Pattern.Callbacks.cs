@@ -239,4 +239,60 @@ public class TestPatternDelegates
         Assert.Equal(3072, sum);
         Assert.Equal(0, allocated);
     }
+    [Fact]
+    public void standard_func_variables_work_for_functions_and_wrappers()
+    {
+        Func<uint> getValue = () => 42;
+        Assert.Equal(42u, Interop.pattern_callback_value(getValue));
+        uint offset = 3;
+        Func<uint, uint> callback = value => value + offset;
+        Assert.Equal(7u, Interop.pattern_callback_1(callback, 4));
+        using var wrapped = new MyCallback(callback);
+        offset = 5;
+        Assert.Equal(9u, Interop.pattern_callback_1(wrapped, 4));
+    }
+
+    [Fact]
+    public void standard_actions_preserve_captures_and_callback_lifetimes()
+    {
+        var calls = 0;
+        Action action = () => ++calls;
+        using (var wrapped = new SumDelegate1(action))
+            wrapped.Call();
+        Assert.Equal(1, calls);
+
+        Action<IntPtr> withArgument = _ => ++calls;
+        using var retained = Interop.pattern_callback_2(withArgument);
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        retained.Call(IntPtr.Zero);
+        Assert.Equal(2, calls);
+    }
+
+    [Fact]
+    public void standard_func_exceptions_are_rethrown_after_native_cleanup()
+    {
+        Func<uint, uint> callback = _ => throw new InvalidOperationException("standard callback failure");
+        var error = Assert.Throws<InvalidOperationException>(() => Interop.pattern_callback_1(callback, 0));
+        Assert.Equal("standard callback failure", error.Message);
+    }
+
+    [Fact]
+    public void standard_bool_func_converts_ffi_booleans()
+    {
+        Func<bool, bool> negate = value => !value;
+        Assert.False(Interop.pattern_callback_bool(negate, true));
+        Assert.True(Interop.pattern_callback_bool(negate, false));
+        using var wrapped = new BoolCallback(negate);
+        Assert.False(wrapped.Call(true));
+    }
+
+    [Fact]
+    public void callbacks_beyond_func_arity_keep_their_named_delegate()
+    {
+        ManyArgsCallbackDelegate callback =
+            (a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16) => a0 + a16;
+        Assert.Equal(16, Interop.pattern_callback_many(callback));
+    }
+
 }
