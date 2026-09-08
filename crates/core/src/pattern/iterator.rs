@@ -128,7 +128,7 @@ unsafe extern "C" fn any<T>(data: *mut c_void, error: *mut *const c_void) -> i32
         state.items.as_mut().expect("owned iterator state").next().map(|item| item.map(|_| ()))
     })) {
         Ok(None) => 0,
-        Ok(Some(Ok(_))) => 1,
+        Ok(Some(Ok(()))) => 1,
         Ok(Some(Err(context))) => {
             unsafe { error.write(context as *const c_void) };
             -1
