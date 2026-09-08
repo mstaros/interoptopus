@@ -244,7 +244,7 @@ fn csharp_benchmarks() -> Result<(), Box<dyn std::error::Error>> {
     let project = project_dir.join("dotnet_benchmarks.csproj");
     let corerun = patched_corerun(&manifest)?;
     let mut build = std::process::Command::new("dotnet");
-    build.arg("build").arg(&project).args(["-c", "Release"]).current_dir(&project_dir);
+    build.arg("build").arg(&project).args(["-c", "Release", "--disable-build-servers"]).current_dir(&project_dir);
     let status = crate::run_with_timeout(&mut build, crate::DOTNET_TIMEOUT)?;
     assert!(status.success(), "benchmark build failed with {status}");
     let output_dir = project_dir.join("bin").join("Release").join("net11.0");

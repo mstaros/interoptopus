@@ -239,6 +239,8 @@ public class TestPatternSlices
         Assert.Equal((byte)5, mutable[0]);
         Assert.Equal((byte)42, mutable[1]);
         Interop.pattern_ffi_slice_4(ReadOnlySpan<byte>.Empty, mutable);
+        using var service = ServiceVariousSlices.Create();
+        Assert.Equal((byte)5, service.MutSelf(mutable));
         ReadOnlySpan<EnumDocumented> enums = stackalloc EnumDocumented[] { EnumDocumented.B, EnumDocumented.A };
         Assert.Equal(1u, Interop.pattern_ffi_slice_of_unit_enum(enums));
     }

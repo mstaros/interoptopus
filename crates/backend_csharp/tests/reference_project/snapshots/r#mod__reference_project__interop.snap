@@ -1014,8 +1014,9 @@ public partial class CallbackFFISlice
 /// thrown inside the callback are captured and re-thrown on <see cref="Dispose"/>.
 ///
 /// When received from Rust, use <see cref="Dispose"/> after the last use to allow
-/// Rust to free any associated data. When passed to Rust, hold onto this class until done,
-/// otherwise your function trampoline might get deallocated.
+/// Rust to free any associated data. When passed by value, Rust keeps the managed
+/// callback alive until it drops the callback. Borrowed callbacks require the wrapper
+/// to remain alive for the duration of the native call.
 /// <remarks>
 /// ⚠️ This type is an owned resource. You must 1) either call `Dispose()` on it,
 /// 2) call another method on it that promises to free it, or 3) 'move' it to Rust
@@ -1024,9 +1025,10 @@ public partial class CallbackFFISlice
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class CallbackFFISlice : IDisposable
 {
-    // Static helpers to de-allocate a pinned GCHandle when callback dropped / disposed.
-    private static readonly CallbackFFISliceDestructor _prevent_gc_release = data => GCHandle.FromIntPtr(data).Free();
-    private static readonly IntPtr _prevent_gc_release_ptr = Marshal.GetFunctionPointerForDelegate(_prevent_gc_release);
+    // Rust releases this rooting handle when it drops the retained callback.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static void ReleaseHandle(IntPtr data) => GCHandle.FromIntPtr(data).Free();
+    private static unsafe IntPtr ReleaseHandlePtr => (IntPtr)(delegate* unmanaged[Cdecl]<IntPtr, void>)&ReleaseHandle;
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
@@ -1035,12 +1037,23 @@ public partial class CallbackFFISlice : IDisposable
 
     /// Wraps a managed delegate so it can be passed to Rust as a callback.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public CallbackFFISlice(CallbackFFISliceDelegate managed)
+    public unsafe CallbackFFISlice(CallbackFFISliceDelegate managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         _managed = managed;
-        _native = CallTrampoline;
-        _ptr = Marshal.GetFunctionPointerForDelegate(_native);
+
+        _ptr = (IntPtr)(delegate* unmanaged[Cdecl]<SliceByte.Unmanaged, IntPtr, byte>)&CallUnmanaged;
+
     }
+
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static byte CallUnmanaged(SliceByte.Unmanaged slice, IntPtr callback_data)
+    {
+        var target = (CallbackFFISlice)GCHandle.FromIntPtr(callback_data).Target;
+        return target.CallTrampoline(slice, callback_data);
+    }
+
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private byte CallTrampoline(SliceByte.Unmanaged slice, IntPtr callback_data)
@@ -1063,9 +1076,11 @@ public partial class CallbackFFISlice : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal byte CallRaw(SliceByte slice)
+    internal unsafe byte CallRaw(SliceByte slice)
     {
-        var __target = Marshal.GetDelegateForFunctionPointer<CallbackFFISliceNative>(_ptr);
+
+        var __target = (delegate* unmanaged[Cdecl]<SliceByte.Unmanaged, IntPtr, byte>)_ptr;
+
         
         return __target(slice.ToUnmanaged(), _data);
         
@@ -1080,6 +1095,7 @@ public partial class CallbackFFISlice : IDisposable
         if (_managed != null)
         {
             return _managed(slice);
+            
         }
         return CallRaw(slice);
     }
@@ -1088,7 +1104,7 @@ public partial class CallbackFFISlice : IDisposable
     /// previous invocation, that exception is re-thrown here. If the callback was
     /// received from Rust, this tells Rust to free the associated data pointer.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public void Dispose()
+    public unsafe void Dispose()
     {
         var exception = _exception;
         _exception = null;
@@ -1099,14 +1115,14 @@ public partial class CallbackFFISlice : IDisposable
         _ptr = IntPtr.Zero;
         if (destructor != IntPtr.Zero)
         {
-            Marshal.GetDelegateForFunctionPointer<CallbackFFISliceDestructor>(destructor)(data);
+            ((delegate* unmanaged[Cdecl]<IntPtr, void>)destructor)(data);
         }
         if (exception != null)
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
-    /// Pins `this` via GCHandle so the native trampoline delegate cannot be garbage collected
+    /// Roots `this` via GCHandle so the managed callback remains alive
     /// while Rust holds the function pointer. The GCHandle is freed when Rust drops the
     /// callback and invokes the destructor.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -1121,7 +1137,7 @@ public partial class CallbackFFISlice : IDisposable
         {
             var handle = GCHandle.Alloc(this);
             rval._data = GCHandle.ToIntPtr(handle);
-            rval._destructor = _prevent_gc_release_ptr;
+            rval._destructor = ReleaseHandlePtr;
         }
         else
         {
@@ -1144,6 +1160,17 @@ public partial class CallbackFFISlice : IDisposable
         rval._callback = _ptr;
         rval._data = _data;
         rval._destructor = _destructor;
+
+        if (_managed != null)
+        {
+            // Borrowed composite fields have no scoped marshaller to free a handle.
+            // Lazily retain an instance thunk for that path only.
+            _native ??= CallTrampoline;
+            rval._callback = Marshal.GetFunctionPointerForDelegate(_native);
+            rval._data = IntPtr.Zero;
+            rval._destructor = IntPtr.Zero;
+        }
+
         return rval;
     }
 
@@ -1240,8 +1267,9 @@ public partial class CallbackU8
 /// thrown inside the callback are captured and re-thrown on <see cref="Dispose"/>.
 ///
 /// When received from Rust, use <see cref="Dispose"/> after the last use to allow
-/// Rust to free any associated data. When passed to Rust, hold onto this class until done,
-/// otherwise your function trampoline might get deallocated.
+/// Rust to free any associated data. When passed by value, Rust keeps the managed
+/// callback alive until it drops the callback. Borrowed callbacks require the wrapper
+/// to remain alive for the duration of the native call.
 /// <remarks>
 /// ⚠️ This type is an owned resource. You must 1) either call `Dispose()` on it,
 /// 2) call another method on it that promises to free it, or 3) 'move' it to Rust
@@ -1250,9 +1278,10 @@ public partial class CallbackU8
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class CallbackU8 : IDisposable
 {
-    // Static helpers to de-allocate a pinned GCHandle when callback dropped / disposed.
-    private static readonly CallbackU8Destructor _prevent_gc_release = data => GCHandle.FromIntPtr(data).Free();
-    private static readonly IntPtr _prevent_gc_release_ptr = Marshal.GetFunctionPointerForDelegate(_prevent_gc_release);
+    // Rust releases this rooting handle when it drops the retained callback.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static void ReleaseHandle(IntPtr data) => GCHandle.FromIntPtr(data).Free();
+    private static unsafe IntPtr ReleaseHandlePtr => (IntPtr)(delegate* unmanaged[Cdecl]<IntPtr, void>)&ReleaseHandle;
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
@@ -1261,12 +1290,23 @@ public partial class CallbackU8 : IDisposable
 
     /// Wraps a managed delegate so it can be passed to Rust as a callback.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public CallbackU8(CallbackU8Delegate managed)
+    public unsafe CallbackU8(CallbackU8Delegate managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         _managed = managed;
-        _native = CallTrampoline;
-        _ptr = Marshal.GetFunctionPointerForDelegate(_native);
+
+        _ptr = (IntPtr)(delegate* unmanaged[Cdecl]<byte, IntPtr, byte>)&CallUnmanaged;
+
     }
+
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static byte CallUnmanaged(byte value, IntPtr callback_data)
+    {
+        var target = (CallbackU8)GCHandle.FromIntPtr(callback_data).Target;
+        return target.CallTrampoline(value, callback_data);
+    }
+
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private byte CallTrampoline(byte value, IntPtr callback_data)
@@ -1289,9 +1329,11 @@ public partial class CallbackU8 : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal byte CallRaw(byte value)
+    internal unsafe byte CallRaw(byte value)
     {
-        var __target = Marshal.GetDelegateForFunctionPointer<CallbackU8Native>(_ptr);
+
+        var __target = (delegate* unmanaged[Cdecl]<byte, IntPtr, byte>)_ptr;
+
         
         return __target(value, _data);
         
@@ -1306,6 +1348,7 @@ public partial class CallbackU8 : IDisposable
         if (_managed != null)
         {
             return _managed(value);
+            
         }
         return CallRaw(value);
     }
@@ -1314,7 +1357,7 @@ public partial class CallbackU8 : IDisposable
     /// previous invocation, that exception is re-thrown here. If the callback was
     /// received from Rust, this tells Rust to free the associated data pointer.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public void Dispose()
+    public unsafe void Dispose()
     {
         var exception = _exception;
         _exception = null;
@@ -1325,14 +1368,14 @@ public partial class CallbackU8 : IDisposable
         _ptr = IntPtr.Zero;
         if (destructor != IntPtr.Zero)
         {
-            Marshal.GetDelegateForFunctionPointer<CallbackU8Destructor>(destructor)(data);
+            ((delegate* unmanaged[Cdecl]<IntPtr, void>)destructor)(data);
         }
         if (exception != null)
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
-    /// Pins `this` via GCHandle so the native trampoline delegate cannot be garbage collected
+    /// Roots `this` via GCHandle so the managed callback remains alive
     /// while Rust holds the function pointer. The GCHandle is freed when Rust drops the
     /// callback and invokes the destructor.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -1347,7 +1390,7 @@ public partial class CallbackU8 : IDisposable
         {
             var handle = GCHandle.Alloc(this);
             rval._data = GCHandle.ToIntPtr(handle);
-            rval._destructor = _prevent_gc_release_ptr;
+            rval._destructor = ReleaseHandlePtr;
         }
         else
         {
@@ -1370,6 +1413,17 @@ public partial class CallbackU8 : IDisposable
         rval._callback = _ptr;
         rval._data = _data;
         rval._destructor = _destructor;
+
+        if (_managed != null)
+        {
+            // Borrowed composite fields have no scoped marshaller to free a handle.
+            // Lazily retain an instance thunk for that path only.
+            _native ??= CallTrampoline;
+            rval._callback = Marshal.GetFunctionPointerForDelegate(_native);
+            rval._data = IntPtr.Zero;
+            rval._destructor = IntPtr.Zero;
+        }
+
         return rval;
     }
 
@@ -1466,8 +1520,9 @@ public partial class SumDelegate2
 /// thrown inside the callback are captured and re-thrown on <see cref="Dispose"/>.
 ///
 /// When received from Rust, use <see cref="Dispose"/> after the last use to allow
-/// Rust to free any associated data. When passed to Rust, hold onto this class until done,
-/// otherwise your function trampoline might get deallocated.
+/// Rust to free any associated data. When passed by value, Rust keeps the managed
+/// callback alive until it drops the callback. Borrowed callbacks require the wrapper
+/// to remain alive for the duration of the native call.
 /// <remarks>
 /// ⚠️ This type is an owned resource. You must 1) either call `Dispose()` on it,
 /// 2) call another method on it that promises to free it, or 3) 'move' it to Rust
@@ -1476,9 +1531,10 @@ public partial class SumDelegate2
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class SumDelegate2 : IDisposable
 {
-    // Static helpers to de-allocate a pinned GCHandle when callback dropped / disposed.
-    private static readonly SumDelegate2Destructor _prevent_gc_release = data => GCHandle.FromIntPtr(data).Free();
-    private static readonly IntPtr _prevent_gc_release_ptr = Marshal.GetFunctionPointerForDelegate(_prevent_gc_release);
+    // Rust releases this rooting handle when it drops the retained callback.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static void ReleaseHandle(IntPtr data) => GCHandle.FromIntPtr(data).Free();
+    private static unsafe IntPtr ReleaseHandlePtr => (IntPtr)(delegate* unmanaged[Cdecl]<IntPtr, void>)&ReleaseHandle;
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
@@ -1487,12 +1543,23 @@ public partial class SumDelegate2 : IDisposable
 
     /// Wraps a managed delegate so it can be passed to Rust as a callback.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public SumDelegate2(SumDelegate2Delegate managed)
+    public unsafe SumDelegate2(SumDelegate2Delegate managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         _managed = managed;
-        _native = CallTrampoline;
-        _ptr = Marshal.GetFunctionPointerForDelegate(_native);
+
+        _ptr = (IntPtr)(delegate* unmanaged[Cdecl]<int, int, IntPtr, int>)&CallUnmanaged;
+
     }
+
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static int CallUnmanaged(int x, int y, IntPtr callback_data)
+    {
+        var target = (SumDelegate2)GCHandle.FromIntPtr(callback_data).Target;
+        return target.CallTrampoline(x, y, callback_data);
+    }
+
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private int CallTrampoline(int x, int y, IntPtr callback_data)
@@ -1515,9 +1582,11 @@ public partial class SumDelegate2 : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal int CallRaw(int x, int y)
+    internal unsafe int CallRaw(int x, int y)
     {
-        var __target = Marshal.GetDelegateForFunctionPointer<SumDelegate2Native>(_ptr);
+
+        var __target = (delegate* unmanaged[Cdecl]<int, int, IntPtr, int>)_ptr;
+
         
         return __target(x, y, _data);
         
@@ -1532,6 +1601,7 @@ public partial class SumDelegate2 : IDisposable
         if (_managed != null)
         {
             return _managed(x, y);
+            
         }
         return CallRaw(x, y);
     }
@@ -1540,7 +1610,7 @@ public partial class SumDelegate2 : IDisposable
     /// previous invocation, that exception is re-thrown here. If the callback was
     /// received from Rust, this tells Rust to free the associated data pointer.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public void Dispose()
+    public unsafe void Dispose()
     {
         var exception = _exception;
         _exception = null;
@@ -1551,14 +1621,14 @@ public partial class SumDelegate2 : IDisposable
         _ptr = IntPtr.Zero;
         if (destructor != IntPtr.Zero)
         {
-            Marshal.GetDelegateForFunctionPointer<SumDelegate2Destructor>(destructor)(data);
+            ((delegate* unmanaged[Cdecl]<IntPtr, void>)destructor)(data);
         }
         if (exception != null)
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
-    /// Pins `this` via GCHandle so the native trampoline delegate cannot be garbage collected
+    /// Roots `this` via GCHandle so the managed callback remains alive
     /// while Rust holds the function pointer. The GCHandle is freed when Rust drops the
     /// callback and invokes the destructor.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -1573,7 +1643,7 @@ public partial class SumDelegate2 : IDisposable
         {
             var handle = GCHandle.Alloc(this);
             rval._data = GCHandle.ToIntPtr(handle);
-            rval._destructor = _prevent_gc_release_ptr;
+            rval._destructor = ReleaseHandlePtr;
         }
         else
         {
@@ -1596,6 +1666,17 @@ public partial class SumDelegate2 : IDisposable
         rval._callback = _ptr;
         rval._data = _data;
         rval._destructor = _destructor;
+
+        if (_managed != null)
+        {
+            // Borrowed composite fields have no scoped marshaller to free a handle.
+            // Lazily retain an instance thunk for that path only.
+            _native ??= CallTrampoline;
+            rval._callback = Marshal.GetFunctionPointerForDelegate(_native);
+            rval._data = IntPtr.Zero;
+            rval._destructor = IntPtr.Zero;
+        }
+
         return rval;
     }
 
@@ -1692,8 +1773,9 @@ public partial class CStrPassthrough
 /// thrown inside the callback are captured and re-thrown on <see cref="Dispose"/>.
 ///
 /// When received from Rust, use <see cref="Dispose"/> after the last use to allow
-/// Rust to free any associated data. When passed to Rust, hold onto this class until done,
-/// otherwise your function trampoline might get deallocated.
+/// Rust to free any associated data. When passed by value, Rust keeps the managed
+/// callback alive until it drops the callback. Borrowed callbacks require the wrapper
+/// to remain alive for the duration of the native call.
 /// <remarks>
 /// ⚠️ This type is an owned resource. You must 1) either call `Dispose()` on it,
 /// 2) call another method on it that promises to free it, or 3) 'move' it to Rust
@@ -1702,9 +1784,10 @@ public partial class CStrPassthrough
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class CStrPassthrough : IDisposable
 {
-    // Static helpers to de-allocate a pinned GCHandle when callback dropped / disposed.
-    private static readonly CStrPassthroughDestructor _prevent_gc_release = data => GCHandle.FromIntPtr(data).Free();
-    private static readonly IntPtr _prevent_gc_release_ptr = Marshal.GetFunctionPointerForDelegate(_prevent_gc_release);
+    // Rust releases this rooting handle when it drops the retained callback.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static void ReleaseHandle(IntPtr data) => GCHandle.FromIntPtr(data).Free();
+    private static unsafe IntPtr ReleaseHandlePtr => (IntPtr)(delegate* unmanaged[Cdecl]<IntPtr, void>)&ReleaseHandle;
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
@@ -1713,12 +1796,17 @@ public partial class CStrPassthrough : IDisposable
 
     /// Wraps a managed delegate so it can be passed to Rust as a callback.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public CStrPassthrough(CStrPassthroughDelegate managed)
+    public unsafe CStrPassthrough(CStrPassthroughDelegate managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         _managed = managed;
+
         _native = CallTrampoline;
         _ptr = Marshal.GetFunctionPointerForDelegate(_native);
+
     }
+
+
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private string CallTrampoline(string s, IntPtr callback_data)
@@ -1741,9 +1829,11 @@ public partial class CStrPassthrough : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal string CallRaw(string s)
+    internal unsafe string CallRaw(string s)
     {
-        var __target = Marshal.GetDelegateForFunctionPointer<CStrPassthroughNative>(_ptr);
+
+        var __target = _native ??= Marshal.GetDelegateForFunctionPointer<CStrPassthroughNative>(_ptr);
+
         
         return __target(s, _data);
         
@@ -1758,6 +1848,7 @@ public partial class CStrPassthrough : IDisposable
         if (_managed != null)
         {
             return _managed(s);
+            
         }
         return CallRaw(s);
     }
@@ -1766,7 +1857,7 @@ public partial class CStrPassthrough : IDisposable
     /// previous invocation, that exception is re-thrown here. If the callback was
     /// received from Rust, this tells Rust to free the associated data pointer.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public void Dispose()
+    public unsafe void Dispose()
     {
         var exception = _exception;
         _exception = null;
@@ -1777,14 +1868,14 @@ public partial class CStrPassthrough : IDisposable
         _ptr = IntPtr.Zero;
         if (destructor != IntPtr.Zero)
         {
-            Marshal.GetDelegateForFunctionPointer<CStrPassthroughDestructor>(destructor)(data);
+            ((delegate* unmanaged[Cdecl]<IntPtr, void>)destructor)(data);
         }
         if (exception != null)
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
-    /// Pins `this` via GCHandle so the native trampoline delegate cannot be garbage collected
+    /// Roots `this` via GCHandle so the managed callback remains alive
     /// while Rust holds the function pointer. The GCHandle is freed when Rust drops the
     /// callback and invokes the destructor.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -1799,7 +1890,7 @@ public partial class CStrPassthrough : IDisposable
         {
             var handle = GCHandle.Alloc(this);
             rval._data = GCHandle.ToIntPtr(handle);
-            rval._destructor = _prevent_gc_release_ptr;
+            rval._destructor = ReleaseHandlePtr;
         }
         else
         {
@@ -1822,6 +1913,7 @@ public partial class CStrPassthrough : IDisposable
         rval._callback = _ptr;
         rval._data = _data;
         rval._destructor = _destructor;
+
         return rval;
     }
 
@@ -1918,8 +2010,9 @@ public partial class MyCallbackNamespaced
 /// thrown inside the callback are captured and re-thrown on <see cref="Dispose"/>.
 ///
 /// When received from Rust, use <see cref="Dispose"/> after the last use to allow
-/// Rust to free any associated data. When passed to Rust, hold onto this class until done,
-/// otherwise your function trampoline might get deallocated.
+/// Rust to free any associated data. When passed by value, Rust keeps the managed
+/// callback alive until it drops the callback. Borrowed callbacks require the wrapper
+/// to remain alive for the duration of the native call.
 /// <remarks>
 /// ⚠️ This type is an owned resource. You must 1) either call `Dispose()` on it,
 /// 2) call another method on it that promises to free it, or 3) 'move' it to Rust
@@ -1928,9 +2021,10 @@ public partial class MyCallbackNamespaced
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class MyCallbackNamespaced : IDisposable
 {
-    // Static helpers to de-allocate a pinned GCHandle when callback dropped / disposed.
-    private static readonly MyCallbackNamespacedDestructor _prevent_gc_release = data => GCHandle.FromIntPtr(data).Free();
-    private static readonly IntPtr _prevent_gc_release_ptr = Marshal.GetFunctionPointerForDelegate(_prevent_gc_release);
+    // Rust releases this rooting handle when it drops the retained callback.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static void ReleaseHandle(IntPtr data) => GCHandle.FromIntPtr(data).Free();
+    private static unsafe IntPtr ReleaseHandlePtr => (IntPtr)(delegate* unmanaged[Cdecl]<IntPtr, void>)&ReleaseHandle;
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
@@ -1939,12 +2033,23 @@ public partial class MyCallbackNamespaced : IDisposable
 
     /// Wraps a managed delegate so it can be passed to Rust as a callback.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public MyCallbackNamespaced(MyCallbackNamespacedDelegate managed)
+    public unsafe MyCallbackNamespaced(MyCallbackNamespacedDelegate managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         _managed = managed;
-        _native = CallTrampoline;
-        _ptr = Marshal.GetFunctionPointerForDelegate(_native);
+
+        _ptr = (IntPtr)(delegate* unmanaged[Cdecl]<uint, IntPtr, uint>)&CallUnmanaged;
+
     }
+
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static uint CallUnmanaged(uint value, IntPtr callback_data)
+    {
+        var target = (MyCallbackNamespaced)GCHandle.FromIntPtr(callback_data).Target;
+        return target.CallTrampoline(value, callback_data);
+    }
+
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private uint CallTrampoline(uint value, IntPtr callback_data)
@@ -1967,9 +2072,11 @@ public partial class MyCallbackNamespaced : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal uint CallRaw(uint value)
+    internal unsafe uint CallRaw(uint value)
     {
-        var __target = Marshal.GetDelegateForFunctionPointer<MyCallbackNamespacedNative>(_ptr);
+
+        var __target = (delegate* unmanaged[Cdecl]<uint, IntPtr, uint>)_ptr;
+
         
         return __target(value, _data);
         
@@ -1984,6 +2091,7 @@ public partial class MyCallbackNamespaced : IDisposable
         if (_managed != null)
         {
             return _managed(value);
+            
         }
         return CallRaw(value);
     }
@@ -1992,7 +2100,7 @@ public partial class MyCallbackNamespaced : IDisposable
     /// previous invocation, that exception is re-thrown here. If the callback was
     /// received from Rust, this tells Rust to free the associated data pointer.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public void Dispose()
+    public unsafe void Dispose()
     {
         var exception = _exception;
         _exception = null;
@@ -2003,14 +2111,14 @@ public partial class MyCallbackNamespaced : IDisposable
         _ptr = IntPtr.Zero;
         if (destructor != IntPtr.Zero)
         {
-            Marshal.GetDelegateForFunctionPointer<MyCallbackNamespacedDestructor>(destructor)(data);
+            ((delegate* unmanaged[Cdecl]<IntPtr, void>)destructor)(data);
         }
         if (exception != null)
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
-    /// Pins `this` via GCHandle so the native trampoline delegate cannot be garbage collected
+    /// Roots `this` via GCHandle so the managed callback remains alive
     /// while Rust holds the function pointer. The GCHandle is freed when Rust drops the
     /// callback and invokes the destructor.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -2025,7 +2133,7 @@ public partial class MyCallbackNamespaced : IDisposable
         {
             var handle = GCHandle.Alloc(this);
             rval._data = GCHandle.ToIntPtr(handle);
-            rval._destructor = _prevent_gc_release_ptr;
+            rval._destructor = ReleaseHandlePtr;
         }
         else
         {
@@ -2048,6 +2156,17 @@ public partial class MyCallbackNamespaced : IDisposable
         rval._callback = _ptr;
         rval._data = _data;
         rval._destructor = _destructor;
+
+        if (_managed != null)
+        {
+            // Borrowed composite fields have no scoped marshaller to free a handle.
+            // Lazily retain an instance thunk for that path only.
+            _native ??= CallTrampoline;
+            rval._callback = Marshal.GetFunctionPointerForDelegate(_native);
+            rval._data = IntPtr.Zero;
+            rval._destructor = IntPtr.Zero;
+        }
+
         return rval;
     }
 
@@ -2144,8 +2263,9 @@ public partial class MyCallback
 /// thrown inside the callback are captured and re-thrown on <see cref="Dispose"/>.
 ///
 /// When received from Rust, use <see cref="Dispose"/> after the last use to allow
-/// Rust to free any associated data. When passed to Rust, hold onto this class until done,
-/// otherwise your function trampoline might get deallocated.
+/// Rust to free any associated data. When passed by value, Rust keeps the managed
+/// callback alive until it drops the callback. Borrowed callbacks require the wrapper
+/// to remain alive for the duration of the native call.
 /// <remarks>
 /// ⚠️ This type is an owned resource. You must 1) either call `Dispose()` on it,
 /// 2) call another method on it that promises to free it, or 3) 'move' it to Rust
@@ -2154,9 +2274,10 @@ public partial class MyCallback
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class MyCallback : IDisposable
 {
-    // Static helpers to de-allocate a pinned GCHandle when callback dropped / disposed.
-    private static readonly MyCallbackDestructor _prevent_gc_release = data => GCHandle.FromIntPtr(data).Free();
-    private static readonly IntPtr _prevent_gc_release_ptr = Marshal.GetFunctionPointerForDelegate(_prevent_gc_release);
+    // Rust releases this rooting handle when it drops the retained callback.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static void ReleaseHandle(IntPtr data) => GCHandle.FromIntPtr(data).Free();
+    private static unsafe IntPtr ReleaseHandlePtr => (IntPtr)(delegate* unmanaged[Cdecl]<IntPtr, void>)&ReleaseHandle;
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
@@ -2165,12 +2286,23 @@ public partial class MyCallback : IDisposable
 
     /// Wraps a managed delegate so it can be passed to Rust as a callback.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public MyCallback(MyCallbackDelegate managed)
+    public unsafe MyCallback(MyCallbackDelegate managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         _managed = managed;
-        _native = CallTrampoline;
-        _ptr = Marshal.GetFunctionPointerForDelegate(_native);
+
+        _ptr = (IntPtr)(delegate* unmanaged[Cdecl]<uint, IntPtr, uint>)&CallUnmanaged;
+
     }
+
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static uint CallUnmanaged(uint value, IntPtr callback_data)
+    {
+        var target = (MyCallback)GCHandle.FromIntPtr(callback_data).Target;
+        return target.CallTrampoline(value, callback_data);
+    }
+
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private uint CallTrampoline(uint value, IntPtr callback_data)
@@ -2193,9 +2325,11 @@ public partial class MyCallback : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal uint CallRaw(uint value)
+    internal unsafe uint CallRaw(uint value)
     {
-        var __target = Marshal.GetDelegateForFunctionPointer<MyCallbackNative>(_ptr);
+
+        var __target = (delegate* unmanaged[Cdecl]<uint, IntPtr, uint>)_ptr;
+
         
         return __target(value, _data);
         
@@ -2210,6 +2344,7 @@ public partial class MyCallback : IDisposable
         if (_managed != null)
         {
             return _managed(value);
+            
         }
         return CallRaw(value);
     }
@@ -2218,7 +2353,7 @@ public partial class MyCallback : IDisposable
     /// previous invocation, that exception is re-thrown here. If the callback was
     /// received from Rust, this tells Rust to free the associated data pointer.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public void Dispose()
+    public unsafe void Dispose()
     {
         var exception = _exception;
         _exception = null;
@@ -2229,14 +2364,14 @@ public partial class MyCallback : IDisposable
         _ptr = IntPtr.Zero;
         if (destructor != IntPtr.Zero)
         {
-            Marshal.GetDelegateForFunctionPointer<MyCallbackDestructor>(destructor)(data);
+            ((delegate* unmanaged[Cdecl]<IntPtr, void>)destructor)(data);
         }
         if (exception != null)
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
-    /// Pins `this` via GCHandle so the native trampoline delegate cannot be garbage collected
+    /// Roots `this` via GCHandle so the managed callback remains alive
     /// while Rust holds the function pointer. The GCHandle is freed when Rust drops the
     /// callback and invokes the destructor.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -2251,7 +2386,7 @@ public partial class MyCallback : IDisposable
         {
             var handle = GCHandle.Alloc(this);
             rval._data = GCHandle.ToIntPtr(handle);
-            rval._destructor = _prevent_gc_release_ptr;
+            rval._destructor = ReleaseHandlePtr;
         }
         else
         {
@@ -2274,6 +2409,17 @@ public partial class MyCallback : IDisposable
         rval._callback = _ptr;
         rval._data = _data;
         rval._destructor = _destructor;
+
+        if (_managed != null)
+        {
+            // Borrowed composite fields have no scoped marshaller to free a handle.
+            // Lazily retain an instance thunk for that path only.
+            _native ??= CallTrampoline;
+            rval._callback = Marshal.GetFunctionPointerForDelegate(_native);
+            rval._data = IntPtr.Zero;
+            rval._destructor = IntPtr.Zero;
+        }
+
         return rval;
     }
 
@@ -2370,8 +2516,9 @@ public partial class CallbackSliceMut
 /// thrown inside the callback are captured and re-thrown on <see cref="Dispose"/>.
 ///
 /// When received from Rust, use <see cref="Dispose"/> after the last use to allow
-/// Rust to free any associated data. When passed to Rust, hold onto this class until done,
-/// otherwise your function trampoline might get deallocated.
+/// Rust to free any associated data. When passed by value, Rust keeps the managed
+/// callback alive until it drops the callback. Borrowed callbacks require the wrapper
+/// to remain alive for the duration of the native call.
 /// <remarks>
 /// ⚠️ This type is an owned resource. You must 1) either call `Dispose()` on it,
 /// 2) call another method on it that promises to free it, or 3) 'move' it to Rust
@@ -2380,9 +2527,10 @@ public partial class CallbackSliceMut
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class CallbackSliceMut : IDisposable
 {
-    // Static helpers to de-allocate a pinned GCHandle when callback dropped / disposed.
-    private static readonly CallbackSliceMutDestructor _prevent_gc_release = data => GCHandle.FromIntPtr(data).Free();
-    private static readonly IntPtr _prevent_gc_release_ptr = Marshal.GetFunctionPointerForDelegate(_prevent_gc_release);
+    // Rust releases this rooting handle when it drops the retained callback.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static void ReleaseHandle(IntPtr data) => GCHandle.FromIntPtr(data).Free();
+    private static unsafe IntPtr ReleaseHandlePtr => (IntPtr)(delegate* unmanaged[Cdecl]<IntPtr, void>)&ReleaseHandle;
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
@@ -2391,12 +2539,23 @@ public partial class CallbackSliceMut : IDisposable
 
     /// Wraps a managed delegate so it can be passed to Rust as a callback.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public CallbackSliceMut(CallbackSliceMutDelegate managed)
+    public unsafe CallbackSliceMut(CallbackSliceMutDelegate managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         _managed = managed;
-        _native = CallTrampoline;
-        _ptr = Marshal.GetFunctionPointerForDelegate(_native);
+
+        _ptr = (IntPtr)(delegate* unmanaged[Cdecl]<SliceMutByte.Unmanaged, IntPtr, void>)&CallUnmanaged;
+
     }
+
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static void CallUnmanaged(SliceMutByte.Unmanaged slice, IntPtr callback_data)
+    {
+        var target = (CallbackSliceMut)GCHandle.FromIntPtr(callback_data).Target;
+        target.CallTrampoline(slice, callback_data);
+    }
+
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void CallTrampoline(SliceMutByte.Unmanaged slice, IntPtr callback_data)
@@ -2419,9 +2578,11 @@ public partial class CallbackSliceMut : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal void CallRaw(SliceMutByte slice)
+    internal unsafe void CallRaw(SliceMutByte slice)
     {
-        var __target = Marshal.GetDelegateForFunctionPointer<CallbackSliceMutNative>(_ptr);
+
+        var __target = (delegate* unmanaged[Cdecl]<SliceMutByte.Unmanaged, IntPtr, void>)_ptr;
+
         
         __target(slice.ToUnmanaged(), _data);
         
@@ -2436,6 +2597,7 @@ public partial class CallbackSliceMut : IDisposable
         if (_managed != null)
         {
             _managed(slice);
+            return;
         }
         CallRaw(slice);
     }
@@ -2444,7 +2606,7 @@ public partial class CallbackSliceMut : IDisposable
     /// previous invocation, that exception is re-thrown here. If the callback was
     /// received from Rust, this tells Rust to free the associated data pointer.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public void Dispose()
+    public unsafe void Dispose()
     {
         var exception = _exception;
         _exception = null;
@@ -2455,14 +2617,14 @@ public partial class CallbackSliceMut : IDisposable
         _ptr = IntPtr.Zero;
         if (destructor != IntPtr.Zero)
         {
-            Marshal.GetDelegateForFunctionPointer<CallbackSliceMutDestructor>(destructor)(data);
+            ((delegate* unmanaged[Cdecl]<IntPtr, void>)destructor)(data);
         }
         if (exception != null)
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
-    /// Pins `this` via GCHandle so the native trampoline delegate cannot be garbage collected
+    /// Roots `this` via GCHandle so the managed callback remains alive
     /// while Rust holds the function pointer. The GCHandle is freed when Rust drops the
     /// callback and invokes the destructor.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -2477,7 +2639,7 @@ public partial class CallbackSliceMut : IDisposable
         {
             var handle = GCHandle.Alloc(this);
             rval._data = GCHandle.ToIntPtr(handle);
-            rval._destructor = _prevent_gc_release_ptr;
+            rval._destructor = ReleaseHandlePtr;
         }
         else
         {
@@ -2500,6 +2662,17 @@ public partial class CallbackSliceMut : IDisposable
         rval._callback = _ptr;
         rval._data = _data;
         rval._destructor = _destructor;
+
+        if (_managed != null)
+        {
+            // Borrowed composite fields have no scoped marshaller to free a handle.
+            // Lazily retain an instance thunk for that path only.
+            _native ??= CallTrampoline;
+            rval._callback = Marshal.GetFunctionPointerForDelegate(_native);
+            rval._data = IntPtr.Zero;
+            rval._destructor = IntPtr.Zero;
+        }
+
         return rval;
     }
 
@@ -2596,8 +2769,9 @@ public partial class MyCallbackContextual
 /// thrown inside the callback are captured and re-thrown on <see cref="Dispose"/>.
 ///
 /// When received from Rust, use <see cref="Dispose"/> after the last use to allow
-/// Rust to free any associated data. When passed to Rust, hold onto this class until done,
-/// otherwise your function trampoline might get deallocated.
+/// Rust to free any associated data. When passed by value, Rust keeps the managed
+/// callback alive until it drops the callback. Borrowed callbacks require the wrapper
+/// to remain alive for the duration of the native call.
 /// <remarks>
 /// ⚠️ This type is an owned resource. You must 1) either call `Dispose()` on it,
 /// 2) call another method on it that promises to free it, or 3) 'move' it to Rust
@@ -2606,9 +2780,10 @@ public partial class MyCallbackContextual
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class MyCallbackContextual : IDisposable
 {
-    // Static helpers to de-allocate a pinned GCHandle when callback dropped / disposed.
-    private static readonly MyCallbackContextualDestructor _prevent_gc_release = data => GCHandle.FromIntPtr(data).Free();
-    private static readonly IntPtr _prevent_gc_release_ptr = Marshal.GetFunctionPointerForDelegate(_prevent_gc_release);
+    // Rust releases this rooting handle when it drops the retained callback.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static void ReleaseHandle(IntPtr data) => GCHandle.FromIntPtr(data).Free();
+    private static unsafe IntPtr ReleaseHandlePtr => (IntPtr)(delegate* unmanaged[Cdecl]<IntPtr, void>)&ReleaseHandle;
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
@@ -2617,12 +2792,23 @@ public partial class MyCallbackContextual : IDisposable
 
     /// Wraps a managed delegate so it can be passed to Rust as a callback.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public MyCallbackContextual(MyCallbackContextualDelegate managed)
+    public unsafe MyCallbackContextual(MyCallbackContextualDelegate managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         _managed = managed;
-        _native = CallTrampoline;
-        _ptr = Marshal.GetFunctionPointerForDelegate(_native);
+
+        _ptr = (IntPtr)(delegate* unmanaged[Cdecl]<IntPtr, uint, IntPtr, void>)&CallUnmanaged;
+
     }
+
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static void CallUnmanaged(IntPtr context, uint value, IntPtr callback_data)
+    {
+        var target = (MyCallbackContextual)GCHandle.FromIntPtr(callback_data).Target;
+        target.CallTrampoline(context, value, callback_data);
+    }
+
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void CallTrampoline(IntPtr context, uint value, IntPtr callback_data)
@@ -2645,9 +2831,11 @@ public partial class MyCallbackContextual : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal void CallRaw(IntPtr context, uint value)
+    internal unsafe void CallRaw(IntPtr context, uint value)
     {
-        var __target = Marshal.GetDelegateForFunctionPointer<MyCallbackContextualNative>(_ptr);
+
+        var __target = (delegate* unmanaged[Cdecl]<IntPtr, uint, IntPtr, void>)_ptr;
+
         
         __target(context, value, _data);
         
@@ -2662,6 +2850,7 @@ public partial class MyCallbackContextual : IDisposable
         if (_managed != null)
         {
             _managed(context, value);
+            return;
         }
         CallRaw(context, value);
     }
@@ -2670,7 +2859,7 @@ public partial class MyCallbackContextual : IDisposable
     /// previous invocation, that exception is re-thrown here. If the callback was
     /// received from Rust, this tells Rust to free the associated data pointer.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public void Dispose()
+    public unsafe void Dispose()
     {
         var exception = _exception;
         _exception = null;
@@ -2681,14 +2870,14 @@ public partial class MyCallbackContextual : IDisposable
         _ptr = IntPtr.Zero;
         if (destructor != IntPtr.Zero)
         {
-            Marshal.GetDelegateForFunctionPointer<MyCallbackContextualDestructor>(destructor)(data);
+            ((delegate* unmanaged[Cdecl]<IntPtr, void>)destructor)(data);
         }
         if (exception != null)
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
-    /// Pins `this` via GCHandle so the native trampoline delegate cannot be garbage collected
+    /// Roots `this` via GCHandle so the managed callback remains alive
     /// while Rust holds the function pointer. The GCHandle is freed when Rust drops the
     /// callback and invokes the destructor.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -2703,7 +2892,7 @@ public partial class MyCallbackContextual : IDisposable
         {
             var handle = GCHandle.Alloc(this);
             rval._data = GCHandle.ToIntPtr(handle);
-            rval._destructor = _prevent_gc_release_ptr;
+            rval._destructor = ReleaseHandlePtr;
         }
         else
         {
@@ -2726,6 +2915,17 @@ public partial class MyCallbackContextual : IDisposable
         rval._callback = _ptr;
         rval._data = _data;
         rval._destructor = _destructor;
+
+        if (_managed != null)
+        {
+            // Borrowed composite fields have no scoped marshaller to free a handle.
+            // Lazily retain an instance thunk for that path only.
+            _native ??= CallTrampoline;
+            rval._callback = Marshal.GetFunctionPointerForDelegate(_native);
+            rval._data = IntPtr.Zero;
+            rval._destructor = IntPtr.Zero;
+        }
+
         return rval;
     }
 
@@ -2822,8 +3022,9 @@ public partial class MyCallbackVoid
 /// thrown inside the callback are captured and re-thrown on <see cref="Dispose"/>.
 ///
 /// When received from Rust, use <see cref="Dispose"/> after the last use to allow
-/// Rust to free any associated data. When passed to Rust, hold onto this class until done,
-/// otherwise your function trampoline might get deallocated.
+/// Rust to free any associated data. When passed by value, Rust keeps the managed
+/// callback alive until it drops the callback. Borrowed callbacks require the wrapper
+/// to remain alive for the duration of the native call.
 /// <remarks>
 /// ⚠️ This type is an owned resource. You must 1) either call `Dispose()` on it,
 /// 2) call another method on it that promises to free it, or 3) 'move' it to Rust
@@ -2832,9 +3033,10 @@ public partial class MyCallbackVoid
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class MyCallbackVoid : IDisposable
 {
-    // Static helpers to de-allocate a pinned GCHandle when callback dropped / disposed.
-    private static readonly MyCallbackVoidDestructor _prevent_gc_release = data => GCHandle.FromIntPtr(data).Free();
-    private static readonly IntPtr _prevent_gc_release_ptr = Marshal.GetFunctionPointerForDelegate(_prevent_gc_release);
+    // Rust releases this rooting handle when it drops the retained callback.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static void ReleaseHandle(IntPtr data) => GCHandle.FromIntPtr(data).Free();
+    private static unsafe IntPtr ReleaseHandlePtr => (IntPtr)(delegate* unmanaged[Cdecl]<IntPtr, void>)&ReleaseHandle;
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
@@ -2843,12 +3045,23 @@ public partial class MyCallbackVoid : IDisposable
 
     /// Wraps a managed delegate so it can be passed to Rust as a callback.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public MyCallbackVoid(MyCallbackVoidDelegate managed)
+    public unsafe MyCallbackVoid(MyCallbackVoidDelegate managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         _managed = managed;
-        _native = CallTrampoline;
-        _ptr = Marshal.GetFunctionPointerForDelegate(_native);
+
+        _ptr = (IntPtr)(delegate* unmanaged[Cdecl]<IntPtr, IntPtr, void>)&CallUnmanaged;
+
     }
+
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static void CallUnmanaged(IntPtr ptr, IntPtr callback_data)
+    {
+        var target = (MyCallbackVoid)GCHandle.FromIntPtr(callback_data).Target;
+        target.CallTrampoline(ptr, callback_data);
+    }
+
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void CallTrampoline(IntPtr ptr, IntPtr callback_data)
@@ -2871,9 +3084,11 @@ public partial class MyCallbackVoid : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal void CallRaw(IntPtr ptr)
+    internal unsafe void CallRaw(IntPtr ptr)
     {
-        var __target = Marshal.GetDelegateForFunctionPointer<MyCallbackVoidNative>(_ptr);
+
+        var __target = (delegate* unmanaged[Cdecl]<IntPtr, IntPtr, void>)_ptr;
+
         
         __target(ptr, _data);
         
@@ -2888,6 +3103,7 @@ public partial class MyCallbackVoid : IDisposable
         if (_managed != null)
         {
             _managed(ptr);
+            return;
         }
         CallRaw(ptr);
     }
@@ -2896,7 +3112,7 @@ public partial class MyCallbackVoid : IDisposable
     /// previous invocation, that exception is re-thrown here. If the callback was
     /// received from Rust, this tells Rust to free the associated data pointer.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public void Dispose()
+    public unsafe void Dispose()
     {
         var exception = _exception;
         _exception = null;
@@ -2907,14 +3123,14 @@ public partial class MyCallbackVoid : IDisposable
         _ptr = IntPtr.Zero;
         if (destructor != IntPtr.Zero)
         {
-            Marshal.GetDelegateForFunctionPointer<MyCallbackVoidDestructor>(destructor)(data);
+            ((delegate* unmanaged[Cdecl]<IntPtr, void>)destructor)(data);
         }
         if (exception != null)
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
-    /// Pins `this` via GCHandle so the native trampoline delegate cannot be garbage collected
+    /// Roots `this` via GCHandle so the managed callback remains alive
     /// while Rust holds the function pointer. The GCHandle is freed when Rust drops the
     /// callback and invokes the destructor.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -2929,7 +3145,7 @@ public partial class MyCallbackVoid : IDisposable
         {
             var handle = GCHandle.Alloc(this);
             rval._data = GCHandle.ToIntPtr(handle);
-            rval._destructor = _prevent_gc_release_ptr;
+            rval._destructor = ReleaseHandlePtr;
         }
         else
         {
@@ -2952,6 +3168,17 @@ public partial class MyCallbackVoid : IDisposable
         rval._callback = _ptr;
         rval._data = _data;
         rval._destructor = _destructor;
+
+        if (_managed != null)
+        {
+            // Borrowed composite fields have no scoped marshaller to free a handle.
+            // Lazily retain an instance thunk for that path only.
+            _native ??= CallTrampoline;
+            rval._callback = Marshal.GetFunctionPointerForDelegate(_native);
+            rval._data = IntPtr.Zero;
+            rval._destructor = IntPtr.Zero;
+        }
+
         return rval;
     }
 
@@ -3048,8 +3275,9 @@ public partial class Pointers
 /// thrown inside the callback are captured and re-thrown on <see cref="Dispose"/>.
 ///
 /// When received from Rust, use <see cref="Dispose"/> after the last use to allow
-/// Rust to free any associated data. When passed to Rust, hold onto this class until done,
-/// otherwise your function trampoline might get deallocated.
+/// Rust to free any associated data. When passed by value, Rust keeps the managed
+/// callback alive until it drops the callback. Borrowed callbacks require the wrapper
+/// to remain alive for the duration of the native call.
 /// <remarks>
 /// ⚠️ This type is an owned resource. You must 1) either call `Dispose()` on it,
 /// 2) call another method on it that promises to free it, or 3) 'move' it to Rust
@@ -3058,9 +3286,10 @@ public partial class Pointers
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class Pointers : IDisposable
 {
-    // Static helpers to de-allocate a pinned GCHandle when callback dropped / disposed.
-    private static readonly PointersDestructor _prevent_gc_release = data => GCHandle.FromIntPtr(data).Free();
-    private static readonly IntPtr _prevent_gc_release_ptr = Marshal.GetFunctionPointerForDelegate(_prevent_gc_release);
+    // Rust releases this rooting handle when it drops the retained callback.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static void ReleaseHandle(IntPtr data) => GCHandle.FromIntPtr(data).Free();
+    private static unsafe IntPtr ReleaseHandlePtr => (IntPtr)(delegate* unmanaged[Cdecl]<IntPtr, void>)&ReleaseHandle;
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
@@ -3069,12 +3298,23 @@ public partial class Pointers : IDisposable
 
     /// Wraps a managed delegate so it can be passed to Rust as a callback.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public Pointers(PointersDelegate managed)
+    public unsafe Pointers(PointersDelegate managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         _managed = managed;
-        _native = CallTrampoline;
-        _ptr = Marshal.GetFunctionPointerForDelegate(_native);
+
+        _ptr = (IntPtr)(delegate* unmanaged[Cdecl]<IntPtr, IntPtr, IntPtr, void>)&CallUnmanaged;
+
     }
+
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static void CallUnmanaged(IntPtr x, IntPtr y, IntPtr callback_data)
+    {
+        var target = (Pointers)GCHandle.FromIntPtr(callback_data).Target;
+        target.CallTrampoline(x, y, callback_data);
+    }
+
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void CallTrampoline(IntPtr x, IntPtr y, IntPtr callback_data)
@@ -3097,9 +3337,11 @@ public partial class Pointers : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal void CallRaw(IntPtr x, IntPtr y)
+    internal unsafe void CallRaw(IntPtr x, IntPtr y)
     {
-        var __target = Marshal.GetDelegateForFunctionPointer<PointersNative>(_ptr);
+
+        var __target = (delegate* unmanaged[Cdecl]<IntPtr, IntPtr, IntPtr, void>)_ptr;
+
         
         __target(x, y, _data);
         
@@ -3114,6 +3356,7 @@ public partial class Pointers : IDisposable
         if (_managed != null)
         {
             _managed(x, y);
+            return;
         }
         CallRaw(x, y);
     }
@@ -3122,7 +3365,7 @@ public partial class Pointers : IDisposable
     /// previous invocation, that exception is re-thrown here. If the callback was
     /// received from Rust, this tells Rust to free the associated data pointer.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public void Dispose()
+    public unsafe void Dispose()
     {
         var exception = _exception;
         _exception = null;
@@ -3133,14 +3376,14 @@ public partial class Pointers : IDisposable
         _ptr = IntPtr.Zero;
         if (destructor != IntPtr.Zero)
         {
-            Marshal.GetDelegateForFunctionPointer<PointersDestructor>(destructor)(data);
+            ((delegate* unmanaged[Cdecl]<IntPtr, void>)destructor)(data);
         }
         if (exception != null)
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
-    /// Pins `this` via GCHandle so the native trampoline delegate cannot be garbage collected
+    /// Roots `this` via GCHandle so the managed callback remains alive
     /// while Rust holds the function pointer. The GCHandle is freed when Rust drops the
     /// callback and invokes the destructor.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -3155,7 +3398,7 @@ public partial class Pointers : IDisposable
         {
             var handle = GCHandle.Alloc(this);
             rval._data = GCHandle.ToIntPtr(handle);
-            rval._destructor = _prevent_gc_release_ptr;
+            rval._destructor = ReleaseHandlePtr;
         }
         else
         {
@@ -3178,6 +3421,17 @@ public partial class Pointers : IDisposable
         rval._callback = _ptr;
         rval._data = _data;
         rval._destructor = _destructor;
+
+        if (_managed != null)
+        {
+            // Borrowed composite fields have no scoped marshaller to free a handle.
+            // Lazily retain an instance thunk for that path only.
+            _native ??= CallTrampoline;
+            rval._callback = Marshal.GetFunctionPointerForDelegate(_native);
+            rval._data = IntPtr.Zero;
+            rval._destructor = IntPtr.Zero;
+        }
+
         return rval;
     }
 
@@ -3274,8 +3528,9 @@ public partial class StringCallback
 /// thrown inside the callback are captured and re-thrown on <see cref="Dispose"/>.
 ///
 /// When received from Rust, use <see cref="Dispose"/> after the last use to allow
-/// Rust to free any associated data. When passed to Rust, hold onto this class until done,
-/// otherwise your function trampoline might get deallocated.
+/// Rust to free any associated data. When passed by value, Rust keeps the managed
+/// callback alive until it drops the callback. Borrowed callbacks require the wrapper
+/// to remain alive for the duration of the native call.
 /// <remarks>
 /// ⚠️ This type is an owned resource. You must 1) either call `Dispose()` on it,
 /// 2) call another method on it that promises to free it, or 3) 'move' it to Rust
@@ -3284,9 +3539,10 @@ public partial class StringCallback
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class StringCallback : IDisposable
 {
-    // Static helpers to de-allocate a pinned GCHandle when callback dropped / disposed.
-    private static readonly StringCallbackDestructor _prevent_gc_release = data => GCHandle.FromIntPtr(data).Free();
-    private static readonly IntPtr _prevent_gc_release_ptr = Marshal.GetFunctionPointerForDelegate(_prevent_gc_release);
+    // Rust releases this rooting handle when it drops the retained callback.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static void ReleaseHandle(IntPtr data) => GCHandle.FromIntPtr(data).Free();
+    private static unsafe IntPtr ReleaseHandlePtr => (IntPtr)(delegate* unmanaged[Cdecl]<IntPtr, void>)&ReleaseHandle;
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
@@ -3295,12 +3551,23 @@ public partial class StringCallback : IDisposable
 
     /// Wraps a managed delegate so it can be passed to Rust as a callback.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public StringCallback(StringCallbackDelegate managed)
+    public unsafe StringCallback(StringCallbackDelegate managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         _managed = managed;
-        _native = CallTrampoline;
-        _ptr = Marshal.GetFunctionPointerForDelegate(_native);
+
+        _ptr = (IntPtr)(delegate* unmanaged[Cdecl]<Utf8String.Unmanaged, IntPtr, void>)&CallUnmanaged;
+
     }
+
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static void CallUnmanaged(Utf8String.Unmanaged s, IntPtr callback_data)
+    {
+        var target = (StringCallback)GCHandle.FromIntPtr(callback_data).Target;
+        target.CallTrampoline(s, callback_data);
+    }
+
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void CallTrampoline(Utf8String.Unmanaged s, IntPtr callback_data)
@@ -3323,9 +3590,11 @@ public partial class StringCallback : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal void CallRaw(Utf8String s)
+    internal unsafe void CallRaw(Utf8String s)
     {
-        var __target = Marshal.GetDelegateForFunctionPointer<StringCallbackNative>(_ptr);
+
+        var __target = (delegate* unmanaged[Cdecl]<Utf8String.Unmanaged, IntPtr, void>)_ptr;
+
         
         __target(s.IntoUnmanaged(), _data);
         
@@ -3340,6 +3609,7 @@ public partial class StringCallback : IDisposable
         if (_managed != null)
         {
             _managed(s);
+            return;
         }
         CallRaw(s);
     }
@@ -3348,7 +3618,7 @@ public partial class StringCallback : IDisposable
     /// previous invocation, that exception is re-thrown here. If the callback was
     /// received from Rust, this tells Rust to free the associated data pointer.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public void Dispose()
+    public unsafe void Dispose()
     {
         var exception = _exception;
         _exception = null;
@@ -3359,14 +3629,14 @@ public partial class StringCallback : IDisposable
         _ptr = IntPtr.Zero;
         if (destructor != IntPtr.Zero)
         {
-            Marshal.GetDelegateForFunctionPointer<StringCallbackDestructor>(destructor)(data);
+            ((delegate* unmanaged[Cdecl]<IntPtr, void>)destructor)(data);
         }
         if (exception != null)
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
-    /// Pins `this` via GCHandle so the native trampoline delegate cannot be garbage collected
+    /// Roots `this` via GCHandle so the managed callback remains alive
     /// while Rust holds the function pointer. The GCHandle is freed when Rust drops the
     /// callback and invokes the destructor.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -3381,7 +3651,7 @@ public partial class StringCallback : IDisposable
         {
             var handle = GCHandle.Alloc(this);
             rval._data = GCHandle.ToIntPtr(handle);
-            rval._destructor = _prevent_gc_release_ptr;
+            rval._destructor = ReleaseHandlePtr;
         }
         else
         {
@@ -3404,6 +3674,17 @@ public partial class StringCallback : IDisposable
         rval._callback = _ptr;
         rval._data = _data;
         rval._destructor = _destructor;
+
+        if (_managed != null)
+        {
+            // Borrowed composite fields have no scoped marshaller to free a handle.
+            // Lazily retain an instance thunk for that path only.
+            _native ??= CallTrampoline;
+            rval._callback = Marshal.GetFunctionPointerForDelegate(_native);
+            rval._data = IntPtr.Zero;
+            rval._destructor = IntPtr.Zero;
+        }
+
         return rval;
     }
 
@@ -3500,8 +3781,9 @@ public partial class SumDelegate1
 /// thrown inside the callback are captured and re-thrown on <see cref="Dispose"/>.
 ///
 /// When received from Rust, use <see cref="Dispose"/> after the last use to allow
-/// Rust to free any associated data. When passed to Rust, hold onto this class until done,
-/// otherwise your function trampoline might get deallocated.
+/// Rust to free any associated data. When passed by value, Rust keeps the managed
+/// callback alive until it drops the callback. Borrowed callbacks require the wrapper
+/// to remain alive for the duration of the native call.
 /// <remarks>
 /// ⚠️ This type is an owned resource. You must 1) either call `Dispose()` on it,
 /// 2) call another method on it that promises to free it, or 3) 'move' it to Rust
@@ -3510,9 +3792,10 @@ public partial class SumDelegate1
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class SumDelegate1 : IDisposable
 {
-    // Static helpers to de-allocate a pinned GCHandle when callback dropped / disposed.
-    private static readonly SumDelegate1Destructor _prevent_gc_release = data => GCHandle.FromIntPtr(data).Free();
-    private static readonly IntPtr _prevent_gc_release_ptr = Marshal.GetFunctionPointerForDelegate(_prevent_gc_release);
+    // Rust releases this rooting handle when it drops the retained callback.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static void ReleaseHandle(IntPtr data) => GCHandle.FromIntPtr(data).Free();
+    private static unsafe IntPtr ReleaseHandlePtr => (IntPtr)(delegate* unmanaged[Cdecl]<IntPtr, void>)&ReleaseHandle;
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
@@ -3521,12 +3804,23 @@ public partial class SumDelegate1 : IDisposable
 
     /// Wraps a managed delegate so it can be passed to Rust as a callback.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public SumDelegate1(SumDelegate1Delegate managed)
+    public unsafe SumDelegate1(SumDelegate1Delegate managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         _managed = managed;
-        _native = CallTrampoline;
-        _ptr = Marshal.GetFunctionPointerForDelegate(_native);
+
+        _ptr = (IntPtr)(delegate* unmanaged[Cdecl]<IntPtr, void>)&CallUnmanaged;
+
     }
+
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static void CallUnmanaged(IntPtr callback_data)
+    {
+        var target = (SumDelegate1)GCHandle.FromIntPtr(callback_data).Target;
+        target.CallTrampoline(callback_data);
+    }
+
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void CallTrampoline(IntPtr callback_data)
@@ -3549,9 +3843,11 @@ public partial class SumDelegate1 : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal void CallRaw()
+    internal unsafe void CallRaw()
     {
-        var __target = Marshal.GetDelegateForFunctionPointer<SumDelegate1Native>(_ptr);
+
+        var __target = (delegate* unmanaged[Cdecl]<IntPtr, void>)_ptr;
+
         
         __target(_data);
         
@@ -3566,6 +3862,7 @@ public partial class SumDelegate1 : IDisposable
         if (_managed != null)
         {
             _managed();
+            return;
         }
         CallRaw();
     }
@@ -3574,7 +3871,7 @@ public partial class SumDelegate1 : IDisposable
     /// previous invocation, that exception is re-thrown here. If the callback was
     /// received from Rust, this tells Rust to free the associated data pointer.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public void Dispose()
+    public unsafe void Dispose()
     {
         var exception = _exception;
         _exception = null;
@@ -3585,14 +3882,14 @@ public partial class SumDelegate1 : IDisposable
         _ptr = IntPtr.Zero;
         if (destructor != IntPtr.Zero)
         {
-            Marshal.GetDelegateForFunctionPointer<SumDelegate1Destructor>(destructor)(data);
+            ((delegate* unmanaged[Cdecl]<IntPtr, void>)destructor)(data);
         }
         if (exception != null)
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
-    /// Pins `this` via GCHandle so the native trampoline delegate cannot be garbage collected
+    /// Roots `this` via GCHandle so the managed callback remains alive
     /// while Rust holds the function pointer. The GCHandle is freed when Rust drops the
     /// callback and invokes the destructor.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -3607,7 +3904,7 @@ public partial class SumDelegate1 : IDisposable
         {
             var handle = GCHandle.Alloc(this);
             rval._data = GCHandle.ToIntPtr(handle);
-            rval._destructor = _prevent_gc_release_ptr;
+            rval._destructor = ReleaseHandlePtr;
         }
         else
         {
@@ -3630,6 +3927,17 @@ public partial class SumDelegate1 : IDisposable
         rval._callback = _ptr;
         rval._data = _data;
         rval._destructor = _destructor;
+
+        if (_managed != null)
+        {
+            // Borrowed composite fields have no scoped marshaller to free a handle.
+            // Lazily retain an instance thunk for that path only.
+            _native ??= CallTrampoline;
+            rval._callback = Marshal.GetFunctionPointerForDelegate(_native);
+            rval._data = IntPtr.Zero;
+            rval._destructor = IntPtr.Zero;
+        }
+
         return rval;
     }
 
@@ -3726,8 +4034,9 @@ public partial class SumDelegateReturn2
 /// thrown inside the callback are captured and re-thrown on <see cref="Dispose"/>.
 ///
 /// When received from Rust, use <see cref="Dispose"/> after the last use to allow
-/// Rust to free any associated data. When passed to Rust, hold onto this class until done,
-/// otherwise your function trampoline might get deallocated.
+/// Rust to free any associated data. When passed by value, Rust keeps the managed
+/// callback alive until it drops the callback. Borrowed callbacks require the wrapper
+/// to remain alive for the duration of the native call.
 /// <remarks>
 /// ⚠️ This type is an owned resource. You must 1) either call `Dispose()` on it,
 /// 2) call another method on it that promises to free it, or 3) 'move' it to Rust
@@ -3736,9 +4045,10 @@ public partial class SumDelegateReturn2
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class SumDelegateReturn2 : IDisposable
 {
-    // Static helpers to de-allocate a pinned GCHandle when callback dropped / disposed.
-    private static readonly SumDelegateReturn2Destructor _prevent_gc_release = data => GCHandle.FromIntPtr(data).Free();
-    private static readonly IntPtr _prevent_gc_release_ptr = Marshal.GetFunctionPointerForDelegate(_prevent_gc_release);
+    // Rust releases this rooting handle when it drops the retained callback.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static void ReleaseHandle(IntPtr data) => GCHandle.FromIntPtr(data).Free();
+    private static unsafe IntPtr ReleaseHandlePtr => (IntPtr)(delegate* unmanaged[Cdecl]<IntPtr, void>)&ReleaseHandle;
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
@@ -3747,12 +4057,23 @@ public partial class SumDelegateReturn2 : IDisposable
 
     /// Wraps a managed delegate so it can be passed to Rust as a callback.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public SumDelegateReturn2(SumDelegateReturn2Delegate managed)
+    public unsafe SumDelegateReturn2(SumDelegateReturn2Delegate managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         _managed = managed;
-        _native = CallTrampoline;
-        _ptr = Marshal.GetFunctionPointerForDelegate(_native);
+
+        _ptr = (IntPtr)(delegate* unmanaged[Cdecl]<int, int, IntPtr, void>)&CallUnmanaged;
+
     }
+
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static void CallUnmanaged(int x, int y, IntPtr callback_data)
+    {
+        var target = (SumDelegateReturn2)GCHandle.FromIntPtr(callback_data).Target;
+        target.CallTrampoline(x, y, callback_data);
+    }
+
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void CallTrampoline(int x, int y, IntPtr callback_data)
@@ -3775,9 +4096,11 @@ public partial class SumDelegateReturn2 : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal void CallRaw(int x, int y)
+    internal unsafe void CallRaw(int x, int y)
     {
-        var __target = Marshal.GetDelegateForFunctionPointer<SumDelegateReturn2Native>(_ptr);
+
+        var __target = (delegate* unmanaged[Cdecl]<int, int, IntPtr, void>)_ptr;
+
         
         __target(x, y, _data);
         
@@ -3792,6 +4115,7 @@ public partial class SumDelegateReturn2 : IDisposable
         if (_managed != null)
         {
             _managed(x, y);
+            return;
         }
         CallRaw(x, y);
     }
@@ -3800,7 +4124,7 @@ public partial class SumDelegateReturn2 : IDisposable
     /// previous invocation, that exception is re-thrown here. If the callback was
     /// received from Rust, this tells Rust to free the associated data pointer.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public void Dispose()
+    public unsafe void Dispose()
     {
         var exception = _exception;
         _exception = null;
@@ -3811,14 +4135,14 @@ public partial class SumDelegateReturn2 : IDisposable
         _ptr = IntPtr.Zero;
         if (destructor != IntPtr.Zero)
         {
-            Marshal.GetDelegateForFunctionPointer<SumDelegateReturn2Destructor>(destructor)(data);
+            ((delegate* unmanaged[Cdecl]<IntPtr, void>)destructor)(data);
         }
         if (exception != null)
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
-    /// Pins `this` via GCHandle so the native trampoline delegate cannot be garbage collected
+    /// Roots `this` via GCHandle so the managed callback remains alive
     /// while Rust holds the function pointer. The GCHandle is freed when Rust drops the
     /// callback and invokes the destructor.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -3833,7 +4157,7 @@ public partial class SumDelegateReturn2 : IDisposable
         {
             var handle = GCHandle.Alloc(this);
             rval._data = GCHandle.ToIntPtr(handle);
-            rval._destructor = _prevent_gc_release_ptr;
+            rval._destructor = ReleaseHandlePtr;
         }
         else
         {
@@ -3856,6 +4180,17 @@ public partial class SumDelegateReturn2 : IDisposable
         rval._callback = _ptr;
         rval._data = _data;
         rval._destructor = _destructor;
+
+        if (_managed != null)
+        {
+            // Borrowed composite fields have no scoped marshaller to free a handle.
+            // Lazily retain an instance thunk for that path only.
+            _native ??= CallTrampoline;
+            rval._callback = Marshal.GetFunctionPointerForDelegate(_native);
+            rval._data = IntPtr.Zero;
+            rval._destructor = IntPtr.Zero;
+        }
+
         return rval;
     }
 
@@ -3967,6 +4302,8 @@ public partial class SliceBool : IEnumerable<Bool>, IDisposable
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         get => new(_data.ToPointer(), (int)_len);
     }
+
+
 
     /// Gets the element at the given index.
     public unsafe Bool this[int i]
@@ -4151,6 +4488,8 @@ public partial class SliceByte : IEnumerable<byte>, IDisposable
         get => new(_data.ToPointer(), (int)_len);
     }
 
+
+
     /// Gets the element at the given index.
     public unsafe byte this[int i]
     {
@@ -4334,6 +4673,8 @@ public partial class SliceInt : IEnumerable<int>, IDisposable
         get => new(_data.ToPointer(), (int)_len);
     }
 
+
+
     /// Gets the element at the given index.
     public unsafe int this[int i]
     {
@@ -4516,6 +4857,18 @@ public partial class SliceMutByte : IEnumerable<byte>, IDisposable
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         get => new(_data.ToPointer(), (int)_len);
     }
+
+
+    /// Returns a writable span over the borrowed memory without copying.
+    public unsafe Span<byte> Span
+    {
+        get
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            return new(_data.ToPointer(), checked((int)_len));
+        }
+    }
+
 
     /// Gets or sets the element at the given index.
     public unsafe byte this[int i]
@@ -4706,6 +5059,18 @@ public partial class SliceMutUint : IEnumerable<uint>, IDisposable
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         get => new(_data.ToPointer(), (int)_len);
     }
+
+
+    /// Returns a writable span over the borrowed memory without copying.
+    public unsafe Span<uint> Span
+    {
+        get
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            return new(_data.ToPointer(), checked((int)_len));
+        }
+    }
+
 
     /// Gets or sets the element at the given index.
     public unsafe uint this[int i]
@@ -5240,6 +5605,8 @@ public partial class SliceUint : IEnumerable<uint>, IDisposable
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         get => new(_data.ToPointer(), (int)_len);
     }
+
+
 
     /// Gets the element at the given index.
     public unsafe uint this[int i]
@@ -5893,9 +6260,13 @@ public partial class VecByte
 public partial class VecByte : IDisposable
 {
 
+    /// Copies the span into a new Rust-owned vector.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static VecByte From(Span<byte> data) => From((ReadOnlySpan<byte>)data);
+
     /// Creates a new Rust-owned vector by copying elements from the given span.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public static unsafe VecByte From(Span<byte> _data)
+    public static unsafe VecByte From(ReadOnlySpan<byte> _data)
     {
         var rval = new VecByte();
         fixed (void* _data_ptr = _data)
@@ -5921,8 +6292,7 @@ public partial class VecByte : IDisposable
 
     /// Copies all elements into a new managed array.
     ///
-    /// Prefer this over looping the indexer: the indexer marshals one element
-    /// per call, which is O(n) interop calls for what is a single copy.
+    /// Uses one bulk copy from the Rust-owned buffer.
     public unsafe byte[] ToArray()
     {
         if (_ptr == IntPtr.Zero) throw new NullReferenceException();
@@ -5938,7 +6308,7 @@ public partial class VecByte : IDisposable
         {
             if (_ptr == IntPtr.Zero) throw new NullReferenceException();
             if (i < 0 || (ulong)i >= _len) throw new IndexOutOfRangeException();
-            return Marshal.PtrToStructure<byte>(new IntPtr(_ptr.ToInt64() + i * sizeof(byte)));
+            return ((byte*)_ptr)[i];
         }
     }
 }
@@ -6116,9 +6486,13 @@ public partial class VecUtf8String
 public partial class VecUtf8String : IDisposable
 {
 
+    /// Copies the span into a new Rust-owned vector.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static VecUtf8String From(Span<Utf8String> data) => From((ReadOnlySpan<Utf8String>)data);
+
     /// Creates a new Rust-owned vector by marshalling each element from the given span.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public static unsafe VecUtf8String From(Span<Utf8String> _data)
+    public static unsafe VecUtf8String From(ReadOnlySpan<Utf8String> _data)
     {
         var _temp = new Utf8String.Unmanaged[_data.Length];
         for (var i = 0; i < _data.Length; ++i)
@@ -8325,7 +8699,21 @@ public static partial class Interop {
     [LibraryImport(NativeLib, EntryPoint = "pattern_ffi_slice_1")]
     [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static partial uint __span_pattern_ffi_slice_1(SliceUint.Unmanaged ffi_slice);
+
+
+    
+    [LibraryImport(NativeLib, EntryPoint = "pattern_ffi_slice_1")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static partial uint pattern_ffi_slice_1(SliceUint ffi_slice);
+
+
+    
+    [LibraryImport(NativeLib, EntryPoint = "pattern_ffi_slice_1b")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static partial uint __span_pattern_ffi_slice_1b(SliceMutUint.Unmanaged ffi_slice);
 
 
     
@@ -8346,7 +8734,21 @@ public static partial class Interop {
     [LibraryImport(NativeLib, EntryPoint = "pattern_ffi_slice_3")]
     [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static partial void __span_pattern_ffi_slice_3(SliceMutByte.Unmanaged slice, CallbackSliceMut callback);
+
+
+    
+    [LibraryImport(NativeLib, EntryPoint = "pattern_ffi_slice_3")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static partial void pattern_ffi_slice_3(SliceMutByte slice, CallbackSliceMut callback);
+
+
+    
+    [LibraryImport(NativeLib, EntryPoint = "pattern_ffi_slice_4")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static partial void __span_pattern_ffi_slice_4(SliceByte.Unmanaged _slice, SliceMutByte.Unmanaged _slice2);
 
 
     
@@ -8403,6 +8805,13 @@ public static partial class Interop {
     [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static partial void pattern_ffi_slice_of_structs_callback(CallbackSliceUseSliceByteInStruct callback);
+
+
+    
+    [LibraryImport(NativeLib, EntryPoint = "pattern_ffi_slice_of_unit_enum")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static partial uint __span_pattern_ffi_slice_of_unit_enum(SliceEnumDocumented.Unmanaged slice);
 
 
     
@@ -9051,6 +9460,13 @@ public static partial class Interop {
 
 
     
+    [LibraryImport(NativeLib, EntryPoint = "service_callbacks_callback_with_slice")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static partial ResultVoidError __span_service_callbacks_callback_with_slice(IntPtr instance, SumDelegateReturn callback, SliceInt.Unmanaged input);
+
+
+    
     [LibraryImport(NativeLib, EntryPoint = "service_callbacks_create")]
     [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -9219,6 +9635,13 @@ public static partial class Interop {
 
 
     
+    [LibraryImport(NativeLib, EntryPoint = "service_result_result_slice")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static partial ResultUintError __span_service_result_result_slice(IntPtr instance, SliceUint.Unmanaged slice, ulong i);
+
+
+    
     [LibraryImport(NativeLib, EntryPoint = "service_result_result_string")]
     [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -9339,6 +9762,13 @@ public static partial class Interop {
 
 
     
+    [LibraryImport(NativeLib, EntryPoint = "service_various_slices_mut_self")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static partial byte __span_service_various_slices_mut_self(IntPtr instance, SliceByte.Unmanaged slice);
+
+
+    
     [LibraryImport(NativeLib, EntryPoint = "service_various_slices_mut_self_ffi_error")]
     [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -9346,10 +9776,24 @@ public static partial class Interop {
 
 
     
+    [LibraryImport(NativeLib, EntryPoint = "service_various_slices_mut_self_ffi_error")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static partial ResultVoidError __span_service_various_slices_mut_self_ffi_error(IntPtr instance, SliceMutByte.Unmanaged _slice);
+
+
+    
     [LibraryImport(NativeLib, EntryPoint = "service_various_slices_mut_self_no_error")]
     [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     internal static partial ResultVoidError service_various_slices_mut_self_no_error(IntPtr instance, SliceMutByte slice);
+
+
+    
+    [LibraryImport(NativeLib, EntryPoint = "service_various_slices_mut_self_no_error")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static partial ResultVoidError __span_service_various_slices_mut_self_no_error(IntPtr instance, SliceMutByte.Unmanaged slice);
 
 
     
@@ -9367,10 +9811,31 @@ public static partial class Interop {
 
 
     
+    [LibraryImport(NativeLib, EntryPoint = "service_various_slices_mut_self_ref_slice")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static partial byte __span_service_various_slices_mut_self_ref_slice(IntPtr instance, IntPtr x, IntPtr _y, SliceByte.Unmanaged _slice);
+
+
+    
     [LibraryImport(NativeLib, EntryPoint = "service_various_slices_mut_self_ref_slice_limited")]
     [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     internal static partial byte service_various_slices_mut_self_ref_slice_limited(IntPtr instance, IntPtr x, IntPtr _y, SliceByte _slice, SliceByte _slice2);
+
+
+    
+    [LibraryImport(NativeLib, EntryPoint = "service_various_slices_mut_self_ref_slice_limited")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static partial byte __span_service_various_slices_mut_self_ref_slice_limited(IntPtr instance, IntPtr x, IntPtr _y, SliceByte.Unmanaged _slice, SliceByte.Unmanaged _slice2);
+
+
+    
+    [LibraryImport(NativeLib, EntryPoint = "service_various_slices_mut_self_void")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static partial void __span_service_various_slices_mut_self_void(IntPtr instance, SliceBool.Unmanaged _slice);
 
 
     
@@ -9455,6 +9920,151 @@ public static partial class Interop {
     [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static partial WireOfU832 wire_return_byte_array();
+
+
+    /// Borrows span memory for this call. The native function must not retain its pointer.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    internal static unsafe ResultUintError service_result_result_slice(IntPtr instance, ReadOnlySpan<uint> slice, ulong i)
+    {
+        fixed (uint* __span_ptr_1 = slice)
+        {
+            return __span_service_result_result_slice(instance, new SliceUint.Unmanaged { _data = (IntPtr)__span_ptr_1, _len = (ulong)slice.Length }, i);
+        }
+    }
+
+
+    /// Borrows span memory for this call. The native function must not retain its pointer.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    internal static unsafe ResultVoidError service_callbacks_callback_with_slice(IntPtr instance, SumDelegateReturn callback, ReadOnlySpan<int> input)
+    {
+        fixed (int* __span_ptr_2 = input)
+        {
+            return __span_service_callbacks_callback_with_slice(instance, callback, new SliceInt.Unmanaged { _data = (IntPtr)__span_ptr_2, _len = (ulong)input.Length });
+        }
+    }
+
+
+    /// Borrows span memory for this call. The native function must not retain its pointer.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    internal static unsafe ResultVoidError service_various_slices_mut_self_ffi_error(IntPtr instance, Span<byte> _slice)
+    {
+        fixed (byte* __span_ptr_1 = _slice)
+        {
+            return __span_service_various_slices_mut_self_ffi_error(instance, new SliceMutByte.Unmanaged { _data = (IntPtr)__span_ptr_1, _len = (ulong)_slice.Length });
+        }
+    }
+
+
+    /// Borrows span memory for this call. The native function must not retain its pointer.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    internal static unsafe ResultVoidError service_various_slices_mut_self_no_error(IntPtr instance, Span<byte> slice)
+    {
+        fixed (byte* __span_ptr_1 = slice)
+        {
+            return __span_service_various_slices_mut_self_no_error(instance, new SliceMutByte.Unmanaged { _data = (IntPtr)__span_ptr_1, _len = (ulong)slice.Length });
+        }
+    }
+
+
+    /// Borrows span memory for this call. The native function must not retain its pointer.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    internal static unsafe byte service_various_slices_mut_self(IntPtr instance, ReadOnlySpan<byte> slice)
+    {
+        fixed (byte* __span_ptr_1 = slice)
+        {
+            return __span_service_various_slices_mut_self(instance, new SliceByte.Unmanaged { _data = (IntPtr)__span_ptr_1, _len = (ulong)slice.Length });
+        }
+    }
+
+
+    /// Borrows span memory for this call. The native function must not retain its pointer.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    internal static unsafe byte service_various_slices_mut_self_ref_slice(IntPtr instance, IntPtr x, IntPtr _y, ReadOnlySpan<byte> _slice)
+    {
+        fixed (byte* __span_ptr_3 = _slice)
+        {
+            return __span_service_various_slices_mut_self_ref_slice(instance, x, _y, new SliceByte.Unmanaged { _data = (IntPtr)__span_ptr_3, _len = (ulong)_slice.Length });
+        }
+    }
+
+
+    /// Borrows span memory for this call. The native function must not retain its pointer.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    internal static unsafe byte service_various_slices_mut_self_ref_slice_limited(IntPtr instance, IntPtr x, IntPtr _y, ReadOnlySpan<byte> _slice, ReadOnlySpan<byte> _slice2)
+    {
+        fixed (byte* __span_ptr_3 = _slice)
+        fixed (byte* __span_ptr_4 = _slice2)
+        {
+            return __span_service_various_slices_mut_self_ref_slice_limited(instance, x, _y, new SliceByte.Unmanaged { _data = (IntPtr)__span_ptr_3, _len = (ulong)_slice.Length }, new SliceByte.Unmanaged { _data = (IntPtr)__span_ptr_4, _len = (ulong)_slice2.Length });
+        }
+    }
+
+
+    /// Borrows span memory for this call. The native function must not retain its pointer.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    internal static unsafe void service_various_slices_mut_self_void(IntPtr instance, ReadOnlySpan<Bool> _slice)
+    {
+        fixed (Bool* __span_ptr_1 = _slice)
+        {
+            __span_service_various_slices_mut_self_void(instance, new SliceBool.Unmanaged { _data = (IntPtr)__span_ptr_1, _len = (ulong)_slice.Length });
+        }
+    }
+
+
+    /// Borrows span memory for this call. The native function must not retain its pointer.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static unsafe uint pattern_ffi_slice_1(ReadOnlySpan<uint> ffi_slice)
+    {
+        fixed (uint* __span_ptr_0 = ffi_slice)
+        {
+            return __span_pattern_ffi_slice_1(new SliceUint.Unmanaged { _data = (IntPtr)__span_ptr_0, _len = (ulong)ffi_slice.Length });
+        }
+    }
+
+
+    /// Borrows span memory for this call. The native function must not retain its pointer.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static unsafe uint pattern_ffi_slice_1b(Span<uint> ffi_slice)
+    {
+        fixed (uint* __span_ptr_0 = ffi_slice)
+        {
+            return __span_pattern_ffi_slice_1b(new SliceMutUint.Unmanaged { _data = (IntPtr)__span_ptr_0, _len = (ulong)ffi_slice.Length });
+        }
+    }
+
+
+    /// Borrows span memory for this call. The native function must not retain its pointer.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static unsafe uint pattern_ffi_slice_of_unit_enum(ReadOnlySpan<EnumDocumented> slice)
+    {
+        fixed (EnumDocumented* __span_ptr_0 = slice)
+        {
+            return __span_pattern_ffi_slice_of_unit_enum(new SliceEnumDocumented.Unmanaged { _data = (IntPtr)__span_ptr_0, _len = (ulong)slice.Length });
+        }
+    }
+
+
+    /// Borrows span memory for this call. The native function must not retain its pointer.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static unsafe void pattern_ffi_slice_3(Span<byte> slice, CallbackSliceMut callback)
+    {
+        fixed (byte* __span_ptr_0 = slice)
+        {
+            __span_pattern_ffi_slice_3(new SliceMutByte.Unmanaged { _data = (IntPtr)__span_ptr_0, _len = (ulong)slice.Length }, callback);
+        }
+    }
+
+
+    /// Borrows span memory for this call. The native function must not retain its pointer.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static unsafe void pattern_ffi_slice_4(ReadOnlySpan<byte> _slice, Span<byte> _slice2)
+    {
+        fixed (byte* __span_ptr_0 = _slice)
+        fixed (byte* __span_ptr_1 = _slice2)
+        {
+            __span_pattern_ffi_slice_4(new SliceByte.Unmanaged { _data = (IntPtr)__span_ptr_0, _len = (ulong)_slice.Length }, new SliceMutByte.Unmanaged { _data = (IntPtr)__span_ptr_1, _len = (ulong)_slice2.Length });
+        }
+    }
 
 
     
@@ -24522,8 +25132,9 @@ public partial class SumDelegateReturn
 /// thrown inside the callback are captured and re-thrown on <see cref="Dispose"/>.
 ///
 /// When received from Rust, use <see cref="Dispose"/> after the last use to allow
-/// Rust to free any associated data. When passed to Rust, hold onto this class until done,
-/// otherwise your function trampoline might get deallocated.
+/// Rust to free any associated data. When passed by value, Rust keeps the managed
+/// callback alive until it drops the callback. Borrowed callbacks require the wrapper
+/// to remain alive for the duration of the native call.
 /// <remarks>
 /// ⚠️ This type is an owned resource. You must 1) either call `Dispose()` on it,
 /// 2) call another method on it that promises to free it, or 3) 'move' it to Rust
@@ -24532,9 +25143,10 @@ public partial class SumDelegateReturn
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class SumDelegateReturn : IDisposable
 {
-    // Static helpers to de-allocate a pinned GCHandle when callback dropped / disposed.
-    private static readonly SumDelegateReturnDestructor _prevent_gc_release = data => GCHandle.FromIntPtr(data).Free();
-    private static readonly IntPtr _prevent_gc_release_ptr = Marshal.GetFunctionPointerForDelegate(_prevent_gc_release);
+    // Rust releases this rooting handle when it drops the retained callback.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static void ReleaseHandle(IntPtr data) => GCHandle.FromIntPtr(data).Free();
+    private static unsafe IntPtr ReleaseHandlePtr => (IntPtr)(delegate* unmanaged[Cdecl]<IntPtr, void>)&ReleaseHandle;
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
@@ -24543,12 +25155,23 @@ public partial class SumDelegateReturn : IDisposable
 
     /// Wraps a managed delegate so it can be passed to Rust as a callback.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public SumDelegateReturn(SumDelegateReturnDelegate managed)
+    public unsafe SumDelegateReturn(SumDelegateReturnDelegate managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         _managed = managed;
-        _native = CallTrampoline;
-        _ptr = Marshal.GetFunctionPointerForDelegate(_native);
+
+        _ptr = (IntPtr)(delegate* unmanaged[Cdecl]<int, int, IntPtr, ResultVoidError.Unmanaged>)&CallUnmanaged;
+
     }
+
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static ResultVoidError.Unmanaged CallUnmanaged(int x, int y, IntPtr callback_data)
+    {
+        var target = (SumDelegateReturn)GCHandle.FromIntPtr(callback_data).Target;
+        return target.CallTrampoline(x, y, callback_data);
+    }
+
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private ResultVoidError.Unmanaged CallTrampoline(int x, int y, IntPtr callback_data)
@@ -24571,9 +25194,11 @@ public partial class SumDelegateReturn : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal ResultVoidError CallRaw(int x, int y)
+    internal unsafe ResultVoidError CallRaw(int x, int y)
     {
-        var __target = Marshal.GetDelegateForFunctionPointer<SumDelegateReturnNative>(_ptr);
+
+        var __target = (delegate* unmanaged[Cdecl]<int, int, IntPtr, ResultVoidError.Unmanaged>)_ptr;
+
         
         return __target(x, y, _data).ToManaged();
         
@@ -24588,6 +25213,7 @@ public partial class SumDelegateReturn : IDisposable
         if (_managed != null)
         {
             return _managed(x, y);
+            
         }
         return CallRaw(x, y);
     }
@@ -24596,7 +25222,7 @@ public partial class SumDelegateReturn : IDisposable
     /// previous invocation, that exception is re-thrown here. If the callback was
     /// received from Rust, this tells Rust to free the associated data pointer.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public void Dispose()
+    public unsafe void Dispose()
     {
         var exception = _exception;
         _exception = null;
@@ -24607,14 +25233,14 @@ public partial class SumDelegateReturn : IDisposable
         _ptr = IntPtr.Zero;
         if (destructor != IntPtr.Zero)
         {
-            Marshal.GetDelegateForFunctionPointer<SumDelegateReturnDestructor>(destructor)(data);
+            ((delegate* unmanaged[Cdecl]<IntPtr, void>)destructor)(data);
         }
         if (exception != null)
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
-    /// Pins `this` via GCHandle so the native trampoline delegate cannot be garbage collected
+    /// Roots `this` via GCHandle so the managed callback remains alive
     /// while Rust holds the function pointer. The GCHandle is freed when Rust drops the
     /// callback and invokes the destructor.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -24629,7 +25255,7 @@ public partial class SumDelegateReturn : IDisposable
         {
             var handle = GCHandle.Alloc(this);
             rval._data = GCHandle.ToIntPtr(handle);
-            rval._destructor = _prevent_gc_release_ptr;
+            rval._destructor = ReleaseHandlePtr;
         }
         else
         {
@@ -24652,6 +25278,17 @@ public partial class SumDelegateReturn : IDisposable
         rval._callback = _ptr;
         rval._data = _data;
         rval._destructor = _destructor;
+
+        if (_managed != null)
+        {
+            // Borrowed composite fields have no scoped marshaller to free a handle.
+            // Lazily retain an instance thunk for that path only.
+            _native ??= CallTrampoline;
+            rval._callback = Marshal.GetFunctionPointerForDelegate(_native);
+            rval._data = IntPtr.Zero;
+            rval._destructor = IntPtr.Zero;
+        }
+
         return rval;
     }
 
@@ -24748,8 +25385,9 @@ public partial class CallbackHugeVecSlice
 /// thrown inside the callback are captured and re-thrown on <see cref="Dispose"/>.
 ///
 /// When received from Rust, use <see cref="Dispose"/> after the last use to allow
-/// Rust to free any associated data. When passed to Rust, hold onto this class until done,
-/// otherwise your function trampoline might get deallocated.
+/// Rust to free any associated data. When passed by value, Rust keeps the managed
+/// callback alive until it drops the callback. Borrowed callbacks require the wrapper
+/// to remain alive for the duration of the native call.
 /// <remarks>
 /// ⚠️ This type is an owned resource. You must 1) either call `Dispose()` on it,
 /// 2) call another method on it that promises to free it, or 3) 'move' it to Rust
@@ -24758,9 +25396,10 @@ public partial class CallbackHugeVecSlice
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class CallbackHugeVecSlice : IDisposable
 {
-    // Static helpers to de-allocate a pinned GCHandle when callback dropped / disposed.
-    private static readonly CallbackHugeVecSliceDestructor _prevent_gc_release = data => GCHandle.FromIntPtr(data).Free();
-    private static readonly IntPtr _prevent_gc_release_ptr = Marshal.GetFunctionPointerForDelegate(_prevent_gc_release);
+    // Rust releases this rooting handle when it drops the retained callback.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static void ReleaseHandle(IntPtr data) => GCHandle.FromIntPtr(data).Free();
+    private static unsafe IntPtr ReleaseHandlePtr => (IntPtr)(delegate* unmanaged[Cdecl]<IntPtr, void>)&ReleaseHandle;
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
@@ -24769,12 +25408,23 @@ public partial class CallbackHugeVecSlice : IDisposable
 
     /// Wraps a managed delegate so it can be passed to Rust as a callback.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public CallbackHugeVecSlice(CallbackHugeVecSliceDelegate managed)
+    public unsafe CallbackHugeVecSlice(CallbackHugeVecSliceDelegate managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         _managed = managed;
-        _native = CallTrampoline;
-        _ptr = Marshal.GetFunctionPointerForDelegate(_native);
+
+        _ptr = (IntPtr)(delegate* unmanaged[Cdecl]<SliceVec3f32.Unmanaged, IntPtr, Vec3f32.Unmanaged>)&CallUnmanaged;
+
     }
+
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static Vec3f32.Unmanaged CallUnmanaged(SliceVec3f32.Unmanaged slice, IntPtr callback_data)
+    {
+        var target = (CallbackHugeVecSlice)GCHandle.FromIntPtr(callback_data).Target;
+        return target.CallTrampoline(slice, callback_data);
+    }
+
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private Vec3f32.Unmanaged CallTrampoline(SliceVec3f32.Unmanaged slice, IntPtr callback_data)
@@ -24797,9 +25447,11 @@ public partial class CallbackHugeVecSlice : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Vec3f32 CallRaw(SliceVec3f32 slice)
+    internal unsafe Vec3f32 CallRaw(SliceVec3f32 slice)
     {
-        var __target = Marshal.GetDelegateForFunctionPointer<CallbackHugeVecSliceNative>(_ptr);
+
+        var __target = (delegate* unmanaged[Cdecl]<SliceVec3f32.Unmanaged, IntPtr, Vec3f32.Unmanaged>)_ptr;
+
         
         return __target(slice.ToUnmanaged(), _data).ToManaged();
         
@@ -24814,6 +25466,7 @@ public partial class CallbackHugeVecSlice : IDisposable
         if (_managed != null)
         {
             return _managed(slice);
+            
         }
         return CallRaw(slice);
     }
@@ -24822,7 +25475,7 @@ public partial class CallbackHugeVecSlice : IDisposable
     /// previous invocation, that exception is re-thrown here. If the callback was
     /// received from Rust, this tells Rust to free the associated data pointer.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public void Dispose()
+    public unsafe void Dispose()
     {
         var exception = _exception;
         _exception = null;
@@ -24833,14 +25486,14 @@ public partial class CallbackHugeVecSlice : IDisposable
         _ptr = IntPtr.Zero;
         if (destructor != IntPtr.Zero)
         {
-            Marshal.GetDelegateForFunctionPointer<CallbackHugeVecSliceDestructor>(destructor)(data);
+            ((delegate* unmanaged[Cdecl]<IntPtr, void>)destructor)(data);
         }
         if (exception != null)
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
-    /// Pins `this` via GCHandle so the native trampoline delegate cannot be garbage collected
+    /// Roots `this` via GCHandle so the managed callback remains alive
     /// while Rust holds the function pointer. The GCHandle is freed when Rust drops the
     /// callback and invokes the destructor.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -24855,7 +25508,7 @@ public partial class CallbackHugeVecSlice : IDisposable
         {
             var handle = GCHandle.Alloc(this);
             rval._data = GCHandle.ToIntPtr(handle);
-            rval._destructor = _prevent_gc_release_ptr;
+            rval._destructor = ReleaseHandlePtr;
         }
         else
         {
@@ -24878,6 +25531,17 @@ public partial class CallbackHugeVecSlice : IDisposable
         rval._callback = _ptr;
         rval._data = _data;
         rval._destructor = _destructor;
+
+        if (_managed != null)
+        {
+            // Borrowed composite fields have no scoped marshaller to free a handle.
+            // Lazily retain an instance thunk for that path only.
+            _native ??= CallTrampoline;
+            rval._callback = Marshal.GetFunctionPointerForDelegate(_native);
+            rval._data = IntPtr.Zero;
+            rval._destructor = IntPtr.Zero;
+        }
+
         return rval;
     }
 
@@ -24974,8 +25638,9 @@ public partial class CallbackCharArray2
 /// thrown inside the callback are captured and re-thrown on <see cref="Dispose"/>.
 ///
 /// When received from Rust, use <see cref="Dispose"/> after the last use to allow
-/// Rust to free any associated data. When passed to Rust, hold onto this class until done,
-/// otherwise your function trampoline might get deallocated.
+/// Rust to free any associated data. When passed by value, Rust keeps the managed
+/// callback alive until it drops the callback. Borrowed callbacks require the wrapper
+/// to remain alive for the duration of the native call.
 /// <remarks>
 /// ⚠️ This type is an owned resource. You must 1) either call `Dispose()` on it,
 /// 2) call another method on it that promises to free it, or 3) 'move' it to Rust
@@ -24984,9 +25649,10 @@ public partial class CallbackCharArray2
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class CallbackCharArray2 : IDisposable
 {
-    // Static helpers to de-allocate a pinned GCHandle when callback dropped / disposed.
-    private static readonly CallbackCharArray2Destructor _prevent_gc_release = data => GCHandle.FromIntPtr(data).Free();
-    private static readonly IntPtr _prevent_gc_release_ptr = Marshal.GetFunctionPointerForDelegate(_prevent_gc_release);
+    // Rust releases this rooting handle when it drops the retained callback.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static void ReleaseHandle(IntPtr data) => GCHandle.FromIntPtr(data).Free();
+    private static unsafe IntPtr ReleaseHandlePtr => (IntPtr)(delegate* unmanaged[Cdecl]<IntPtr, void>)&ReleaseHandle;
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
@@ -24995,12 +25661,23 @@ public partial class CallbackCharArray2 : IDisposable
 
     /// Wraps a managed delegate so it can be passed to Rust as a callback.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public CallbackCharArray2(CallbackCharArray2Delegate managed)
+    public unsafe CallbackCharArray2(CallbackCharArray2Delegate managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         _managed = managed;
-        _native = CallTrampoline;
-        _ptr = Marshal.GetFunctionPointerForDelegate(_native);
+
+        _ptr = (IntPtr)(delegate* unmanaged[Cdecl]<CharArray.Unmanaged, IntPtr, void>)&CallUnmanaged;
+
     }
+
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static void CallUnmanaged(CharArray.Unmanaged value, IntPtr callback_data)
+    {
+        var target = (CallbackCharArray2)GCHandle.FromIntPtr(callback_data).Target;
+        target.CallTrampoline(value, callback_data);
+    }
+
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void CallTrampoline(CharArray.Unmanaged value, IntPtr callback_data)
@@ -25023,9 +25700,11 @@ public partial class CallbackCharArray2 : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal void CallRaw(CharArray value)
+    internal unsafe void CallRaw(CharArray value)
     {
-        var __target = Marshal.GetDelegateForFunctionPointer<CallbackCharArray2Native>(_ptr);
+
+        var __target = (delegate* unmanaged[Cdecl]<CharArray.Unmanaged, IntPtr, void>)_ptr;
+
         
         __target(value.ToUnmanaged(), _data);
         
@@ -25040,6 +25719,7 @@ public partial class CallbackCharArray2 : IDisposable
         if (_managed != null)
         {
             _managed(value);
+            return;
         }
         CallRaw(value);
     }
@@ -25048,7 +25728,7 @@ public partial class CallbackCharArray2 : IDisposable
     /// previous invocation, that exception is re-thrown here. If the callback was
     /// received from Rust, this tells Rust to free the associated data pointer.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public void Dispose()
+    public unsafe void Dispose()
     {
         var exception = _exception;
         _exception = null;
@@ -25059,14 +25739,14 @@ public partial class CallbackCharArray2 : IDisposable
         _ptr = IntPtr.Zero;
         if (destructor != IntPtr.Zero)
         {
-            Marshal.GetDelegateForFunctionPointer<CallbackCharArray2Destructor>(destructor)(data);
+            ((delegate* unmanaged[Cdecl]<IntPtr, void>)destructor)(data);
         }
         if (exception != null)
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
-    /// Pins `this` via GCHandle so the native trampoline delegate cannot be garbage collected
+    /// Roots `this` via GCHandle so the managed callback remains alive
     /// while Rust holds the function pointer. The GCHandle is freed when Rust drops the
     /// callback and invokes the destructor.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -25081,7 +25761,7 @@ public partial class CallbackCharArray2 : IDisposable
         {
             var handle = GCHandle.Alloc(this);
             rval._data = GCHandle.ToIntPtr(handle);
-            rval._destructor = _prevent_gc_release_ptr;
+            rval._destructor = ReleaseHandlePtr;
         }
         else
         {
@@ -25104,6 +25784,17 @@ public partial class CallbackCharArray2 : IDisposable
         rval._callback = _ptr;
         rval._data = _data;
         rval._destructor = _destructor;
+
+        if (_managed != null)
+        {
+            // Borrowed composite fields have no scoped marshaller to free a handle.
+            // Lazily retain an instance thunk for that path only.
+            _native ??= CallTrampoline;
+            rval._callback = Marshal.GetFunctionPointerForDelegate(_native);
+            rval._data = IntPtr.Zero;
+            rval._destructor = IntPtr.Zero;
+        }
+
         return rval;
     }
 
@@ -25200,8 +25891,9 @@ public partial class CallbackSliceUseSliceByteInStruct
 /// thrown inside the callback are captured and re-thrown on <see cref="Dispose"/>.
 ///
 /// When received from Rust, use <see cref="Dispose"/> after the last use to allow
-/// Rust to free any associated data. When passed to Rust, hold onto this class until done,
-/// otherwise your function trampoline might get deallocated.
+/// Rust to free any associated data. When passed by value, Rust keeps the managed
+/// callback alive until it drops the callback. Borrowed callbacks require the wrapper
+/// to remain alive for the duration of the native call.
 /// <remarks>
 /// ⚠️ This type is an owned resource. You must 1) either call `Dispose()` on it,
 /// 2) call another method on it that promises to free it, or 3) 'move' it to Rust
@@ -25210,9 +25902,10 @@ public partial class CallbackSliceUseSliceByteInStruct
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class CallbackSliceUseSliceByteInStruct : IDisposable
 {
-    // Static helpers to de-allocate a pinned GCHandle when callback dropped / disposed.
-    private static readonly CallbackSliceUseSliceByteInStructDestructor _prevent_gc_release = data => GCHandle.FromIntPtr(data).Free();
-    private static readonly IntPtr _prevent_gc_release_ptr = Marshal.GetFunctionPointerForDelegate(_prevent_gc_release);
+    // Rust releases this rooting handle when it drops the retained callback.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static void ReleaseHandle(IntPtr data) => GCHandle.FromIntPtr(data).Free();
+    private static unsafe IntPtr ReleaseHandlePtr => (IntPtr)(delegate* unmanaged[Cdecl]<IntPtr, void>)&ReleaseHandle;
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
@@ -25221,12 +25914,23 @@ public partial class CallbackSliceUseSliceByteInStruct : IDisposable
 
     /// Wraps a managed delegate so it can be passed to Rust as a callback.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public CallbackSliceUseSliceByteInStruct(CallbackSliceUseSliceByteInStructDelegate managed)
+    public unsafe CallbackSliceUseSliceByteInStruct(CallbackSliceUseSliceByteInStructDelegate managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         _managed = managed;
-        _native = CallTrampoline;
-        _ptr = Marshal.GetFunctionPointerForDelegate(_native);
+
+        _ptr = (IntPtr)(delegate* unmanaged[Cdecl]<SliceUseSliceByteInStruct.Unmanaged, IntPtr, void>)&CallUnmanaged;
+
     }
+
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static void CallUnmanaged(SliceUseSliceByteInStruct.Unmanaged slice, IntPtr callback_data)
+    {
+        var target = (CallbackSliceUseSliceByteInStruct)GCHandle.FromIntPtr(callback_data).Target;
+        target.CallTrampoline(slice, callback_data);
+    }
+
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void CallTrampoline(SliceUseSliceByteInStruct.Unmanaged slice, IntPtr callback_data)
@@ -25249,9 +25953,11 @@ public partial class CallbackSliceUseSliceByteInStruct : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal void CallRaw(SliceUseSliceByteInStruct slice)
+    internal unsafe void CallRaw(SliceUseSliceByteInStruct slice)
     {
-        var __target = Marshal.GetDelegateForFunctionPointer<CallbackSliceUseSliceByteInStructNative>(_ptr);
+
+        var __target = (delegate* unmanaged[Cdecl]<SliceUseSliceByteInStruct.Unmanaged, IntPtr, void>)_ptr;
+
         
         __target(slice.ToUnmanaged(), _data);
         
@@ -25266,6 +25972,7 @@ public partial class CallbackSliceUseSliceByteInStruct : IDisposable
         if (_managed != null)
         {
             _managed(slice);
+            return;
         }
         CallRaw(slice);
     }
@@ -25274,7 +25981,7 @@ public partial class CallbackSliceUseSliceByteInStruct : IDisposable
     /// previous invocation, that exception is re-thrown here. If the callback was
     /// received from Rust, this tells Rust to free the associated data pointer.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public void Dispose()
+    public unsafe void Dispose()
     {
         var exception = _exception;
         _exception = null;
@@ -25285,14 +25992,14 @@ public partial class CallbackSliceUseSliceByteInStruct : IDisposable
         _ptr = IntPtr.Zero;
         if (destructor != IntPtr.Zero)
         {
-            Marshal.GetDelegateForFunctionPointer<CallbackSliceUseSliceByteInStructDestructor>(destructor)(data);
+            ((delegate* unmanaged[Cdecl]<IntPtr, void>)destructor)(data);
         }
         if (exception != null)
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
-    /// Pins `this` via GCHandle so the native trampoline delegate cannot be garbage collected
+    /// Roots `this` via GCHandle so the managed callback remains alive
     /// while Rust holds the function pointer. The GCHandle is freed when Rust drops the
     /// callback and invokes the destructor.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -25307,7 +26014,7 @@ public partial class CallbackSliceUseSliceByteInStruct : IDisposable
         {
             var handle = GCHandle.Alloc(this);
             rval._data = GCHandle.ToIntPtr(handle);
-            rval._destructor = _prevent_gc_release_ptr;
+            rval._destructor = ReleaseHandlePtr;
         }
         else
         {
@@ -25330,6 +26037,17 @@ public partial class CallbackSliceUseSliceByteInStruct : IDisposable
         rval._callback = _ptr;
         rval._data = _data;
         rval._destructor = _destructor;
+
+        if (_managed != null)
+        {
+            // Borrowed composite fields have no scoped marshaller to free a handle.
+            // Lazily retain an instance thunk for that path only.
+            _native ??= CallTrampoline;
+            rval._callback = Marshal.GetFunctionPointerForDelegate(_native);
+            rval._data = IntPtr.Zero;
+            rval._destructor = IntPtr.Zero;
+        }
+
         return rval;
     }
 
@@ -25426,8 +26144,9 @@ public partial class NestedStringCallback
 /// thrown inside the callback are captured and re-thrown on <see cref="Dispose"/>.
 ///
 /// When received from Rust, use <see cref="Dispose"/> after the last use to allow
-/// Rust to free any associated data. When passed to Rust, hold onto this class until done,
-/// otherwise your function trampoline might get deallocated.
+/// Rust to free any associated data. When passed by value, Rust keeps the managed
+/// callback alive until it drops the callback. Borrowed callbacks require the wrapper
+/// to remain alive for the duration of the native call.
 /// <remarks>
 /// ⚠️ This type is an owned resource. You must 1) either call `Dispose()` on it,
 /// 2) call another method on it that promises to free it, or 3) 'move' it to Rust
@@ -25436,9 +26155,10 @@ public partial class NestedStringCallback
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class NestedStringCallback : IDisposable
 {
-    // Static helpers to de-allocate a pinned GCHandle when callback dropped / disposed.
-    private static readonly NestedStringCallbackDestructor _prevent_gc_release = data => GCHandle.FromIntPtr(data).Free();
-    private static readonly IntPtr _prevent_gc_release_ptr = Marshal.GetFunctionPointerForDelegate(_prevent_gc_release);
+    // Rust releases this rooting handle when it drops the retained callback.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static void ReleaseHandle(IntPtr data) => GCHandle.FromIntPtr(data).Free();
+    private static unsafe IntPtr ReleaseHandlePtr => (IntPtr)(delegate* unmanaged[Cdecl]<IntPtr, void>)&ReleaseHandle;
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
@@ -25447,12 +26167,23 @@ public partial class NestedStringCallback : IDisposable
 
     /// Wraps a managed delegate so it can be passed to Rust as a callback.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public NestedStringCallback(NestedStringCallbackDelegate managed)
+    public unsafe NestedStringCallback(NestedStringCallbackDelegate managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         _managed = managed;
-        _native = CallTrampoline;
-        _ptr = Marshal.GetFunctionPointerForDelegate(_native);
+
+        _ptr = (IntPtr)(delegate* unmanaged[Cdecl]<UseString.Unmanaged, IntPtr, void>)&CallUnmanaged;
+
     }
+
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static void CallUnmanaged(UseString.Unmanaged s, IntPtr callback_data)
+    {
+        var target = (NestedStringCallback)GCHandle.FromIntPtr(callback_data).Target;
+        target.CallTrampoline(s, callback_data);
+    }
+
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void CallTrampoline(UseString.Unmanaged s, IntPtr callback_data)
@@ -25475,9 +26206,11 @@ public partial class NestedStringCallback : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal void CallRaw(UseString s)
+    internal unsafe void CallRaw(UseString s)
     {
-        var __target = Marshal.GetDelegateForFunctionPointer<NestedStringCallbackNative>(_ptr);
+
+        var __target = (delegate* unmanaged[Cdecl]<UseString.Unmanaged, IntPtr, void>)_ptr;
+
         
         __target(s.IntoUnmanaged(), _data);
         
@@ -25492,6 +26225,7 @@ public partial class NestedStringCallback : IDisposable
         if (_managed != null)
         {
             _managed(s);
+            return;
         }
         CallRaw(s);
     }
@@ -25500,7 +26234,7 @@ public partial class NestedStringCallback : IDisposable
     /// previous invocation, that exception is re-thrown here. If the callback was
     /// received from Rust, this tells Rust to free the associated data pointer.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public void Dispose()
+    public unsafe void Dispose()
     {
         var exception = _exception;
         _exception = null;
@@ -25511,14 +26245,14 @@ public partial class NestedStringCallback : IDisposable
         _ptr = IntPtr.Zero;
         if (destructor != IntPtr.Zero)
         {
-            Marshal.GetDelegateForFunctionPointer<NestedStringCallbackDestructor>(destructor)(data);
+            ((delegate* unmanaged[Cdecl]<IntPtr, void>)destructor)(data);
         }
         if (exception != null)
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
-    /// Pins `this` via GCHandle so the native trampoline delegate cannot be garbage collected
+    /// Roots `this` via GCHandle so the managed callback remains alive
     /// while Rust holds the function pointer. The GCHandle is freed when Rust drops the
     /// callback and invokes the destructor.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -25533,7 +26267,7 @@ public partial class NestedStringCallback : IDisposable
         {
             var handle = GCHandle.Alloc(this);
             rval._data = GCHandle.ToIntPtr(handle);
-            rval._destructor = _prevent_gc_release_ptr;
+            rval._destructor = ReleaseHandlePtr;
         }
         else
         {
@@ -25556,6 +26290,17 @@ public partial class NestedStringCallback : IDisposable
         rval._callback = _ptr;
         rval._data = _data;
         rval._destructor = _destructor;
+
+        if (_managed != null)
+        {
+            // Borrowed composite fields have no scoped marshaller to free a handle.
+            // Lazily retain an instance thunk for that path only.
+            _native ??= CallTrampoline;
+            rval._callback = Marshal.GetFunctionPointerForDelegate(_native);
+            rval._data = IntPtr.Zero;
+            rval._destructor = IntPtr.Zero;
+        }
+
         return rval;
     }
 
@@ -25667,6 +26412,8 @@ public partial class SliceEnumDocumented : IEnumerable<EnumDocumented>, IDisposa
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         get => new(_data.ToPointer(), (int)_len);
     }
+
+
 
     /// Gets the element at the given index.
     public unsafe EnumDocumented this[int i]
@@ -26852,9 +27599,13 @@ public partial class VecEnumPayload
 public partial class VecEnumPayload : IDisposable
 {
 
+    /// Copies the span into a new Rust-owned vector.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static VecEnumPayload From(Span<EnumPayload> data) => From((ReadOnlySpan<EnumPayload>)data);
+
     /// Creates a new Rust-owned vector by marshalling each element from the given span.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public static unsafe VecEnumPayload From(Span<EnumPayload> _data)
+    public static unsafe VecEnumPayload From(ReadOnlySpan<EnumPayload> _data)
     {
         var _temp = new EnumPayload.Unmanaged[_data.Length];
         for (var i = 0; i < _data.Length; ++i)
@@ -27057,9 +27808,13 @@ public partial class VecVec3f32
 public partial class VecVec3f32 : IDisposable
 {
 
+    /// Copies the span into a new Rust-owned vector.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static VecVec3f32 From(Span<Vec3f32> data) => From((ReadOnlySpan<Vec3f32>)data);
+
     /// Creates a new Rust-owned vector by marshalling each element from the given span.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public static unsafe VecVec3f32 From(Span<Vec3f32> _data)
+    public static unsafe VecVec3f32 From(ReadOnlySpan<Vec3f32> _data)
     {
         var _temp = new Vec3f32.Unmanaged[_data.Length];
         for (var i = 0; i < _data.Length; ++i)
@@ -27616,6 +28371,14 @@ public partial class ServiceCallbacks : IDisposable
 
     
     
+    /// Borrows span memory for this call.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public void CallbackWithSlice(SumDelegateReturn callback, ReadOnlySpan<int> input)
+    {
+        Interop.service_callbacks_callback_with_slice(_context, callback, input).AsOk();
+    }
+    
+    
     /// Invoke the callback stored at construction time.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public uint InvokeStoredCallback(uint x)
@@ -27872,6 +28635,14 @@ public partial class ServiceResult : IDisposable
 
     
     
+    /// Borrows span memory for this call.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public uint ResultSlice(ReadOnlySpan<uint> slice, ulong i)
+    {
+        return Interop.service_result_result_slice(_context, slice, i).AsOk();
+    }
+    
+    
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Test()
     {
@@ -28050,6 +28821,54 @@ public partial class ServiceVariousSlices : IDisposable
 
     
 
+    
+    
+    /// Borrows span memory for this call.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public byte MutSelf(ReadOnlySpan<byte> slice)
+    {
+        return Interop.service_various_slices_mut_self(_context, slice);
+    }
+    
+    
+    /// Borrows span memory for this call.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public void MutSelfVoid(ReadOnlySpan<Bool> _slice)
+    {
+        Interop.service_various_slices_mut_self_void(_context, _slice);
+    }
+    
+    
+    /// Borrows span memory for this call.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public byte MutSelfRefSlice(IntPtr x, IntPtr _y, ReadOnlySpan<byte> _slice)
+    {
+        return Interop.service_various_slices_mut_self_ref_slice(_context, x, _y, _slice);
+    }
+    
+    
+    /// Borrows span memory for this call.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public byte MutSelfRefSliceLimited(IntPtr x, IntPtr _y, ReadOnlySpan<byte> _slice, ReadOnlySpan<byte> _slice2)
+    {
+        return Interop.service_various_slices_mut_self_ref_slice_limited(_context, x, _y, _slice, _slice2);
+    }
+    
+    
+    /// Borrows span memory for this call.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public void MutSelfFfiError(Span<byte> _slice)
+    {
+        Interop.service_various_slices_mut_self_ffi_error(_context, _slice).AsOk();
+    }
+    
+    
+    /// Borrows span memory for this call.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public void MutSelfNoError(Span<byte> slice)
+    {
+        Interop.service_various_slices_mut_self_no_error(_context, slice).AsOk();
+    }
     
     
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]

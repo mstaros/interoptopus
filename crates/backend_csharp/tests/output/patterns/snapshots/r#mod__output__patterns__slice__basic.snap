@@ -57,6 +57,24 @@ public static partial class Interop {
     [LibraryImport(NativeLib, EntryPoint = "sum_slice_37846")]
     [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static partial uint __span_sum_slice_37846(SliceUint.Unmanaged values);
+
+
+    
+    [LibraryImport(NativeLib, EntryPoint = "sum_slice_37846")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static partial uint sum_slice_37846(SliceUint values);
+
+
+    /// Borrows span memory for this call. The native function must not retain its pointer.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static unsafe uint sum_slice_37846(ReadOnlySpan<uint> values)
+    {
+        fixed (uint* __span_ptr_0 = values)
+        {
+            return __span_sum_slice_37846(new SliceUint.Unmanaged { _data = (IntPtr)__span_ptr_0, _len = (ulong)values.Length });
+        }
+    }
 
 }

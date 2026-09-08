@@ -100,18 +100,7 @@ impl Pass {
                         _ => "",
                     };
                     span_args[index].insert("call", format!("{prefix}{}", arg.name));
-                    let (element, mutable) = match &ty.kind {
-                        TypeKind::TypePattern(TypePattern::Slice(element)) => (*element, false),
-                        TypeKind::TypePattern(TypePattern::SliceMut(element)) => (*element, true),
-                        _ => continue,
-                    };
-                    let element_ty = types.get(element).expect("slice element");
-                    if ty.decorators.param.is_some()
-                        || managed_conversion.managed_conversion(element) != Some(ManagedConversion::AsIs)
-                        || matches!(element_ty.kind, TypeKind::Delegate(_) | TypeKind::TypePattern(TypePattern::CStrPointer))
-                    {
-                        continue;
-                    }
+                    let Some((element_ty, mutable)) = span_element(arg.ty, types, managed_conversion) else { continue };
                     let span = if mutable { "Span" } else { "ReadOnlySpan" };
                     span_args[index].insert("ty", format!("{span}<{}>", element_ty.name));
                     let pointer = format!("__span_ptr_{index}");
@@ -154,4 +143,22 @@ impl Pass {
     pub fn imports_for(&self, output: &Output) -> Option<&[String]> {
         self.fn_imports.get(output).map(std::vec::Vec::as_slice)
     }
+}
+
+pub(crate) fn span_element<'a>(
+    id: crate::lang::TypeId,
+    types: &'a model::common::types::all::Pass,
+    managed_conversion: &model::common::types::info::managed_conversion::Pass,
+) -> Option<(&'a crate::lang::types::Type, bool)> {
+    let ty = types.get(id)?;
+    let (element, mutable) = match ty.kind {
+        TypeKind::TypePattern(TypePattern::Slice(element)) => (element, false),
+        TypeKind::TypePattern(TypePattern::SliceMut(element)) => (element, true),
+        _ => return None,
+    };
+    let element_ty = types.get(element)?;
+    (ty.decorators.param.is_none()
+        && managed_conversion.managed_conversion(element) == Some(ManagedConversion::AsIs)
+        && !matches!(element_ty.kind, TypeKind::Delegate(_) | TypeKind::TypePattern(TypePattern::CStrPointer)))
+        .then_some((element_ty, mutable))
 }

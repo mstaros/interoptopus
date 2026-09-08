@@ -21,8 +21,9 @@ delegate void {{ name }}Destructor(IntPtr data);
 /// thrown inside the callback are captured and re-thrown on <see cref="Dispose"/>.
 ///
 /// When received from Rust, use <see cref="Dispose"/> after the last use to allow
-/// Rust to free any associated data. When passed to Rust, hold onto this class until done,
-/// otherwise your function trampoline might get deallocated.
+/// Rust to free any associated data. When passed by value, Rust keeps the managed
+/// callback alive until it drops the callback. Borrowed callbacks require the wrapper
+/// to remain alive for the duration of the native call.
 {{ _types_docs_owned }}
 [NativeMarshalling(typeof(MarshallerMeta))]
 {{ visibility }} partial class {{ name }} : IDisposable

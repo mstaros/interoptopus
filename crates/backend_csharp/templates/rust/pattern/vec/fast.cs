@@ -11,6 +11,10 @@
 public partial class {{ name }} : IDisposable
 {
 
+    /// Copies the span into a new Rust-owned vector.
+    {{ _fns_decorators_all | indent }}
+    public static {{ name }} From(Span<{{ element_type }}> data) => From((ReadOnlySpan<{{ element_type }}>)data);
+
     /// Creates a new Rust-owned vector by copying elements from the given span.
     {{ _fns_decorators_all | indent }}
     public static unsafe {{ name }} From(ReadOnlySpan<{{ element_type }}> _data)

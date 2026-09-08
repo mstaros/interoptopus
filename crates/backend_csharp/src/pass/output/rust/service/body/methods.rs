@@ -39,6 +39,7 @@ impl Pass {
         types: &model::common::types::all::Pass,
         method_names: &model::rust::service::method::names::Pass,
         trampoline: &model::rust::types::info::trampoline::Pass,
+        managed_conversion: &model::common::types::info::managed_conversion::Pass,
     ) -> OutputResult {
         let templates = output_master.templates();
 
@@ -48,6 +49,31 @@ impl Pass {
             for &method_fn_id in &service.methods {
                 let Some(method_fn) = fns.get(method_fn_id) else { continue };
                 let Some(method_name) = method_names.get(method_fn_id) else { continue };
+
+                // Expose the span import on the service as well as on Interop.
+                if matches!(method_fn.kind, FunctionKind::Original)
+                    && !types.get(method_fn.signature.rval).is_some_and(|ty| matches!(ty.kind, TypeKind::TypePattern(TypePattern::TaskHandle)))
+                    && !method_fn.signature.arguments.iter().any(|arg| types.get(arg.ty).is_some_and(|ty| matches!(ty.kind, TypeKind::TypePattern(TypePattern::AsyncCallback(_)))))
+                {
+                    let mut args = build_args(&method_fn.signature.arguments[1..], types);
+                    let mut has_span = false;
+                    for (index, arg) in method_fn.signature.arguments[1..].iter().enumerate() {
+                        if let Some((element, mutable)) = output::rust::fns::rust::span_element(arg.ty, types, managed_conversion) {
+                            let span = if mutable { "Span" } else { "ReadOnlySpan" };
+                            args[index].insert("ty", Value::normal_string(&format!("{span}<{}>", element.name)));
+                            has_span = true;
+                        }
+                    }
+                    if has_span {
+                        let rval_kind = types.get(method_fn.signature.rval).map(|ty| &ty.kind);
+                        let result = resolve_result_rval(rval_kind, types);
+                        if let Some(rval) = result.rval_name.as_deref().or_else(|| types.get(method_fn.signature.rval).map(|ty| ty.name.as_str())) {
+                            let is_void = result.is_void || matches!(rval_kind, Some(TypeKind::Primitive(Primitive::Void)));
+                            rendered_methods.push(render(templates, rval, is_void, result.as_ok, method_name, &method_fn.name, &args,
+                                "/// Borrows span memory for this call.", "public", "_context")?);
+                        }
+                    }
+                }
 
                 match &method_fn.kind {
                     // Skip originals that have overloads — the overload will be rendered instead.

@@ -90,7 +90,7 @@ static class Benchmark {
         writer.Add("pattern_string_10(hello_world.Clone())", result);
 
         result = MeasureResult.Measure(iterations, () => Interop.pattern_string_11(in hello_world));
-        writer.Add("pattern_string_11(ref hello_world)", result);
+        writer.Add("pattern_string_11(in hello_world)", result);
 
         result = MeasureResult.Measure(iterations, () => "hello world".Utf8().Dispose());
         writer.Add("'hello world'.Utf8().Dispose()", result);
