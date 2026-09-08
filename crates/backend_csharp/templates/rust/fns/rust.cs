@@ -2,6 +2,7 @@
 {{ docs }}
 {%- endif %}
 [LibraryImport(NativeLib, EntryPoint = "{{symbol}}")]
+[UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
 {%- if rval_decorator %}
 [{{ rval_decorator }}]
 {%- endif %}

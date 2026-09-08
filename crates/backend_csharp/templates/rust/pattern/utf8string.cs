@@ -7,8 +7,8 @@ public partial class Utf8String
 
 /// A Rust-allocated UTF-8 string.
 ///
-/// This type wraps a native Rust <c>String</c> and provides zero-copy read access
-/// via the <see cref="String"/> property.
+/// This type wraps a native Rust <c>String</c>. Reading <see cref="String"/> decodes
+/// the UTF-8 buffer and allocates a managed string.
 {{ _types_docs_owned }}
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class Utf8String : IDisposable
@@ -21,15 +21,26 @@ public partial class Utf8String : IDisposable
     {
         var rval = new Utf8String();
         var source = s.AsSpan();
-        Span<byte> utf8Bytes = stackalloc byte[Encoding.UTF8.GetByteCount(source)];
-        var len = Encoding.UTF8.GetBytes(source, utf8Bytes);
+        var byteCount = Encoding.UTF8.GetByteCount(source);
+        byte[] rented = null;
+        Span<byte> utf8Bytes = byteCount <= 1024
+            ? stackalloc byte[byteCount]
+            : (rented = System.Buffers.ArrayPool<byte>.Shared.Rent(byteCount)).AsSpan(0, byteCount);
 
-        fixed (byte* p = utf8Bytes)
+        try
         {
-            InteropHelper.interoptopus_string_create((IntPtr)p, (ulong)len, out var native);
-            rval._ptr = native._ptr;
-            rval._len = native._len;
-            rval._capacity = native._capacity;
+            var len = Encoding.UTF8.GetBytes(source, utf8Bytes);
+            fixed (byte* p = utf8Bytes)
+            {
+                InteropHelper.interoptopus_string_create((IntPtr)p, (ulong)len, out var native);
+                rval._ptr = native._ptr;
+                rval._len = native._len;
+                rval._capacity = native._capacity;
+            }
+        }
+        finally
+        {
+            if (rented != null) System.Buffers.ArrayPool<byte>.Shared.Return(rented);
         }
 
         return rval;
@@ -50,7 +61,8 @@ public partial class Utf8String : IDisposable
     {
         get
         {
-            var span = new ReadOnlySpan<byte>((byte*)_ptr, (int)_len);
+            ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
+            var span = new ReadOnlySpan<byte>((byte*)_ptr, checked((int)_len));
             var s = Encoding.UTF8.GetString(span);
             return s;
         }
@@ -77,6 +89,8 @@ public partial class Utf8String : IDisposable
         _unmanaged._capacity = _capacity;
         InteropHelper.interoptopus_string_destroy(_unmanaged);
         _ptr = IntPtr.Zero;
+        _len = 0;
+        _capacity = 0;
     }
 
     /// Creates an independent copy of this string, backed by a new Rust allocation.
@@ -93,12 +107,14 @@ public partial class Utf8String : IDisposable
     {{ _fns_decorators_internal | indent }}
     internal Unmanaged IntoUnmanaged()
     {
-        if (_ptr == IntPtr.Zero) { throw new Exception(); }
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var _unmanaged = new Unmanaged();
         _unmanaged._ptr = _ptr;
         _unmanaged._len = _len;
         _unmanaged._capacity = _capacity;
         _ptr = IntPtr.Zero;
+        _len = 0;
+        _capacity = 0;
         return _unmanaged;
     }
 
@@ -106,6 +122,7 @@ public partial class Utf8String : IDisposable
     {{ _fns_decorators_internal | indent }}
     internal Unmanaged AsUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var _unmanaged = new Unmanaged();
         _unmanaged._ptr = _ptr;
         _unmanaged._len = _len;
@@ -136,16 +153,21 @@ public partial class Utf8String : IDisposable
     internal partial class InteropHelper
     {
         [LibraryImport(Interop.NativeLib, EntryPoint = "{{ create_entry_point }}")]
+        [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
         {{ _fns_decorators_all | indent(width = 8) }}
 
         public static partial long interoptopus_string_create(IntPtr utf8, ulong len, out Unmanaged rval);
 
         [LibraryImport(Interop.NativeLib, EntryPoint = "{{ destroy_entry_point }}")]
+
+        [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
         {{ _fns_decorators_all | indent(width = 8) }}
 
         public static partial long interoptopus_string_destroy(Unmanaged utf8);
 
         [LibraryImport(Interop.NativeLib, EntryPoint = "{{ clone_entry_point }}")]
+
+        [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
         {{ _fns_decorators_all | indent(width = 8) }}
 
         public static partial long interoptopus_string_clone(ref Unmanaged orig, ref Unmanaged cloned);

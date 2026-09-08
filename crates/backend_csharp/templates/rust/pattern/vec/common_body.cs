@@ -67,8 +67,10 @@ public partial class {{ name }}
     internal partial class InteropHelper
     {
         [LibraryImport(Interop.NativeLib, EntryPoint = "{{ create_entry_point }}")]
+        [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
         internal static partial long interoptopus_vec_create(IntPtr vec, ulong len, out Unmanaged rval);
         [LibraryImport(Interop.NativeLib, EntryPoint = "{{ destroy_entry_point }}")]
+        [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
         internal static partial long interoptopus_vec_destroy(Unmanaged vec);
     }
 

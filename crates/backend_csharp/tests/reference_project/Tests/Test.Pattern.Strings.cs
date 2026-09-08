@@ -274,4 +274,27 @@ public class TestPatternStrings
         s1.Dispose();
         s1.Dispose();
     }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(511)]
+    [InlineData(512)]
+    [InlineData(513)]
+    [InlineData(2_000_000)]
+    public void utf8_encoding_round_trips_across_buffer_sizes(int length)
+    {
+        var expected = new string('é', length) + (length >= 513 ? "🙂" : "");
+        using var value = Utf8String.From(expected);
+        Assert.Equal(expected, value.String);
+    }
+
+    [Fact]
+    public void disposed_string_rejects_reads_and_borrows()
+    {
+        var value = Utf8String.From("value");
+        value.Dispose();
+        value.Dispose();
+        Assert.Throws<ObjectDisposedException>(() => _ = value.String);
+        Assert.Throws<ObjectDisposedException>(() => Interop.pattern_string_11(in value));
+    }
 }

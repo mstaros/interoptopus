@@ -114,6 +114,14 @@ fn interop() -> Result<(), Box<dyn std::error::Error>> {
         cursor += relative + fragment.len();
     }
 
+    for source in [&interop, &common] {
+        for (offset, _) in source.match_indices("[LibraryImport") {
+            let declaration = &source[offset..];
+            let attributes = declaration.split_once("static partial").expect("generated native import").0;
+            assert!(attributes.contains("UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })"));
+        }
+    }
+
     insta::assert_snapshot!(multibuf);
 
     Ok(())
