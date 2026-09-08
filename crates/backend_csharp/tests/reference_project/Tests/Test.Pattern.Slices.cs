@@ -205,7 +205,8 @@ public class TestPatternSlices
     {
         var fast = SliceByte.From(new byte[] { 1 });
         fast.Dispose();
-        Assert.Throws<ObjectDisposedException>(() => Interop.pattern_ffi_slice_4(fast, SliceMutByte.From(Array.Empty<byte>())));
+        using var mutable = SliceMutByte.From(System.Array.Empty<byte>());
+        Assert.Throws<ObjectDisposedException>(() => Interop.pattern_ffi_slice_4(fast, mutable));
 
         var value = OptionUtf8String.Some("value".Utf8());
         try

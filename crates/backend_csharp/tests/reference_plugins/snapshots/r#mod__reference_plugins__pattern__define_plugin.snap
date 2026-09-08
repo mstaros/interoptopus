@@ -155,13 +155,19 @@ public partial class SumDelegate2 : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        if (_exception != null) throw _exception;
-        if (_destructor != IntPtr.Zero)
-        {
-            Marshal.GetDelegateForFunctionPointer<SumDelegate2Destructor>(_destructor)(_data);
-            _destructor = IntPtr.Zero;
-        }
+        var exception = _exception;
+        _exception = null;
+        var destructor = _destructor;
+        var data = _data;
+        _destructor = IntPtr.Zero;
+        _data = IntPtr.Zero;
         _ptr = IntPtr.Zero;
+        if (destructor != IntPtr.Zero)
+        {
+            Marshal.GetDelegateForFunctionPointer<SumDelegate2Destructor>(destructor)(data);
+        }
+        if (exception != null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
@@ -173,6 +179,7 @@ public partial class SumDelegate2 : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged IntoUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         if (_managed != null)
@@ -185,6 +192,9 @@ public partial class SumDelegate2 : IDisposable
         {
             rval._data = _data;
             rval._destructor = _destructor;
+            _ptr = IntPtr.Zero;
+            _data = IntPtr.Zero;
+            _destructor = IntPtr.Zero;
         }
         return rval;
     }
@@ -194,6 +204,7 @@ public partial class SumDelegate2 : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         rval._data = _data;
@@ -370,13 +381,19 @@ public partial class MyCallback : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        if (_exception != null) throw _exception;
-        if (_destructor != IntPtr.Zero)
-        {
-            Marshal.GetDelegateForFunctionPointer<MyCallbackDestructor>(_destructor)(_data);
-            _destructor = IntPtr.Zero;
-        }
+        var exception = _exception;
+        _exception = null;
+        var destructor = _destructor;
+        var data = _data;
+        _destructor = IntPtr.Zero;
+        _data = IntPtr.Zero;
         _ptr = IntPtr.Zero;
+        if (destructor != IntPtr.Zero)
+        {
+            Marshal.GetDelegateForFunctionPointer<MyCallbackDestructor>(destructor)(data);
+        }
+        if (exception != null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
@@ -388,6 +405,7 @@ public partial class MyCallback : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged IntoUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         if (_managed != null)
@@ -400,6 +418,9 @@ public partial class MyCallback : IDisposable
         {
             rval._data = _data;
             rval._destructor = _destructor;
+            _ptr = IntPtr.Zero;
+            _data = IntPtr.Zero;
+            _destructor = IntPtr.Zero;
         }
         return rval;
     }
@@ -409,6 +430,7 @@ public partial class MyCallback : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         rval._data = _data;
