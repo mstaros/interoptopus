@@ -100,7 +100,7 @@ fn interop() -> Result<(), Box<dyn std::error::Error>> {
     let mut cursor = 0;
     for fragment in [
         "if (managed[i] is null)",
-        "rval._data = Marshal.AllocHGlobal(size * managed.Length);",
+        "rval._data = Marshal.AllocHGlobal(checked(size * managed.Length));",
         "\n        try\n        {",
         "var unmanaged = managed[i].AsUnmanaged();",
         "\n        catch\n        {",

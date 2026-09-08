@@ -3,6 +3,7 @@ public partial class {{ name }}
     GCHandle _handle;
     IntPtr _data;
     ulong _len;
+    bool _disposed;
 }
 
 
@@ -54,6 +55,8 @@ public partial class {{ name }} : IEnumerable<{{ element_type }}>, IDisposable
     /// memory remains valid for the lifetime of this slice.
     public static {{ name }} From(IntPtr data, ulong len)
     {
+        if (len > int.MaxValue) throw new ArgumentOutOfRangeException(nameof(len));
+        if (data == IntPtr.Zero && len != 0) throw new ArgumentException("Nonempty slices require a data pointer.", nameof(data));
         var rval = new {{ name }}();
         rval._data = data;
         rval._len = len;
@@ -64,6 +67,7 @@ public partial class {{ name }} : IEnumerable<{{ element_type }}>, IDisposable
     {{ _fns_decorators_all | indent }}
     public static {{ name }} From({{ element_type }}[] managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         var rval = new {{ name }}();
         rval._handle = GCHandle.Alloc(managed, GCHandleType.Pinned);
         rval._data = rval._handle.AddrOfPinnedObject();
@@ -84,14 +88,18 @@ public partial class {{ name }} : IEnumerable<{{ element_type }}>, IDisposable
     {{ _fns_decorators_all | indent }}
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
         if (_handle is { IsAllocated: true }) { _handle.Free(); }
         _data = IntPtr.Zero;
+        _len = 0;
     }
 
     {{ _fns_decorators_all | indent }}
     {{ _fns_decorators_internal | indent }}
     internal Unmanaged ToUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         var unmanaged = new Unmanaged();
         unmanaged._data = _data;
         unmanaged._len = _len;

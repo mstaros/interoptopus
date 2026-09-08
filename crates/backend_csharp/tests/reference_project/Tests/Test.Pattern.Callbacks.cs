@@ -172,4 +172,32 @@ public class TestPatternDelegates
         });
         Assert.Equal(42, result);
     }
+
+    [Fact]
+    public void returned_callback_moves_ownership_and_survives_gc()
+    {
+        var calls = 0;
+        using var source = new MyCallbackVoid(_ => ++calls);
+        using var first = Interop.pattern_callback_2(source);
+        using var second = Interop.pattern_callback_2(first);
+        Assert.Throws<ObjectDisposedException>(() => first.Call(IntPtr.Zero));
+        Assert.Throws<ObjectDisposedException>(() => Interop.pattern_callback_2(first));
+        first.Dispose();
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        second.Call(IntPtr.Zero);
+        Assert.Equal(1, calls);
+        second.Dispose();
+        second.Dispose();
+    }
+
+    [Fact]
+    public void callback_disposal_invalidates_even_when_rethrowing()
+    {
+        var callback = new MyCallback(_ => throw new InvalidOperationException("callback failure"));
+        Interop.pattern_callback_1(callback, 0);
+        Assert.Throws<InvalidOperationException>(() => callback.Dispose());
+        Assert.Throws<ObjectDisposedException>(() => callback.Call(0));
+        callback.Dispose();
+    }
 }

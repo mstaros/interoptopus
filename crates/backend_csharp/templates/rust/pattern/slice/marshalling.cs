@@ -2,14 +2,17 @@ public partial class {{ name }}
 {
     IntPtr _data;
     ulong _len;
+    bool _ownsData;
+    bool _disposed;
 }
 
 /// A read-only view into a contiguous region of <c>{{ element_type }}</c> elements,
 /// with marshalling support for non-blittable element types.
 ///
 /// Elements are marshalled from their unmanaged representation on each access.
-/// The slice allocates a temporary native copy via <c>Marshal.AllocHGlobal</c>;
-/// call <see cref="Dispose"/> to free it.
+/// Slices created from managed arrays own a temporary native copy. Slices received
+/// from Rust borrow memory that must remain valid while the slice is used.
+/// Call <see cref="Dispose"/> to release this wrapper; borrowed memory is never freed.
 {{ _types_docs_owned }}
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class {{ name }} : IDisposable
@@ -41,6 +44,7 @@ public partial class {{ name }} : IDisposable
     {{ _fns_decorators_all | indent }}
     public static unsafe {{ name }} From({{ element_type }}[] managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
 {% if reject_null_elements %}        for (var i = 0; i < managed.Length; ++i)
         {
             if (managed[i] is null)
@@ -50,7 +54,8 @@ public partial class {{ name }} : IDisposable
         }
 {% endif %}        var rval = new {{ name }}();
         var size = Marshal.SizeOf<{{ unmanaged_element_type }}>();
-        rval._data = Marshal.AllocHGlobal(size * managed.Length);
+        rval._data = Marshal.AllocHGlobal(checked(size * managed.Length));
+        rval._ownsData = true;
         rval._len = (ulong) managed.Length;
         try
         {
@@ -73,15 +78,18 @@ public partial class {{ name }} : IDisposable
     {{ _fns_decorators_all | indent }}
     public void Dispose()
     {
-        if (_data == IntPtr.Zero) return;
-        Marshal.FreeHGlobal(_data);
+        if (_disposed) return;
+        _disposed = true;
+        if (_ownsData && _data != IntPtr.Zero) Marshal.FreeHGlobal(_data);
         _data = IntPtr.Zero;
+        _len = 0;
     }
 
     {{ _fns_decorators_all | indent }}
     {{ _fns_decorators_internal | indent }}
     internal Unmanaged ToUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         var unmanaged = new Unmanaged();
         unmanaged._data = _data;
         unmanaged._len = _len;

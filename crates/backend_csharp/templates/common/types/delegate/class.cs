@@ -97,13 +97,19 @@ delegate void {{ name }}Destructor(IntPtr data);
     {{ _fns_decorators_all | indent }}
     public void Dispose()
     {
-        if (_exception != null) throw _exception;
-        if (_destructor != IntPtr.Zero)
-        {
-            Marshal.GetDelegateForFunctionPointer<{{ name }}Destructor>(_destructor)(_data);
-            _destructor = IntPtr.Zero;
-        }
+        var exception = _exception;
+        _exception = null;
+        var destructor = _destructor;
+        var data = _data;
+        _destructor = IntPtr.Zero;
+        _data = IntPtr.Zero;
         _ptr = IntPtr.Zero;
+        if (destructor != IntPtr.Zero)
+        {
+            Marshal.GetDelegateForFunctionPointer<{{ name }}Destructor>(destructor)(data);
+        }
+        if (exception != null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
@@ -114,6 +120,7 @@ delegate void {{ name }}Destructor(IntPtr data);
     {{ _fns_decorators_internal | indent }}
     internal Unmanaged IntoUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         if (_managed != null)
@@ -126,6 +133,9 @@ delegate void {{ name }}Destructor(IntPtr data);
         {
             rval._data = _data;
             rval._destructor = _destructor;
+            _ptr = IntPtr.Zero;
+            _data = IntPtr.Zero;
+            _destructor = IntPtr.Zero;
         }
         return rval;
     }
@@ -134,6 +144,7 @@ delegate void {{ name }}Destructor(IntPtr data);
     {{ _fns_decorators_internal | indent }}
     internal Unmanaged AsUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         rval._data = _data;
