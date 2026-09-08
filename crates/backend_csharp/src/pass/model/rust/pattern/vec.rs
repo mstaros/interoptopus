@@ -12,7 +12,7 @@ use crate::pass::Outcome::Unchanged;
 use crate::pass::{ModelResult, PassInfo, model};
 use crate::try_resolve;
 use interoptopus::inventory::{Functions, Types};
-use interoptopus::lang::types::TypeKind;
+use interoptopus::lang::types::{TypeKind, TypePattern};
 use std::collections::HashMap;
 
 #[derive(Default)]
@@ -22,6 +22,7 @@ pub struct Config {}
 pub struct VecHelpers {
     pub create_entry_point: String,
     pub destroy_entry_point: String,
+    pub clone_element_entry_point: String,
 }
 
 pub struct Pass {
@@ -47,6 +48,7 @@ impl Pass {
         // Collect destroy entry points keyed by the Vec TypeId they consume.
         // The destroy function's first param is `Vec<T>` directly.
         let mut destroys: HashMap<interoptopus::inventory::TypeId, String> = HashMap::new();
+        let mut clones: HashMap<interoptopus::inventory::TypeId, String> = HashMap::new();
 
         for rust_fn in rs_functions.values() {
             if rust_fn.name.starts_with("interoptopus_vec_create") {
@@ -55,6 +57,13 @@ impl Pass {
                     && let TypeKind::ReadWritePointer(inner_id) = &ty.kind
                 {
                     creates.insert(*inner_id, rust_fn.name.clone());
+                }
+            } else if rust_fn.name.starts_with("interoptopus_vec_clone_element") {
+                if let Some(last_arg) = rust_fn.signature.arguments.last()
+                    && let Some(ty) = rs_types.get(&last_arg.ty)
+                    && let TypeKind::ReadWritePointer(inner_id) = &ty.kind
+                {
+                    clones.insert(*inner_id, rust_fn.name.clone());
                 }
             } else if rust_fn.name.starts_with("interoptopus_vec_destroy")
                 && let Some(first_arg) = rust_fn.signature.arguments.first()
@@ -75,8 +84,18 @@ impl Pass {
                 continue;
             };
 
-            self.helpers
-                .insert(cs_vec_id, VecHelpers { create_entry_point: create_name.clone(), destroy_entry_point: destroy_name.clone() });
+            let Some(TypeKind::TypePattern(TypePattern::Vec(element_id))) = rs_types.get(rust_vec_id).map(|ty| &ty.kind) else {
+                continue;
+            };
+            let Some(clone_name) = clones.get(element_id) else {
+                continue;
+            };
+
+            self.helpers.insert(cs_vec_id, VecHelpers {
+                create_entry_point: create_name.clone(),
+                destroy_entry_point: destroy_name.clone(),
+                clone_element_entry_point: clone_name.clone(),
+            });
             outcome.changed();
         }
 

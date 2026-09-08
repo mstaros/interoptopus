@@ -17,7 +17,7 @@ public partial class {{ name }} : IDisposable
         var _temp = new {{ unmanaged_element_type }}[_data.Length];
         for (var i = 0; i < _data.Length; ++i)
         {
-            _temp[i] = _data[i].{{ element_to_unmanaged }}();
+            _temp[i] = _data[i].AsUnmanaged();
         }
         fixed (void* _data_ptr = _temp)
         {
@@ -26,7 +26,13 @@ public partial class {{ name }} : IDisposable
         }
     }
 
-    /// Gets the element at the given index, marshalling from its unmanaged form.
+{% if clone_elements %}    internal partial class InteropHelper
+    {
+        [LibraryImport(Interop.NativeLib, EntryPoint = "{{ clone_element_entry_point }}")]
+        internal static partial long interoptopus_vec_clone_element(IntPtr source, out {{ unmanaged_element_type }} value);
+    }
+
+{% endif %}    /// Returns an independent copy of the element. Dispose owned values when finished.
     public unsafe {{ element_type }} this[int i]
     {
         {{ _fns_decorators_all | indent(width = 8) }}
@@ -34,7 +40,11 @@ public partial class {{ name }} : IDisposable
         {
             if (_ptr == IntPtr.Zero) throw new NullReferenceException();
             if (i < 0 || (ulong)i >= _len) throw new IndexOutOfRangeException();
-            var _element = Marshal.PtrToStructure<{{ unmanaged_element_type }}>(new IntPtr(_ptr.ToInt64() + i * sizeof({{ unmanaged_element_type }})));
+{% if clone_elements %}            var _source = (IntPtr)(({{ unmanaged_element_type }}*)_ptr + i);
+            if (InteropHelper.interoptopus_vec_clone_element(_source, out var _element) != 0)
+                throw new InvalidOperationException("Could not clone the vector element.");
+{% else %}            var _element = *(({{ unmanaged_element_type }}*)_ptr + i);
+{% endif %}
             return _element.{{ element_to_managed }}();
         }
     }

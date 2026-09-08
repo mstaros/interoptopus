@@ -182,6 +182,60 @@ public class TestPatternVec
         }
     }
 
+
+    [Fact]
+    public void owning_vec_copies_inputs_and_returns_independent_elements()
+    {
+        AllocationProbe.Settle();
+        var bytes = Interop.__test_live_bytes();
+        var allocations = Interop.__test_live_allocations();
+        var source = "independent".Utf8();
+        VecUtf8String vector = null;
+        Utf8String first = null;
+        Utf8String second = null;
+        try
+        {
+            vector = VecUtf8String.From(new[] { source });
+            Assert.Equal("independent", source.String);
+            source.Dispose();
+
+            first = vector[0];
+            first.Dispose();
+            second = vector[0];
+            vector.Dispose();
+            Assert.Equal("independent", second.String);
+        }
+        finally
+        {
+            first?.Dispose();
+            second?.Dispose();
+            vector?.Dispose();
+            source.Dispose();
+        }
+        Assert.Equal(bytes, Interop.__test_live_bytes());
+        Assert.Equal(allocations, Interop.__test_live_allocations());
+    }
+
+    [Fact]
+    public void owning_vec_conversion_failure_preserves_prior_inputs()
+    {
+        AllocationProbe.Settle();
+        var bytes = Interop.__test_live_bytes();
+        var allocations = Interop.__test_live_allocations();
+        var source = "still owned".Utf8();
+        try
+        {
+            Assert.Throws<NullReferenceException>(() => VecUtf8String.From(new Utf8String[] { source, null }));
+            Assert.Equal("still owned", source.String);
+        }
+        finally
+        {
+            source.Dispose();
+        }
+        Assert.Equal(bytes, Interop.__test_live_bytes());
+        Assert.Equal(allocations, Interop.__test_live_allocations());
+    }
+
     [Fact]
     public void vec_empty()
     {

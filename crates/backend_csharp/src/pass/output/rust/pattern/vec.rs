@@ -83,11 +83,12 @@ impl Pass {
                     context.insert("unmanaged_element_type", &unmanaged_name);
                     context.insert("create_entry_point", &helpers.create_entry_point);
                     context.insert("destroy_entry_point", &helpers.destroy_entry_point);
-                    let (element_to_unmanaged, element_to_managed) = match element_conversion {
-                        ManagedConversion::Into => ("IntoUnmanaged", "IntoManaged"),
-                        _ => ("AsUnmanaged", "ToManaged"),
+                    context.insert("clone_element_entry_point", &helpers.clone_element_entry_point);
+                    context.insert("clone_elements", &(element_conversion == ManagedConversion::Into));
+                    let element_to_managed = match element_conversion {
+                        ManagedConversion::Into => "IntoManaged",
+                        _ => "ToManaged",
                     };
-                    context.insert("element_to_unmanaged", element_to_unmanaged);
                     context.insert("element_to_managed", element_to_managed);
                     templates.render("rust/pattern/vec/marshalling.cs", &context)?
                 };

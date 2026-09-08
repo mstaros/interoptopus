@@ -197,6 +197,7 @@ impl<T> Drop for Vec<T> {
 ///
 /// This macro generates the following FFI functions with unique, type-specific symbol names:
 /// - `interoptopus_vec_create` — creates an `ffi::Vec<T>` by copying `len` elements from a raw pointer.
+/// - `interoptopus_vec_clone_element` — clones one borrowed element into a new owned value.
 /// - `interoptopus_vec_destroy` — drops an `ffi::Vec<T>`, freeing its memory.
 ///
 #[macro_export]
@@ -215,6 +216,16 @@ macro_rules! builtins_vec {
         }
 
         #[$crate::ffi(export = unique)]
+        pub fn interoptopus_vec_clone_element(data: *const ::std::ffi::c_void, rval: &mut ::std::mem::MaybeUninit<$t>) -> i64 {
+            if data.is_null() {
+                return -1;
+            }
+            let value = unsafe { &*data.cast::<$t>() };
+            rval.write(value.clone());
+            0
+        }
+
+        #[$crate::ffi(export = unique)]
         pub fn interoptopus_vec_destroy(_: $crate::ffi::Vec<$t>) -> i64 {
             0
         }
@@ -222,6 +233,7 @@ macro_rules! builtins_vec {
         |x: &mut $crate::inventory::RustInventory| {
             <interoptopus_vec_create as $crate::lang::function::FunctionInfo>::register(x);
             <interoptopus_vec_destroy as $crate::lang::function::FunctionInfo>::register(x);
+            <interoptopus_vec_clone_element as $crate::lang::function::FunctionInfo>::register(x);
         }
     }};
 }
