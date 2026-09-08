@@ -1090,13 +1090,19 @@ public partial class CallbackFFISlice : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        if (_exception != null) throw _exception;
-        if (_destructor != IntPtr.Zero)
-        {
-            Marshal.GetDelegateForFunctionPointer<CallbackFFISliceDestructor>(_destructor)(_data);
-            _destructor = IntPtr.Zero;
-        }
+        var exception = _exception;
+        _exception = null;
+        var destructor = _destructor;
+        var data = _data;
+        _destructor = IntPtr.Zero;
+        _data = IntPtr.Zero;
         _ptr = IntPtr.Zero;
+        if (destructor != IntPtr.Zero)
+        {
+            Marshal.GetDelegateForFunctionPointer<CallbackFFISliceDestructor>(destructor)(data);
+        }
+        if (exception != null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
@@ -1108,6 +1114,7 @@ public partial class CallbackFFISlice : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged IntoUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         if (_managed != null)
@@ -1120,6 +1127,9 @@ public partial class CallbackFFISlice : IDisposable
         {
             rval._data = _data;
             rval._destructor = _destructor;
+            _ptr = IntPtr.Zero;
+            _data = IntPtr.Zero;
+            _destructor = IntPtr.Zero;
         }
         return rval;
     }
@@ -1129,6 +1139,7 @@ public partial class CallbackFFISlice : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         rval._data = _data;
@@ -1305,13 +1316,19 @@ public partial class CallbackU8 : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        if (_exception != null) throw _exception;
-        if (_destructor != IntPtr.Zero)
-        {
-            Marshal.GetDelegateForFunctionPointer<CallbackU8Destructor>(_destructor)(_data);
-            _destructor = IntPtr.Zero;
-        }
+        var exception = _exception;
+        _exception = null;
+        var destructor = _destructor;
+        var data = _data;
+        _destructor = IntPtr.Zero;
+        _data = IntPtr.Zero;
         _ptr = IntPtr.Zero;
+        if (destructor != IntPtr.Zero)
+        {
+            Marshal.GetDelegateForFunctionPointer<CallbackU8Destructor>(destructor)(data);
+        }
+        if (exception != null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
@@ -1323,6 +1340,7 @@ public partial class CallbackU8 : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged IntoUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         if (_managed != null)
@@ -1335,6 +1353,9 @@ public partial class CallbackU8 : IDisposable
         {
             rval._data = _data;
             rval._destructor = _destructor;
+            _ptr = IntPtr.Zero;
+            _data = IntPtr.Zero;
+            _destructor = IntPtr.Zero;
         }
         return rval;
     }
@@ -1344,6 +1365,7 @@ public partial class CallbackU8 : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         rval._data = _data;
@@ -1520,13 +1542,19 @@ public partial class SumDelegate2 : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        if (_exception != null) throw _exception;
-        if (_destructor != IntPtr.Zero)
-        {
-            Marshal.GetDelegateForFunctionPointer<SumDelegate2Destructor>(_destructor)(_data);
-            _destructor = IntPtr.Zero;
-        }
+        var exception = _exception;
+        _exception = null;
+        var destructor = _destructor;
+        var data = _data;
+        _destructor = IntPtr.Zero;
+        _data = IntPtr.Zero;
         _ptr = IntPtr.Zero;
+        if (destructor != IntPtr.Zero)
+        {
+            Marshal.GetDelegateForFunctionPointer<SumDelegate2Destructor>(destructor)(data);
+        }
+        if (exception != null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
@@ -1538,6 +1566,7 @@ public partial class SumDelegate2 : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged IntoUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         if (_managed != null)
@@ -1550,6 +1579,9 @@ public partial class SumDelegate2 : IDisposable
         {
             rval._data = _data;
             rval._destructor = _destructor;
+            _ptr = IntPtr.Zero;
+            _data = IntPtr.Zero;
+            _destructor = IntPtr.Zero;
         }
         return rval;
     }
@@ -1559,6 +1591,7 @@ public partial class SumDelegate2 : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         rval._data = _data;
@@ -1735,13 +1768,19 @@ public partial class CStrPassthrough : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        if (_exception != null) throw _exception;
-        if (_destructor != IntPtr.Zero)
-        {
-            Marshal.GetDelegateForFunctionPointer<CStrPassthroughDestructor>(_destructor)(_data);
-            _destructor = IntPtr.Zero;
-        }
+        var exception = _exception;
+        _exception = null;
+        var destructor = _destructor;
+        var data = _data;
+        _destructor = IntPtr.Zero;
+        _data = IntPtr.Zero;
         _ptr = IntPtr.Zero;
+        if (destructor != IntPtr.Zero)
+        {
+            Marshal.GetDelegateForFunctionPointer<CStrPassthroughDestructor>(destructor)(data);
+        }
+        if (exception != null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
@@ -1753,6 +1792,7 @@ public partial class CStrPassthrough : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged IntoUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         if (_managed != null)
@@ -1765,6 +1805,9 @@ public partial class CStrPassthrough : IDisposable
         {
             rval._data = _data;
             rval._destructor = _destructor;
+            _ptr = IntPtr.Zero;
+            _data = IntPtr.Zero;
+            _destructor = IntPtr.Zero;
         }
         return rval;
     }
@@ -1774,6 +1817,7 @@ public partial class CStrPassthrough : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         rval._data = _data;
@@ -1950,13 +1994,19 @@ public partial class MyCallbackNamespaced : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        if (_exception != null) throw _exception;
-        if (_destructor != IntPtr.Zero)
-        {
-            Marshal.GetDelegateForFunctionPointer<MyCallbackNamespacedDestructor>(_destructor)(_data);
-            _destructor = IntPtr.Zero;
-        }
+        var exception = _exception;
+        _exception = null;
+        var destructor = _destructor;
+        var data = _data;
+        _destructor = IntPtr.Zero;
+        _data = IntPtr.Zero;
         _ptr = IntPtr.Zero;
+        if (destructor != IntPtr.Zero)
+        {
+            Marshal.GetDelegateForFunctionPointer<MyCallbackNamespacedDestructor>(destructor)(data);
+        }
+        if (exception != null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
@@ -1968,6 +2018,7 @@ public partial class MyCallbackNamespaced : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged IntoUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         if (_managed != null)
@@ -1980,6 +2031,9 @@ public partial class MyCallbackNamespaced : IDisposable
         {
             rval._data = _data;
             rval._destructor = _destructor;
+            _ptr = IntPtr.Zero;
+            _data = IntPtr.Zero;
+            _destructor = IntPtr.Zero;
         }
         return rval;
     }
@@ -1989,6 +2043,7 @@ public partial class MyCallbackNamespaced : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         rval._data = _data;
@@ -2165,13 +2220,19 @@ public partial class MyCallback : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        if (_exception != null) throw _exception;
-        if (_destructor != IntPtr.Zero)
-        {
-            Marshal.GetDelegateForFunctionPointer<MyCallbackDestructor>(_destructor)(_data);
-            _destructor = IntPtr.Zero;
-        }
+        var exception = _exception;
+        _exception = null;
+        var destructor = _destructor;
+        var data = _data;
+        _destructor = IntPtr.Zero;
+        _data = IntPtr.Zero;
         _ptr = IntPtr.Zero;
+        if (destructor != IntPtr.Zero)
+        {
+            Marshal.GetDelegateForFunctionPointer<MyCallbackDestructor>(destructor)(data);
+        }
+        if (exception != null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
@@ -2183,6 +2244,7 @@ public partial class MyCallback : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged IntoUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         if (_managed != null)
@@ -2195,6 +2257,9 @@ public partial class MyCallback : IDisposable
         {
             rval._data = _data;
             rval._destructor = _destructor;
+            _ptr = IntPtr.Zero;
+            _data = IntPtr.Zero;
+            _destructor = IntPtr.Zero;
         }
         return rval;
     }
@@ -2204,6 +2269,7 @@ public partial class MyCallback : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         rval._data = _data;
@@ -2380,13 +2446,19 @@ public partial class CallbackSliceMut : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        if (_exception != null) throw _exception;
-        if (_destructor != IntPtr.Zero)
-        {
-            Marshal.GetDelegateForFunctionPointer<CallbackSliceMutDestructor>(_destructor)(_data);
-            _destructor = IntPtr.Zero;
-        }
+        var exception = _exception;
+        _exception = null;
+        var destructor = _destructor;
+        var data = _data;
+        _destructor = IntPtr.Zero;
+        _data = IntPtr.Zero;
         _ptr = IntPtr.Zero;
+        if (destructor != IntPtr.Zero)
+        {
+            Marshal.GetDelegateForFunctionPointer<CallbackSliceMutDestructor>(destructor)(data);
+        }
+        if (exception != null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
@@ -2398,6 +2470,7 @@ public partial class CallbackSliceMut : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged IntoUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         if (_managed != null)
@@ -2410,6 +2483,9 @@ public partial class CallbackSliceMut : IDisposable
         {
             rval._data = _data;
             rval._destructor = _destructor;
+            _ptr = IntPtr.Zero;
+            _data = IntPtr.Zero;
+            _destructor = IntPtr.Zero;
         }
         return rval;
     }
@@ -2419,6 +2495,7 @@ public partial class CallbackSliceMut : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         rval._data = _data;
@@ -2595,13 +2672,19 @@ public partial class MyCallbackContextual : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        if (_exception != null) throw _exception;
-        if (_destructor != IntPtr.Zero)
-        {
-            Marshal.GetDelegateForFunctionPointer<MyCallbackContextualDestructor>(_destructor)(_data);
-            _destructor = IntPtr.Zero;
-        }
+        var exception = _exception;
+        _exception = null;
+        var destructor = _destructor;
+        var data = _data;
+        _destructor = IntPtr.Zero;
+        _data = IntPtr.Zero;
         _ptr = IntPtr.Zero;
+        if (destructor != IntPtr.Zero)
+        {
+            Marshal.GetDelegateForFunctionPointer<MyCallbackContextualDestructor>(destructor)(data);
+        }
+        if (exception != null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
@@ -2613,6 +2696,7 @@ public partial class MyCallbackContextual : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged IntoUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         if (_managed != null)
@@ -2625,6 +2709,9 @@ public partial class MyCallbackContextual : IDisposable
         {
             rval._data = _data;
             rval._destructor = _destructor;
+            _ptr = IntPtr.Zero;
+            _data = IntPtr.Zero;
+            _destructor = IntPtr.Zero;
         }
         return rval;
     }
@@ -2634,6 +2721,7 @@ public partial class MyCallbackContextual : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         rval._data = _data;
@@ -2810,13 +2898,19 @@ public partial class MyCallbackVoid : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        if (_exception != null) throw _exception;
-        if (_destructor != IntPtr.Zero)
-        {
-            Marshal.GetDelegateForFunctionPointer<MyCallbackVoidDestructor>(_destructor)(_data);
-            _destructor = IntPtr.Zero;
-        }
+        var exception = _exception;
+        _exception = null;
+        var destructor = _destructor;
+        var data = _data;
+        _destructor = IntPtr.Zero;
+        _data = IntPtr.Zero;
         _ptr = IntPtr.Zero;
+        if (destructor != IntPtr.Zero)
+        {
+            Marshal.GetDelegateForFunctionPointer<MyCallbackVoidDestructor>(destructor)(data);
+        }
+        if (exception != null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
@@ -2828,6 +2922,7 @@ public partial class MyCallbackVoid : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged IntoUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         if (_managed != null)
@@ -2840,6 +2935,9 @@ public partial class MyCallbackVoid : IDisposable
         {
             rval._data = _data;
             rval._destructor = _destructor;
+            _ptr = IntPtr.Zero;
+            _data = IntPtr.Zero;
+            _destructor = IntPtr.Zero;
         }
         return rval;
     }
@@ -2849,6 +2947,7 @@ public partial class MyCallbackVoid : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         rval._data = _data;
@@ -3025,13 +3124,19 @@ public partial class Pointers : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        if (_exception != null) throw _exception;
-        if (_destructor != IntPtr.Zero)
-        {
-            Marshal.GetDelegateForFunctionPointer<PointersDestructor>(_destructor)(_data);
-            _destructor = IntPtr.Zero;
-        }
+        var exception = _exception;
+        _exception = null;
+        var destructor = _destructor;
+        var data = _data;
+        _destructor = IntPtr.Zero;
+        _data = IntPtr.Zero;
         _ptr = IntPtr.Zero;
+        if (destructor != IntPtr.Zero)
+        {
+            Marshal.GetDelegateForFunctionPointer<PointersDestructor>(destructor)(data);
+        }
+        if (exception != null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
@@ -3043,6 +3148,7 @@ public partial class Pointers : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged IntoUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         if (_managed != null)
@@ -3055,6 +3161,9 @@ public partial class Pointers : IDisposable
         {
             rval._data = _data;
             rval._destructor = _destructor;
+            _ptr = IntPtr.Zero;
+            _data = IntPtr.Zero;
+            _destructor = IntPtr.Zero;
         }
         return rval;
     }
@@ -3064,6 +3173,7 @@ public partial class Pointers : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         rval._data = _data;
@@ -3240,13 +3350,19 @@ public partial class StringCallback : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        if (_exception != null) throw _exception;
-        if (_destructor != IntPtr.Zero)
-        {
-            Marshal.GetDelegateForFunctionPointer<StringCallbackDestructor>(_destructor)(_data);
-            _destructor = IntPtr.Zero;
-        }
+        var exception = _exception;
+        _exception = null;
+        var destructor = _destructor;
+        var data = _data;
+        _destructor = IntPtr.Zero;
+        _data = IntPtr.Zero;
         _ptr = IntPtr.Zero;
+        if (destructor != IntPtr.Zero)
+        {
+            Marshal.GetDelegateForFunctionPointer<StringCallbackDestructor>(destructor)(data);
+        }
+        if (exception != null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
@@ -3258,6 +3374,7 @@ public partial class StringCallback : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged IntoUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         if (_managed != null)
@@ -3270,6 +3387,9 @@ public partial class StringCallback : IDisposable
         {
             rval._data = _data;
             rval._destructor = _destructor;
+            _ptr = IntPtr.Zero;
+            _data = IntPtr.Zero;
+            _destructor = IntPtr.Zero;
         }
         return rval;
     }
@@ -3279,6 +3399,7 @@ public partial class StringCallback : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         rval._data = _data;
@@ -3455,13 +3576,19 @@ public partial class SumDelegate1 : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        if (_exception != null) throw _exception;
-        if (_destructor != IntPtr.Zero)
-        {
-            Marshal.GetDelegateForFunctionPointer<SumDelegate1Destructor>(_destructor)(_data);
-            _destructor = IntPtr.Zero;
-        }
+        var exception = _exception;
+        _exception = null;
+        var destructor = _destructor;
+        var data = _data;
+        _destructor = IntPtr.Zero;
+        _data = IntPtr.Zero;
         _ptr = IntPtr.Zero;
+        if (destructor != IntPtr.Zero)
+        {
+            Marshal.GetDelegateForFunctionPointer<SumDelegate1Destructor>(destructor)(data);
+        }
+        if (exception != null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
@@ -3473,6 +3600,7 @@ public partial class SumDelegate1 : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged IntoUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         if (_managed != null)
@@ -3485,6 +3613,9 @@ public partial class SumDelegate1 : IDisposable
         {
             rval._data = _data;
             rval._destructor = _destructor;
+            _ptr = IntPtr.Zero;
+            _data = IntPtr.Zero;
+            _destructor = IntPtr.Zero;
         }
         return rval;
     }
@@ -3494,6 +3625,7 @@ public partial class SumDelegate1 : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         rval._data = _data;
@@ -3670,13 +3802,19 @@ public partial class SumDelegateReturn2 : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        if (_exception != null) throw _exception;
-        if (_destructor != IntPtr.Zero)
-        {
-            Marshal.GetDelegateForFunctionPointer<SumDelegateReturn2Destructor>(_destructor)(_data);
-            _destructor = IntPtr.Zero;
-        }
+        var exception = _exception;
+        _exception = null;
+        var destructor = _destructor;
+        var data = _data;
+        _destructor = IntPtr.Zero;
+        _data = IntPtr.Zero;
         _ptr = IntPtr.Zero;
+        if (destructor != IntPtr.Zero)
+        {
+            Marshal.GetDelegateForFunctionPointer<SumDelegateReturn2Destructor>(destructor)(data);
+        }
+        if (exception != null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
@@ -3688,6 +3826,7 @@ public partial class SumDelegateReturn2 : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged IntoUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         if (_managed != null)
@@ -3700,6 +3839,9 @@ public partial class SumDelegateReturn2 : IDisposable
         {
             rval._data = _data;
             rval._destructor = _destructor;
+            _ptr = IntPtr.Zero;
+            _data = IntPtr.Zero;
+            _destructor = IntPtr.Zero;
         }
         return rval;
     }
@@ -3709,6 +3851,7 @@ public partial class SumDelegateReturn2 : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         rval._data = _data;
@@ -3795,6 +3938,7 @@ public partial class SliceBool
     GCHandle _handle;
     IntPtr _data;
     ulong _len;
+    bool _disposed;
 }
 
 
@@ -3843,6 +3987,8 @@ public partial class SliceBool : IEnumerable<Bool>, IDisposable
     /// memory remains valid for the lifetime of this slice.
     public static SliceBool From(IntPtr data, ulong len)
     {
+        if (len > int.MaxValue) throw new ArgumentOutOfRangeException(nameof(len));
+        if (data == IntPtr.Zero && len != 0) throw new ArgumentException("Nonempty slices require a data pointer.", nameof(data));
         var rval = new SliceBool();
         rval._data = data;
         rval._len = len;
@@ -3853,6 +3999,7 @@ public partial class SliceBool : IEnumerable<Bool>, IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static SliceBool From(Bool[] managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         var rval = new SliceBool();
         rval._handle = GCHandle.Alloc(managed, GCHandleType.Pinned);
         rval._data = rval._handle.AddrOfPinnedObject();
@@ -3873,8 +4020,11 @@ public partial class SliceBool : IEnumerable<Bool>, IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
         if (_handle is { IsAllocated: true }) { _handle.Free(); }
         _data = IntPtr.Zero;
+        _len = 0;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -3882,6 +4032,7 @@ public partial class SliceBool : IEnumerable<Bool>, IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         var unmanaged = new Unmanaged();
         unmanaged._data = _data;
         unmanaged._len = _len;
@@ -3970,6 +4121,7 @@ public partial class SliceByte
     GCHandle _handle;
     IntPtr _data;
     ulong _len;
+    bool _disposed;
 }
 
 
@@ -4018,6 +4170,8 @@ public partial class SliceByte : IEnumerable<byte>, IDisposable
     /// memory remains valid for the lifetime of this slice.
     public static SliceByte From(IntPtr data, ulong len)
     {
+        if (len > int.MaxValue) throw new ArgumentOutOfRangeException(nameof(len));
+        if (data == IntPtr.Zero && len != 0) throw new ArgumentException("Nonempty slices require a data pointer.", nameof(data));
         var rval = new SliceByte();
         rval._data = data;
         rval._len = len;
@@ -4028,6 +4182,7 @@ public partial class SliceByte : IEnumerable<byte>, IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static SliceByte From(byte[] managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         var rval = new SliceByte();
         rval._handle = GCHandle.Alloc(managed, GCHandleType.Pinned);
         rval._data = rval._handle.AddrOfPinnedObject();
@@ -4048,8 +4203,11 @@ public partial class SliceByte : IEnumerable<byte>, IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
         if (_handle is { IsAllocated: true }) { _handle.Free(); }
         _data = IntPtr.Zero;
+        _len = 0;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -4057,6 +4215,7 @@ public partial class SliceByte : IEnumerable<byte>, IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         var unmanaged = new Unmanaged();
         unmanaged._data = _data;
         unmanaged._len = _len;
@@ -4145,6 +4304,7 @@ public partial class SliceInt
     GCHandle _handle;
     IntPtr _data;
     ulong _len;
+    bool _disposed;
 }
 
 
@@ -4193,6 +4353,8 @@ public partial class SliceInt : IEnumerable<int>, IDisposable
     /// memory remains valid for the lifetime of this slice.
     public static SliceInt From(IntPtr data, ulong len)
     {
+        if (len > int.MaxValue) throw new ArgumentOutOfRangeException(nameof(len));
+        if (data == IntPtr.Zero && len != 0) throw new ArgumentException("Nonempty slices require a data pointer.", nameof(data));
         var rval = new SliceInt();
         rval._data = data;
         rval._len = len;
@@ -4203,6 +4365,7 @@ public partial class SliceInt : IEnumerable<int>, IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static SliceInt From(int[] managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         var rval = new SliceInt();
         rval._handle = GCHandle.Alloc(managed, GCHandleType.Pinned);
         rval._data = rval._handle.AddrOfPinnedObject();
@@ -4223,8 +4386,11 @@ public partial class SliceInt : IEnumerable<int>, IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
         if (_handle is { IsAllocated: true }) { _handle.Free(); }
         _data = IntPtr.Zero;
+        _len = 0;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -4232,6 +4398,7 @@ public partial class SliceInt : IEnumerable<int>, IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         var unmanaged = new Unmanaged();
         unmanaged._data = _data;
         unmanaged._len = _len;
@@ -4320,6 +4487,7 @@ public partial class SliceMutByte
     GCHandle _handle;
     IntPtr _data;
     ulong _len;
+    bool _disposed;
 }
 
 
@@ -4375,6 +4543,8 @@ public partial class SliceMutByte : IEnumerable<byte>, IDisposable
     /// memory remains valid for the lifetime of this slice.
     public static SliceMutByte From(IntPtr data, ulong len)
     {
+        if (len > int.MaxValue) throw new ArgumentOutOfRangeException(nameof(len));
+        if (data == IntPtr.Zero && len != 0) throw new ArgumentException("Nonempty slices require a data pointer.", nameof(data));
         var rval = new SliceMutByte();
         rval._data = data;
         rval._len = len;
@@ -4385,6 +4555,7 @@ public partial class SliceMutByte : IEnumerable<byte>, IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static SliceMutByte From(byte[] managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         var rval = new SliceMutByte();
         rval._handle = GCHandle.Alloc(managed, GCHandleType.Pinned);
         rval._data = rval._handle.AddrOfPinnedObject();
@@ -4405,8 +4576,11 @@ public partial class SliceMutByte : IEnumerable<byte>, IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
         if (_handle is { IsAllocated: true }) { _handle.Free(); }
         _data = IntPtr.Zero;
+        _len = 0;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -4414,6 +4588,7 @@ public partial class SliceMutByte : IEnumerable<byte>, IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         var unmanaged = new Unmanaged();
         unmanaged._data = _data;
         unmanaged._len = _len;
@@ -4502,6 +4677,7 @@ public partial class SliceMutUint
     GCHandle _handle;
     IntPtr _data;
     ulong _len;
+    bool _disposed;
 }
 
 
@@ -4557,6 +4733,8 @@ public partial class SliceMutUint : IEnumerable<uint>, IDisposable
     /// memory remains valid for the lifetime of this slice.
     public static SliceMutUint From(IntPtr data, ulong len)
     {
+        if (len > int.MaxValue) throw new ArgumentOutOfRangeException(nameof(len));
+        if (data == IntPtr.Zero && len != 0) throw new ArgumentException("Nonempty slices require a data pointer.", nameof(data));
         var rval = new SliceMutUint();
         rval._data = data;
         rval._len = len;
@@ -4567,6 +4745,7 @@ public partial class SliceMutUint : IEnumerable<uint>, IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static SliceMutUint From(uint[] managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         var rval = new SliceMutUint();
         rval._handle = GCHandle.Alloc(managed, GCHandleType.Pinned);
         rval._data = rval._handle.AddrOfPinnedObject();
@@ -4587,8 +4766,11 @@ public partial class SliceMutUint : IEnumerable<uint>, IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
         if (_handle is { IsAllocated: true }) { _handle.Free(); }
         _data = IntPtr.Zero;
+        _len = 0;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -4596,6 +4778,7 @@ public partial class SliceMutUint : IEnumerable<uint>, IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         var unmanaged = new Unmanaged();
         unmanaged._data = _data;
         unmanaged._len = _len;
@@ -4683,14 +4866,17 @@ public partial class SliceMutVec
 {
     IntPtr _data;
     ulong _len;
+    bool _ownsData;
+    bool _disposed;
 }
 
 /// A read-only view into a contiguous region of <c>Vec</c> elements,
 /// with marshalling support for non-blittable element types.
 ///
 /// Elements are marshalled from their unmanaged representation on each access.
-/// The slice allocates a temporary native copy via <c>Marshal.AllocHGlobal</c>;
-/// call <see cref="Dispose"/> to free it.
+/// Slices created from managed arrays own a temporary native copy. Slices received
+/// from Rust borrow memory that must remain valid while the slice is used.
+/// Call <see cref="Dispose"/> to release this wrapper; borrowed memory is never freed.
 /// <remarks>
 /// ⚠️ This type is an owned resource. You must 1) either call `Dispose()` on it,
 /// 2) call another method on it that promises to free it, or 3) 'move' it to Rust
@@ -4726,9 +4912,11 @@ public partial class SliceMutVec : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static unsafe SliceMutVec From(Vec[] managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         var rval = new SliceMutVec();
         var size = Marshal.SizeOf<Vec.Unmanaged>();
-        rval._data = Marshal.AllocHGlobal(size * managed.Length);
+        rval._data = Marshal.AllocHGlobal(checked(size * managed.Length));
+        rval._ownsData = true;
         rval._len = (ulong) managed.Length;
         try
         {
@@ -4751,9 +4939,11 @@ public partial class SliceMutVec : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        if (_data == IntPtr.Zero) return;
-        Marshal.FreeHGlobal(_data);
+        if (_disposed) return;
+        _disposed = true;
+        if (_ownsData && _data != IntPtr.Zero) Marshal.FreeHGlobal(_data);
         _data = IntPtr.Zero;
+        _len = 0;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -4761,6 +4951,7 @@ public partial class SliceMutVec : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         var unmanaged = new Unmanaged();
         unmanaged._data = _data;
         unmanaged._len = _len;
@@ -4851,14 +5042,17 @@ public partial class SliceOptionUtf8String
 {
     IntPtr _data;
     ulong _len;
+    bool _ownsData;
+    bool _disposed;
 }
 
 /// A read-only view into a contiguous region of <c>OptionUtf8String</c> elements,
 /// with marshalling support for non-blittable element types.
 ///
 /// Elements are marshalled from their unmanaged representation on each access.
-/// The slice allocates a temporary native copy via <c>Marshal.AllocHGlobal</c>;
-/// call <see cref="Dispose"/> to free it.
+/// Slices created from managed arrays own a temporary native copy. Slices received
+/// from Rust borrow memory that must remain valid while the slice is used.
+/// Call <see cref="Dispose"/> to release this wrapper; borrowed memory is never freed.
 /// <remarks>
 /// ⚠️ This type is an owned resource. You must 1) either call `Dispose()` on it,
 /// 2) call another method on it that promises to free it, or 3) 'move' it to Rust
@@ -4879,6 +5073,7 @@ public partial class SliceOptionUtf8String : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static unsafe SliceOptionUtf8String From(OptionUtf8String[] managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         for (var i = 0; i < managed.Length; ++i)
         {
             if (managed[i] is null)
@@ -4888,7 +5083,8 @@ public partial class SliceOptionUtf8String : IDisposable
         }
         var rval = new SliceOptionUtf8String();
         var size = Marshal.SizeOf<OptionUtf8String.Unmanaged>();
-        rval._data = Marshal.AllocHGlobal(size * managed.Length);
+        rval._data = Marshal.AllocHGlobal(checked(size * managed.Length));
+        rval._ownsData = true;
         rval._len = (ulong) managed.Length;
         try
         {
@@ -4911,9 +5107,11 @@ public partial class SliceOptionUtf8String : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        if (_data == IntPtr.Zero) return;
-        Marshal.FreeHGlobal(_data);
+        if (_disposed) return;
+        _disposed = true;
+        if (_ownsData && _data != IntPtr.Zero) Marshal.FreeHGlobal(_data);
         _data = IntPtr.Zero;
+        _len = 0;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -4921,6 +5119,7 @@ public partial class SliceOptionUtf8String : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         var unmanaged = new Unmanaged();
         unmanaged._data = _data;
         unmanaged._len = _len;
@@ -5012,6 +5211,7 @@ public partial class SliceUint
     GCHandle _handle;
     IntPtr _data;
     ulong _len;
+    bool _disposed;
 }
 
 
@@ -5060,6 +5260,8 @@ public partial class SliceUint : IEnumerable<uint>, IDisposable
     /// memory remains valid for the lifetime of this slice.
     public static SliceUint From(IntPtr data, ulong len)
     {
+        if (len > int.MaxValue) throw new ArgumentOutOfRangeException(nameof(len));
+        if (data == IntPtr.Zero && len != 0) throw new ArgumentException("Nonempty slices require a data pointer.", nameof(data));
         var rval = new SliceUint();
         rval._data = data;
         rval._len = len;
@@ -5070,6 +5272,7 @@ public partial class SliceUint : IEnumerable<uint>, IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static SliceUint From(uint[] managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         var rval = new SliceUint();
         rval._handle = GCHandle.Alloc(managed, GCHandleType.Pinned);
         rval._data = rval._handle.AddrOfPinnedObject();
@@ -5090,8 +5293,11 @@ public partial class SliceUint : IEnumerable<uint>, IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
         if (_handle is { IsAllocated: true }) { _handle.Free(); }
         _data = IntPtr.Zero;
+        _len = 0;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -5099,6 +5305,7 @@ public partial class SliceUint : IEnumerable<uint>, IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         var unmanaged = new Unmanaged();
         unmanaged._data = _data;
         unmanaged._len = _len;
@@ -5186,14 +5393,17 @@ public partial class SliceUtf8String
 {
     IntPtr _data;
     ulong _len;
+    bool _ownsData;
+    bool _disposed;
 }
 
 /// A read-only view into a contiguous region of <c>Utf8String</c> elements,
 /// with marshalling support for non-blittable element types.
 ///
 /// Elements are marshalled from their unmanaged representation on each access.
-/// The slice allocates a temporary native copy via <c>Marshal.AllocHGlobal</c>;
-/// call <see cref="Dispose"/> to free it.
+/// Slices created from managed arrays own a temporary native copy. Slices received
+/// from Rust borrow memory that must remain valid while the slice is used.
+/// Call <see cref="Dispose"/> to release this wrapper; borrowed memory is never freed.
 /// <remarks>
 /// ⚠️ This type is an owned resource. You must 1) either call `Dispose()` on it,
 /// 2) call another method on it that promises to free it, or 3) 'move' it to Rust
@@ -5214,9 +5424,11 @@ public partial class SliceUtf8String : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static unsafe SliceUtf8String From(Utf8String[] managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         var rval = new SliceUtf8String();
         var size = Marshal.SizeOf<Utf8String.Unmanaged>();
-        rval._data = Marshal.AllocHGlobal(size * managed.Length);
+        rval._data = Marshal.AllocHGlobal(checked(size * managed.Length));
+        rval._ownsData = true;
         rval._len = (ulong) managed.Length;
         try
         {
@@ -5239,9 +5451,11 @@ public partial class SliceUtf8String : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        if (_data == IntPtr.Zero) return;
-        Marshal.FreeHGlobal(_data);
+        if (_disposed) return;
+        _disposed = true;
+        if (_ownsData && _data != IntPtr.Zero) Marshal.FreeHGlobal(_data);
         _data = IntPtr.Zero;
+        _len = 0;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -5249,6 +5463,7 @@ public partial class SliceUtf8String : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         var unmanaged = new Unmanaged();
         unmanaged._data = _data;
         unmanaged._len = _len;
@@ -5339,14 +5554,17 @@ public partial class SliceVec
 {
     IntPtr _data;
     ulong _len;
+    bool _ownsData;
+    bool _disposed;
 }
 
 /// A read-only view into a contiguous region of <c>Vec</c> elements,
 /// with marshalling support for non-blittable element types.
 ///
 /// Elements are marshalled from their unmanaged representation on each access.
-/// The slice allocates a temporary native copy via <c>Marshal.AllocHGlobal</c>;
-/// call <see cref="Dispose"/> to free it.
+/// Slices created from managed arrays own a temporary native copy. Slices received
+/// from Rust borrow memory that must remain valid while the slice is used.
+/// Call <see cref="Dispose"/> to release this wrapper; borrowed memory is never freed.
 /// <remarks>
 /// ⚠️ This type is an owned resource. You must 1) either call `Dispose()` on it,
 /// 2) call another method on it that promises to free it, or 3) 'move' it to Rust
@@ -5382,9 +5600,11 @@ public partial class SliceVec : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static unsafe SliceVec From(Vec[] managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         var rval = new SliceVec();
         var size = Marshal.SizeOf<Vec.Unmanaged>();
-        rval._data = Marshal.AllocHGlobal(size * managed.Length);
+        rval._data = Marshal.AllocHGlobal(checked(size * managed.Length));
+        rval._ownsData = true;
         rval._len = (ulong) managed.Length;
         try
         {
@@ -5407,9 +5627,11 @@ public partial class SliceVec : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        if (_data == IntPtr.Zero) return;
-        Marshal.FreeHGlobal(_data);
+        if (_disposed) return;
+        _disposed = true;
+        if (_ownsData && _data != IntPtr.Zero) Marshal.FreeHGlobal(_data);
         _data = IntPtr.Zero;
+        _len = 0;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -5417,6 +5639,7 @@ public partial class SliceVec : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         var unmanaged = new Unmanaged();
         unmanaged._data = _data;
         unmanaged._len = _len;
@@ -24032,13 +24255,19 @@ public partial class SumDelegateReturn : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        if (_exception != null) throw _exception;
-        if (_destructor != IntPtr.Zero)
-        {
-            Marshal.GetDelegateForFunctionPointer<SumDelegateReturnDestructor>(_destructor)(_data);
-            _destructor = IntPtr.Zero;
-        }
+        var exception = _exception;
+        _exception = null;
+        var destructor = _destructor;
+        var data = _data;
+        _destructor = IntPtr.Zero;
+        _data = IntPtr.Zero;
         _ptr = IntPtr.Zero;
+        if (destructor != IntPtr.Zero)
+        {
+            Marshal.GetDelegateForFunctionPointer<SumDelegateReturnDestructor>(destructor)(data);
+        }
+        if (exception != null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
@@ -24050,6 +24279,7 @@ public partial class SumDelegateReturn : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged IntoUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         if (_managed != null)
@@ -24062,6 +24292,9 @@ public partial class SumDelegateReturn : IDisposable
         {
             rval._data = _data;
             rval._destructor = _destructor;
+            _ptr = IntPtr.Zero;
+            _data = IntPtr.Zero;
+            _destructor = IntPtr.Zero;
         }
         return rval;
     }
@@ -24071,6 +24304,7 @@ public partial class SumDelegateReturn : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         rval._data = _data;
@@ -24247,13 +24481,19 @@ public partial class CallbackHugeVecSlice : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        if (_exception != null) throw _exception;
-        if (_destructor != IntPtr.Zero)
-        {
-            Marshal.GetDelegateForFunctionPointer<CallbackHugeVecSliceDestructor>(_destructor)(_data);
-            _destructor = IntPtr.Zero;
-        }
+        var exception = _exception;
+        _exception = null;
+        var destructor = _destructor;
+        var data = _data;
+        _destructor = IntPtr.Zero;
+        _data = IntPtr.Zero;
         _ptr = IntPtr.Zero;
+        if (destructor != IntPtr.Zero)
+        {
+            Marshal.GetDelegateForFunctionPointer<CallbackHugeVecSliceDestructor>(destructor)(data);
+        }
+        if (exception != null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
@@ -24265,6 +24505,7 @@ public partial class CallbackHugeVecSlice : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged IntoUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         if (_managed != null)
@@ -24277,6 +24518,9 @@ public partial class CallbackHugeVecSlice : IDisposable
         {
             rval._data = _data;
             rval._destructor = _destructor;
+            _ptr = IntPtr.Zero;
+            _data = IntPtr.Zero;
+            _destructor = IntPtr.Zero;
         }
         return rval;
     }
@@ -24286,6 +24530,7 @@ public partial class CallbackHugeVecSlice : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         rval._data = _data;
@@ -24462,13 +24707,19 @@ public partial class CallbackCharArray2 : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        if (_exception != null) throw _exception;
-        if (_destructor != IntPtr.Zero)
-        {
-            Marshal.GetDelegateForFunctionPointer<CallbackCharArray2Destructor>(_destructor)(_data);
-            _destructor = IntPtr.Zero;
-        }
+        var exception = _exception;
+        _exception = null;
+        var destructor = _destructor;
+        var data = _data;
+        _destructor = IntPtr.Zero;
+        _data = IntPtr.Zero;
         _ptr = IntPtr.Zero;
+        if (destructor != IntPtr.Zero)
+        {
+            Marshal.GetDelegateForFunctionPointer<CallbackCharArray2Destructor>(destructor)(data);
+        }
+        if (exception != null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
@@ -24480,6 +24731,7 @@ public partial class CallbackCharArray2 : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged IntoUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         if (_managed != null)
@@ -24492,6 +24744,9 @@ public partial class CallbackCharArray2 : IDisposable
         {
             rval._data = _data;
             rval._destructor = _destructor;
+            _ptr = IntPtr.Zero;
+            _data = IntPtr.Zero;
+            _destructor = IntPtr.Zero;
         }
         return rval;
     }
@@ -24501,6 +24756,7 @@ public partial class CallbackCharArray2 : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         rval._data = _data;
@@ -24677,13 +24933,19 @@ public partial class CallbackSliceUseSliceByteInStruct : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        if (_exception != null) throw _exception;
-        if (_destructor != IntPtr.Zero)
-        {
-            Marshal.GetDelegateForFunctionPointer<CallbackSliceUseSliceByteInStructDestructor>(_destructor)(_data);
-            _destructor = IntPtr.Zero;
-        }
+        var exception = _exception;
+        _exception = null;
+        var destructor = _destructor;
+        var data = _data;
+        _destructor = IntPtr.Zero;
+        _data = IntPtr.Zero;
         _ptr = IntPtr.Zero;
+        if (destructor != IntPtr.Zero)
+        {
+            Marshal.GetDelegateForFunctionPointer<CallbackSliceUseSliceByteInStructDestructor>(destructor)(data);
+        }
+        if (exception != null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
@@ -24695,6 +24957,7 @@ public partial class CallbackSliceUseSliceByteInStruct : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged IntoUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         if (_managed != null)
@@ -24707,6 +24970,9 @@ public partial class CallbackSliceUseSliceByteInStruct : IDisposable
         {
             rval._data = _data;
             rval._destructor = _destructor;
+            _ptr = IntPtr.Zero;
+            _data = IntPtr.Zero;
+            _destructor = IntPtr.Zero;
         }
         return rval;
     }
@@ -24716,6 +24982,7 @@ public partial class CallbackSliceUseSliceByteInStruct : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         rval._data = _data;
@@ -24892,13 +25159,19 @@ public partial class NestedStringCallback : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        if (_exception != null) throw _exception;
-        if (_destructor != IntPtr.Zero)
-        {
-            Marshal.GetDelegateForFunctionPointer<NestedStringCallbackDestructor>(_destructor)(_data);
-            _destructor = IntPtr.Zero;
-        }
+        var exception = _exception;
+        _exception = null;
+        var destructor = _destructor;
+        var data = _data;
+        _destructor = IntPtr.Zero;
+        _data = IntPtr.Zero;
         _ptr = IntPtr.Zero;
+        if (destructor != IntPtr.Zero)
+        {
+            Marshal.GetDelegateForFunctionPointer<NestedStringCallbackDestructor>(destructor)(data);
+        }
+        if (exception != null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
@@ -24910,6 +25183,7 @@ public partial class NestedStringCallback : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged IntoUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         if (_managed != null)
@@ -24922,6 +25196,9 @@ public partial class NestedStringCallback : IDisposable
         {
             rval._data = _data;
             rval._destructor = _destructor;
+            _ptr = IntPtr.Zero;
+            _data = IntPtr.Zero;
+            _destructor = IntPtr.Zero;
         }
         return rval;
     }
@@ -24931,6 +25208,7 @@ public partial class NestedStringCallback : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged AsUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         rval._data = _data;
@@ -25017,6 +25295,7 @@ public partial class SliceEnumDocumented
     GCHandle _handle;
     IntPtr _data;
     ulong _len;
+    bool _disposed;
 }
 
 
@@ -25065,6 +25344,8 @@ public partial class SliceEnumDocumented : IEnumerable<EnumDocumented>, IDisposa
     /// memory remains valid for the lifetime of this slice.
     public static SliceEnumDocumented From(IntPtr data, ulong len)
     {
+        if (len > int.MaxValue) throw new ArgumentOutOfRangeException(nameof(len));
+        if (data == IntPtr.Zero && len != 0) throw new ArgumentException("Nonempty slices require a data pointer.", nameof(data));
         var rval = new SliceEnumDocumented();
         rval._data = data;
         rval._len = len;
@@ -25075,6 +25356,7 @@ public partial class SliceEnumDocumented : IEnumerable<EnumDocumented>, IDisposa
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static SliceEnumDocumented From(EnumDocumented[] managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         var rval = new SliceEnumDocumented();
         rval._handle = GCHandle.Alloc(managed, GCHandleType.Pinned);
         rval._data = rval._handle.AddrOfPinnedObject();
@@ -25095,8 +25377,11 @@ public partial class SliceEnumDocumented : IEnumerable<EnumDocumented>, IDisposa
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
         if (_handle is { IsAllocated: true }) { _handle.Free(); }
         _data = IntPtr.Zero;
+        _len = 0;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -25104,6 +25389,7 @@ public partial class SliceEnumDocumented : IEnumerable<EnumDocumented>, IDisposa
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         var unmanaged = new Unmanaged();
         unmanaged._data = _data;
         unmanaged._len = _len;
@@ -25191,14 +25477,17 @@ public partial class SliceMutCharArray
 {
     IntPtr _data;
     ulong _len;
+    bool _ownsData;
+    bool _disposed;
 }
 
 /// A read-only view into a contiguous region of <c>CharArray</c> elements,
 /// with marshalling support for non-blittable element types.
 ///
 /// Elements are marshalled from their unmanaged representation on each access.
-/// The slice allocates a temporary native copy via <c>Marshal.AllocHGlobal</c>;
-/// call <see cref="Dispose"/> to free it.
+/// Slices created from managed arrays own a temporary native copy. Slices received
+/// from Rust borrow memory that must remain valid while the slice is used.
+/// Call <see cref="Dispose"/> to release this wrapper; borrowed memory is never freed.
 /// <remarks>
 /// ⚠️ This type is an owned resource. You must 1) either call `Dispose()` on it,
 /// 2) call another method on it that promises to free it, or 3) 'move' it to Rust
@@ -25234,9 +25523,11 @@ public partial class SliceMutCharArray : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static unsafe SliceMutCharArray From(CharArray[] managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         var rval = new SliceMutCharArray();
         var size = Marshal.SizeOf<CharArray.Unmanaged>();
-        rval._data = Marshal.AllocHGlobal(size * managed.Length);
+        rval._data = Marshal.AllocHGlobal(checked(size * managed.Length));
+        rval._ownsData = true;
         rval._len = (ulong) managed.Length;
         try
         {
@@ -25259,9 +25550,11 @@ public partial class SliceMutCharArray : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        if (_data == IntPtr.Zero) return;
-        Marshal.FreeHGlobal(_data);
+        if (_disposed) return;
+        _disposed = true;
+        if (_ownsData && _data != IntPtr.Zero) Marshal.FreeHGlobal(_data);
         _data = IntPtr.Zero;
+        _len = 0;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -25269,6 +25562,7 @@ public partial class SliceMutCharArray : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         var unmanaged = new Unmanaged();
         unmanaged._data = _data;
         unmanaged._len = _len;
@@ -25359,14 +25653,17 @@ public partial class SliceUseCStrPtr
 {
     IntPtr _data;
     ulong _len;
+    bool _ownsData;
+    bool _disposed;
 }
 
 /// A read-only view into a contiguous region of <c>UseCStrPtr</c> elements,
 /// with marshalling support for non-blittable element types.
 ///
 /// Elements are marshalled from their unmanaged representation on each access.
-/// The slice allocates a temporary native copy via <c>Marshal.AllocHGlobal</c>;
-/// call <see cref="Dispose"/> to free it.
+/// Slices created from managed arrays own a temporary native copy. Slices received
+/// from Rust borrow memory that must remain valid while the slice is used.
+/// Call <see cref="Dispose"/> to release this wrapper; borrowed memory is never freed.
 /// <remarks>
 /// ⚠️ This type is an owned resource. You must 1) either call `Dispose()` on it,
 /// 2) call another method on it that promises to free it, or 3) 'move' it to Rust
@@ -25402,9 +25699,11 @@ public partial class SliceUseCStrPtr : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static unsafe SliceUseCStrPtr From(UseCStrPtr[] managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         var rval = new SliceUseCStrPtr();
         var size = Marshal.SizeOf<UseCStrPtr.Unmanaged>();
-        rval._data = Marshal.AllocHGlobal(size * managed.Length);
+        rval._data = Marshal.AllocHGlobal(checked(size * managed.Length));
+        rval._ownsData = true;
         rval._len = (ulong) managed.Length;
         try
         {
@@ -25427,9 +25726,11 @@ public partial class SliceUseCStrPtr : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        if (_data == IntPtr.Zero) return;
-        Marshal.FreeHGlobal(_data);
+        if (_disposed) return;
+        _disposed = true;
+        if (_ownsData && _data != IntPtr.Zero) Marshal.FreeHGlobal(_data);
         _data = IntPtr.Zero;
+        _len = 0;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -25437,6 +25738,7 @@ public partial class SliceUseCStrPtr : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         var unmanaged = new Unmanaged();
         unmanaged._data = _data;
         unmanaged._len = _len;
@@ -25527,14 +25829,17 @@ public partial class SliceUseSliceByteInStruct
 {
     IntPtr _data;
     ulong _len;
+    bool _ownsData;
+    bool _disposed;
 }
 
 /// A read-only view into a contiguous region of <c>UseSliceByteInStruct</c> elements,
 /// with marshalling support for non-blittable element types.
 ///
 /// Elements are marshalled from their unmanaged representation on each access.
-/// The slice allocates a temporary native copy via <c>Marshal.AllocHGlobal</c>;
-/// call <see cref="Dispose"/> to free it.
+/// Slices created from managed arrays own a temporary native copy. Slices received
+/// from Rust borrow memory that must remain valid while the slice is used.
+/// Call <see cref="Dispose"/> to release this wrapper; borrowed memory is never freed.
 /// <remarks>
 /// ⚠️ This type is an owned resource. You must 1) either call `Dispose()` on it,
 /// 2) call another method on it that promises to free it, or 3) 'move' it to Rust
@@ -25570,9 +25875,11 @@ public partial class SliceUseSliceByteInStruct : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static unsafe SliceUseSliceByteInStruct From(UseSliceByteInStruct[] managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         var rval = new SliceUseSliceByteInStruct();
         var size = Marshal.SizeOf<UseSliceByteInStruct.Unmanaged>();
-        rval._data = Marshal.AllocHGlobal(size * managed.Length);
+        rval._data = Marshal.AllocHGlobal(checked(size * managed.Length));
+        rval._ownsData = true;
         rval._len = (ulong) managed.Length;
         try
         {
@@ -25595,9 +25902,11 @@ public partial class SliceUseSliceByteInStruct : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        if (_data == IntPtr.Zero) return;
-        Marshal.FreeHGlobal(_data);
+        if (_disposed) return;
+        _disposed = true;
+        if (_ownsData && _data != IntPtr.Zero) Marshal.FreeHGlobal(_data);
         _data = IntPtr.Zero;
+        _len = 0;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -25605,6 +25914,7 @@ public partial class SliceUseSliceByteInStruct : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         var unmanaged = new Unmanaged();
         unmanaged._data = _data;
         unmanaged._len = _len;
@@ -25695,14 +26005,17 @@ public partial class SliceUseString
 {
     IntPtr _data;
     ulong _len;
+    bool _ownsData;
+    bool _disposed;
 }
 
 /// A read-only view into a contiguous region of <c>UseString</c> elements,
 /// with marshalling support for non-blittable element types.
 ///
 /// Elements are marshalled from their unmanaged representation on each access.
-/// The slice allocates a temporary native copy via <c>Marshal.AllocHGlobal</c>;
-/// call <see cref="Dispose"/> to free it.
+/// Slices created from managed arrays own a temporary native copy. Slices received
+/// from Rust borrow memory that must remain valid while the slice is used.
+/// Call <see cref="Dispose"/> to release this wrapper; borrowed memory is never freed.
 /// <remarks>
 /// ⚠️ This type is an owned resource. You must 1) either call `Dispose()` on it,
 /// 2) call another method on it that promises to free it, or 3) 'move' it to Rust
@@ -25723,6 +26036,7 @@ public partial class SliceUseString : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static unsafe SliceUseString From(UseString[] managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         for (var i = 0; i < managed.Length; ++i)
         {
             if (managed[i] is null)
@@ -25732,7 +26046,8 @@ public partial class SliceUseString : IDisposable
         }
         var rval = new SliceUseString();
         var size = Marshal.SizeOf<UseString.Unmanaged>();
-        rval._data = Marshal.AllocHGlobal(size * managed.Length);
+        rval._data = Marshal.AllocHGlobal(checked(size * managed.Length));
+        rval._ownsData = true;
         rval._len = (ulong) managed.Length;
         try
         {
@@ -25755,9 +26070,11 @@ public partial class SliceUseString : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        if (_data == IntPtr.Zero) return;
-        Marshal.FreeHGlobal(_data);
+        if (_disposed) return;
+        _disposed = true;
+        if (_ownsData && _data != IntPtr.Zero) Marshal.FreeHGlobal(_data);
         _data = IntPtr.Zero;
+        _len = 0;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -25765,6 +26082,7 @@ public partial class SliceUseString : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         var unmanaged = new Unmanaged();
         unmanaged._data = _data;
         unmanaged._len = _len;
@@ -25855,14 +26173,17 @@ public partial class SliceVec3f32
 {
     IntPtr _data;
     ulong _len;
+    bool _ownsData;
+    bool _disposed;
 }
 
 /// A read-only view into a contiguous region of <c>Vec3f32</c> elements,
 /// with marshalling support for non-blittable element types.
 ///
 /// Elements are marshalled from their unmanaged representation on each access.
-/// The slice allocates a temporary native copy via <c>Marshal.AllocHGlobal</c>;
-/// call <see cref="Dispose"/> to free it.
+/// Slices created from managed arrays own a temporary native copy. Slices received
+/// from Rust borrow memory that must remain valid while the slice is used.
+/// Call <see cref="Dispose"/> to release this wrapper; borrowed memory is never freed.
 /// <remarks>
 /// ⚠️ This type is an owned resource. You must 1) either call `Dispose()` on it,
 /// 2) call another method on it that promises to free it, or 3) 'move' it to Rust
@@ -25898,9 +26219,11 @@ public partial class SliceVec3f32 : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static unsafe SliceVec3f32 From(Vec3f32[] managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         var rval = new SliceVec3f32();
         var size = Marshal.SizeOf<Vec3f32.Unmanaged>();
-        rval._data = Marshal.AllocHGlobal(size * managed.Length);
+        rval._data = Marshal.AllocHGlobal(checked(size * managed.Length));
+        rval._ownsData = true;
         rval._len = (ulong) managed.Length;
         try
         {
@@ -25923,9 +26246,11 @@ public partial class SliceVec3f32 : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        if (_data == IntPtr.Zero) return;
-        Marshal.FreeHGlobal(_data);
+        if (_disposed) return;
+        _disposed = true;
+        if (_ownsData && _data != IntPtr.Zero) Marshal.FreeHGlobal(_data);
         _data = IntPtr.Zero;
+        _len = 0;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -25933,6 +26258,7 @@ public partial class SliceVec3f32 : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         var unmanaged = new Unmanaged();
         unmanaged._data = _data;
         unmanaged._len = _len;

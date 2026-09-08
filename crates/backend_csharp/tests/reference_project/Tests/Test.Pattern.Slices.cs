@@ -183,4 +183,43 @@ public class TestPatternSlices
         using var valid = new[] { some, OptionUtf8String.None }.Slice();
         Assert.Equal(1u, Interop.pattern_ffi_slice_of_option_string(valid));
     }
+
+    [Fact]
+    public void borrowed_native_slice_disposal_does_not_free_rust_memory()
+    {
+        for (var i = 0; i < 3; ++i)
+        {
+            Interop.pattern_ffi_slice_of_structs_callback(slice =>
+            {
+                Assert.Equal(1, slice.Count);
+                Assert.Equal((byte)2, slice[0].bytes[1]);
+                slice.Dispose();
+                slice.Dispose();
+                Assert.Equal(0, slice.Count);
+            });
+        }
+    }
+
+    [Fact]
+    public void disposed_slices_cannot_be_passed_to_rust()
+    {
+        var fast = SliceByte.From(new byte[] { 1 });
+        fast.Dispose();
+        using var mutable = SliceMutByte.From(System.Array.Empty<byte>());
+        Assert.Throws<ObjectDisposedException>(() => Interop.pattern_ffi_slice_4(fast, mutable));
+
+        var value = OptionUtf8String.Some("value".Utf8());
+        try
+        {
+            var marshalled = SliceOptionUtf8String.From(new[] { value });
+            marshalled.Dispose();
+            marshalled.Dispose();
+            Assert.Equal(0, marshalled.Count);
+            Assert.Throws<ObjectDisposedException>(() => Interop.pattern_ffi_slice_of_option_string(marshalled));
+        }
+        finally
+        {
+            value.Dispose();
+        }
+    }
 }
