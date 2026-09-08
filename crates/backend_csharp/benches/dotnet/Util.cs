@@ -3,6 +3,8 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 
 namespace Interoptopus
 {
@@ -33,13 +35,14 @@ namespace Interoptopus
 
         public static void Calibrate(uint n, Run r)
         {
+            _calibrationTicks = 0;
             var result = Measure(n, r);
             _calibrationTicks = result._totalTicks;
         }
 
         public static MeasureResult Measure(uint n, Run r)
         {
-
+            ArgumentOutOfRangeException.ThrowIfZero(n);
             for (var i = 0; i < n; i++)
             {
                 r.Invoke();
@@ -53,7 +56,18 @@ namespace Interoptopus
             }
             stopwatch.Stop();
 
-            return new MeasureResult( n, stopwatch.ElapsedTicks - _calibrationTicks);
+            return new MeasureResult(n, Math.Max(0, stopwatch.ElapsedTicks - _calibrationTicks));
+        }
+
+        public static async Task<MeasureResult> MeasureAsync(uint n, Func<Task> run)
+        {
+            ArgumentOutOfRangeException.ThrowIfZero(n);
+            for (var i = 0u; i < n; ++i) await run();
+            var stopwatch = Stopwatch.StartNew();
+            for (var i = 0u; i < n; ++i) await run();
+            stopwatch.Stop();
+            // A synchronous empty-loop calibration does not model awaited continuations.
+            return new MeasureResult(n, stopwatch.ElapsedTicks);
         }
 
     }
@@ -78,40 +92,22 @@ namespace Interoptopus
             });
         }
 
-        public void Write(string file)
+        public void Write(string file, uint iterations)
         {
-            var header = @"
+            var header = $@"
 # FFI Call Overheads
 
-The numbers below are to help FFI design decisions by giving order-of-magnitude estimates how
-expensive certain constructs are.
-
-## Notes
-
-- Times were determined by running the given construct 100k times, taking the elapsed time in ticks,
-and computing the cost per 1k invocations.
-
-- The time of the called function is included.
-
-- However, the reference project was written so that each function is _minimal_, i.e., any similar
-function you wrote, would have to at least as expensive operations if it were to do anything sensible with
-the given type.
-
-- The list is ad-hoc, PRs adding more tests to `Benchmark.cs` are welcome.
-
-- Bindings were generated with the C# `use_unsafe` config, which dramatically (between 2x and 150x(!)) speeds
-  up slice access and copies in .NET and Unity, [see the FAQ for details](https://github.com/ralfbiedert/interoptopus/blob/master/FAQ.md#existing-backends).
+Each entry runs {iterations} warmup calls followed by {iterations} measured calls.
+Times include the native function's work. Async entries await every invocation to completion.
+Synchronous entries subtract an empty-loop calibration; async entries report total elapsed time.
+These ad-hoc timings are estimates, not statistically rigorous comparisons.
 
 ## System
 
-The following system was used:
-
-```
-System: AMD Ryzen 9 7950X3D, 64 GB RAM; Windows 11
-rustc: stable (i.e., 1.85 or later)
-profile: --release
-.NET: v9.0
-```
+- OS: {RuntimeInformation.OSDescription}
+- Architecture: {RuntimeInformation.ProcessArchitecture}
+- Runtime: {RuntimeInformation.FrameworkDescription}
+- Stopwatch frequency: {Stopwatch.Frequency} Hz
 
 ## Results
 

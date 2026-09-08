@@ -1,5 +1,7 @@
 //! Writes function import declarations.
 
+use crate::lang::types::{ManagedConversion, ParamDecorator};
+use crate::lang::types::kind::{Primitive, TypeKind, TypePattern};
 use crate::output::{FileType, Output};
 use crate::pass::{OutputResult, PassInfo, format_docs, model, output};
 use interoptopus_backends::template::Context;
@@ -25,6 +27,7 @@ impl Pass {
         output_master: &output::common::master::Pass,
         fns_all: &model::common::fns::all::Pass,
         types: &model::common::types::all::Pass,
+        managed_conversion: &model::common::types::info::managed_conversion::Pass,
     ) -> OutputResult {
         let templates = output_master.templates();
 
@@ -76,6 +79,67 @@ impl Pass {
 
                 let import = templates.render("rust/fns/rust.cs", &context)?;
                 imports.push(import);
+
+                // A span borrows memory only until this synchronous import returns.
+                if matches!(rval_type.kind, TypeKind::TypePattern(TypePattern::TaskHandle))
+                    || function.signature.arguments.iter().any(|arg| {
+                        types.get(arg.ty).is_some_and(|ty| matches!(ty.kind, TypeKind::TypePattern(TypePattern::AsyncCallback(_))))
+                    })
+                {
+                    continue;
+                }
+                let mut span_args = args.clone();
+                let mut raw_args = args;
+                let mut pins: Vec<HashMap<&str, String>> = Vec::new();
+                for (index, arg) in function.signature.arguments.iter().enumerate() {
+                    let ty = types.get(arg.ty).expect("argument resolved above");
+                    let prefix = match &ty.decorators.param {
+                        Some(ParamDecorator::In { .. }) => "in ",
+                        Some(ParamDecorator::Ref) => "ref ",
+                        Some(ParamDecorator::Out) => "out ",
+                        _ => "",
+                    };
+                    span_args[index].insert("call", format!("{prefix}{}", arg.name));
+                    let (element, mutable) = match &ty.kind {
+                        TypeKind::TypePattern(TypePattern::Slice(element)) => (*element, false),
+                        TypeKind::TypePattern(TypePattern::SliceMut(element)) => (*element, true),
+                        _ => continue,
+                    };
+                    let element_ty = types.get(element).expect("slice element");
+                    if ty.decorators.param.is_some()
+                        || managed_conversion.managed_conversion(element) != Some(ManagedConversion::AsIs)
+                        || matches!(element_ty.kind, TypeKind::Delegate(_) | TypeKind::TypePattern(TypePattern::CStrPointer))
+                    {
+                        continue;
+                    }
+                    let span = if mutable { "Span" } else { "ReadOnlySpan" };
+                    span_args[index].insert("ty", format!("{span}<{}>", element_ty.name));
+                    let pointer = format!("__span_ptr_{index}");
+                    span_args[index].insert("call", format!(
+                        "new {}.Unmanaged {{ _data = (IntPtr){pointer}, _len = (ulong){}.Length }}", ty.name, arg.name
+                    ));
+                    raw_args[index].insert("ty", format!("{}.Unmanaged", ty.name));
+                    let mut pin = HashMap::new();
+                    pin.insert("element", element_ty.name.clone());
+                    pin.insert("pointer", pointer);
+                    pin.insert("name", arg.name.clone());
+                    pins.push(pin);
+                }
+                if !pins.is_empty() {
+                    let raw_name = format!("__span_{name}");
+                    context.insert("name", &raw_name);
+                    context.insert("visibility", "private");
+                    context.insert("args", &raw_args);
+                    context.insert("docs", "");
+                    imports.push(templates.render("rust/fns/rust.cs", &context)?);
+                    context.insert("name", name);
+                    context.insert("visibility", &function.visibility.to_string());
+                    context.insert("args", &span_args);
+                    context.insert("raw_name", &raw_name);
+                    context.insert("pins", &pins);
+                    context.insert("is_void", &matches!(rval_type.kind, TypeKind::Primitive(Primitive::Void)));
+                    imports.push(templates.render("rust/fns/overload/span.cs", &context)?);
+                }
             }
 
             imports.sort();

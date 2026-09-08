@@ -29,6 +29,18 @@ public partial class {{ name }} : IEnumerable<{{ element_type }}>, IDisposable
         get => new(_data.ToPointer(), (int)_len);
     }
 
+{% if is_mut %}
+    /// Returns a writable span over the borrowed memory without copying.
+    public unsafe Span<{{ element_type }}> Span
+    {
+        get
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            return new(_data.ToPointer(), checked((int)_len));
+        }
+    }
+{% endif %}
+
     /// Gets {% if is_mut %}or sets {% endif %}the element at the given index.
     public unsafe {{ element_type }} this[int i]
     {

@@ -200,4 +200,43 @@ public class TestPatternDelegates
         Assert.Throws<ObjectDisposedException>(() => callback.Call(0));
         callback.Dispose();
     }
+
+    [Fact]
+    public void managed_void_callback_is_invoked_once()
+    {
+        var count = 0;
+        using var callback = new MyCallbackVoid(_ => ++count);
+        callback.Call(IntPtr.Zero);
+        Assert.Equal(1, count);
+    }
+
+    [Fact]
+    public void rust_retains_managed_callback_after_wrapper_leaves_scope()
+    {
+        var count = 0;
+        MyCallbackVoid Retain()
+        {
+            using var callback = new MyCallbackVoid(_ => ++count);
+            return Interop.pattern_callback_2(callback);
+        }
+        using var retained = Retain();
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        retained.Call(IntPtr.Zero);
+        Assert.Equal(1, count);
+    }
+
+    [Fact]
+    public void native_callback_calls_do_not_allocate_delegates()
+    {
+        using var callback = Interop.pattern_callback_6();
+        for (var i = 0; i < 512; ++i) callback.Call(1, 2);
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var sum = 0;
+        for (var i = 0; i < 1024; ++i) sum += callback.Call(1, 2);
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        Assert.Equal(3072, sum);
+        Assert.Equal(0, allocated);
+    }
 }

@@ -3,7 +3,8 @@
 //! These are full wrapper classes for named callbacks (with data pointers), including
 //! `Unmanaged` structs, marshallers, and trampoline methods.
 
-use crate::lang::types::kind::{DelegateKind, Primitive, TypeKind};
+use crate::lang::TypeId;
+use crate::lang::types::kind::{DelegateKind, PointerKind, Primitive, TypeKind, TypePattern, Variant};
 use crate::output::{FileType, Output};
 use crate::pass::{OutputResult, PassInfo, model, output};
 use interoptopus_backends::template::Context;
@@ -100,6 +101,9 @@ impl Pass {
                 context.insert("rval_to_unmanaged", &rval_to_unmanaged);
                 context.insert("rval_to_managed", &rval_to_managed);
                 context.insert("args", &args);
+                let function_pointer = supports_function_pointer(signature.rval, types)
+                    && signature.arguments.iter().all(|arg| supports_function_pointer(arg.ty, types));
+                context.insert("function_pointer", &function_pointer);
 
                 let rendered = templates.render("common/types/delegate/class.cs", &context)?;
                 rendered_delegates.push(rendered);
@@ -115,5 +119,26 @@ impl Pass {
     #[must_use]
     pub fn delegates_for(&self, output: &Output) -> Option<&[String]> {
         self.delegates.get(output).map(std::vec::Vec::as_slice)
+    }
+}
+
+// UnmanagedCallersOnly and delegate* do not run the runtime marshaller. Inspect the
+// actual wire representation, retaining delegate marshalling for strings and bools.
+fn supports_function_pointer(id: TypeId, types: &model::common::types::all::Pass) -> bool {
+    let Some(ty) = types.get(id) else { return false };
+    if ty.decorators.param.is_some() || ty.decorators.rval.is_some() {
+        return false;
+    }
+    match &ty.kind {
+        TypeKind::Primitive(p) => *p != Primitive::Bool,
+        TypeKind::Pointer(p) => matches!(p.kind, PointerKind::IntPtr(_)),
+        TypeKind::Delegate(d) => d.kind == DelegateKind::Class,
+        TypeKind::Composite(c) => c.fields.iter().all(|f| supports_function_pointer(f.ty, types)),
+        TypeKind::Array(a) => supports_function_pointer(a.ty, types),
+        TypeKind::DataEnum(e) | TypeKind::TypePattern(TypePattern::Option(_, e) | TypePattern::Result(_, _, e)) => {
+            e.variants.iter().flat_map(Variant::payloads).all(|p| supports_function_pointer(p.ty, types))
+        }
+        TypeKind::TypePattern(p) => !matches!(p, TypePattern::CStrPointer),
+        _ => false,
     }
 }

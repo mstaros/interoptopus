@@ -27,9 +27,10 @@ delegate void {{ name }}Destructor(IntPtr data);
 [NativeMarshalling(typeof(MarshallerMeta))]
 {{ visibility }} partial class {{ name }} : IDisposable
 {
-    // Static helpers to de-allocate a pinned GCHandle when callback dropped / disposed.
-    private static readonly {{ name }}Destructor _prevent_gc_release = data => GCHandle.FromIntPtr(data).Free();
-    private static readonly IntPtr _prevent_gc_release_ptr = Marshal.GetFunctionPointerForDelegate(_prevent_gc_release);
+    // Rust releases this rooting handle when it drops the retained callback.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static void ReleaseHandle(IntPtr data) => GCHandle.FromIntPtr(data).Free();
+    private static unsafe IntPtr ReleaseHandlePtr => (IntPtr)(delegate* unmanaged[Cdecl]<IntPtr, void>)&ReleaseHandle;
 
     {{ _fns_decorators_all | indent }}
     {{ _fns_decorators_internal | indent }}
@@ -37,12 +38,26 @@ delegate void {{ name }}Destructor(IntPtr data);
 
     /// Wraps a managed delegate so it can be passed to Rust as a callback.
     {{ _fns_decorators_all | indent }}
-    public {{ name }}({{ name }}Delegate managed)
+    public unsafe {{ name }}({{ name }}Delegate managed)
     {
+        ArgumentNullException.ThrowIfNull(managed);
         _managed = managed;
+{% if function_pointer %}
+        _ptr = (IntPtr)(delegate* unmanaged[Cdecl]<{% for arg in args %}{{ arg.unmanaged_name }}, {% endfor %}IntPtr, {{ rval_unmanaged_name }}>)&CallUnmanaged;
+{% else %}
         _native = CallTrampoline;
         _ptr = Marshal.GetFunctionPointerForDelegate(_native);
+{% endif %}
     }
+
+{% if function_pointer %}
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static {{ rval_unmanaged_name }} CallUnmanaged({% for arg in args %}{{ arg.unmanaged_name }} {{ arg.name }}, {% endfor %}IntPtr callback_data)
+    {
+        var target = ({{ name }})GCHandle.FromIntPtr(callback_data).Target;
+        {% if not is_void %}return {% endif %}target.CallTrampoline({% for arg in args %}{{ arg.name }}, {% endfor %}callback_data);
+    }
+{% endif %}
 
     {{ _fns_decorators_all | indent }}
     private {{ rval_unmanaged_name }} CallTrampoline({% for arg in args %}{{ arg.unmanaged_name }} {{ arg.name }}, {% endfor %}IntPtr callback_data)
@@ -68,9 +83,13 @@ delegate void {{ name }}Destructor(IntPtr data);
 
     {{ _fns_decorators_all | indent }}
     {{ _fns_decorators_internal | indent }}
-    internal {{ rval_managed }} CallRaw({% for arg in args %}{{ arg.managed_type }} {{ arg.name }}{% if not loop.last %}, {% endif %}{% endfor %})
+    internal unsafe {{ rval_managed }} CallRaw({% for arg in args %}{{ arg.managed_type }} {{ arg.name }}{% if not loop.last %}, {% endif %}{% endfor %})
     {
-        var __target = Marshal.GetDelegateForFunctionPointer<{{ name }}Native>(_ptr);
+{% if function_pointer %}
+        var __target = (delegate* unmanaged[Cdecl]<{% for arg in args %}{{ arg.unmanaged_name }}, {% endfor %}IntPtr, {{ rval_unmanaged_name }}>)_ptr;
+{% else %}
+        var __target = _native ??= Marshal.GetDelegateForFunctionPointer<{{ name }}Native>(_ptr);
+{% endif %}
         {% if not is_void %}
         return __target({% for arg in args %}{{ arg.name }}{{ arg.to_unmanaged }}, {% endfor %}_data){{ rval_to_managed }};
         {% else %}
@@ -87,6 +106,7 @@ delegate void {{ name }}Destructor(IntPtr data);
         if (_managed != null)
         {
             {% if not is_void %}return {% endif %}_managed({% for arg in args %}{{ arg.name }}{% if not loop.last %}, {% endif %}{% endfor %});
+            {% if is_void %}return;{% endif %}
         }
         {% if not is_void %}return {% endif %}CallRaw({% for arg in args %}{{ arg.name }}{% if not loop.last %}, {% endif %}{% endfor %});
     }
@@ -95,7 +115,7 @@ delegate void {{ name }}Destructor(IntPtr data);
     /// previous invocation, that exception is re-thrown here. If the callback was
     /// received from Rust, this tells Rust to free the associated data pointer.
     {{ _fns_decorators_all | indent }}
-    public void Dispose()
+    public unsafe void Dispose()
     {
         var exception = _exception;
         _exception = null;
@@ -106,14 +126,14 @@ delegate void {{ name }}Destructor(IntPtr data);
         _ptr = IntPtr.Zero;
         if (destructor != IntPtr.Zero)
         {
-            Marshal.GetDelegateForFunctionPointer<{{ name }}Destructor>(destructor)(data);
+            ((delegate* unmanaged[Cdecl]<IntPtr, void>)destructor)(data);
         }
         if (exception != null)
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// Converts this managed callback to its unmanaged representation for passing to Rust.
-    /// Pins `this` via GCHandle so the native trampoline delegate cannot be garbage collected
+    /// Roots `this` via GCHandle so the managed callback remains alive
     /// while Rust holds the function pointer. The GCHandle is freed when Rust drops the
     /// callback and invokes the destructor.
     {{ _fns_decorators_all | indent }}
@@ -127,7 +147,7 @@ delegate void {{ name }}Destructor(IntPtr data);
         {
             var handle = GCHandle.Alloc(this);
             rval._data = GCHandle.ToIntPtr(handle);
-            rval._destructor = _prevent_gc_release_ptr;
+            rval._destructor = ReleaseHandlePtr;
         }
         else
         {
@@ -149,6 +169,17 @@ delegate void {{ name }}Destructor(IntPtr data);
         rval._callback = _ptr;
         rval._data = _data;
         rval._destructor = _destructor;
+{% if function_pointer %}
+        if (_managed != null)
+        {
+            // Borrowed composite fields have no scoped marshaller to free a handle.
+            // Lazily retain an instance thunk for that path only.
+            _native ??= CallTrampoline;
+            rval._callback = Marshal.GetFunctionPointerForDelegate(_native);
+            rval._data = IntPtr.Zero;
+            rval._destructor = IntPtr.Zero;
+        }
+{% endif %}
         return rval;
     }
 

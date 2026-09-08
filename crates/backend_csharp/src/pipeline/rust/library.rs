@@ -480,7 +480,7 @@ impl RustLibrary {
         o.delegates_signature.process(&mut pass_meta, &self.output_master, &m.type_all)?;
         o.slices.process(&mut pass_meta, &self.output_master, &m.type_all, &m.type_managed_conversion, &m.type_nullable, &o.unmanaged_names)?;
         o.vecs.process(&mut pass_meta, &self.output_master, &m.type_all, &m.type_managed_conversion, &o.unmanaged_names, &m.pattern_vec)?;
-        o.fns_rust.process(&mut pass_meta, &self.output_master, &m.fns_all, &m.type_all)?;
+        o.fns_rust.process(&mut pass_meta, &self.output_master, &m.fns_all, &m.type_all, &m.type_managed_conversion)?;
         o.fns_guard.process(&mut pass_meta, &self.output_master, &m.fns_all, &m.type_all, &self.meta_info)?;
         o.fns_overload_simple.process(&mut pass_meta, &self.output_master, &m.fns_all, &m.type_all)?;
         o.fns_overload_body.process(&mut pass_meta, &self.output_master, &m.fns_all, &m.type_all, &m.type_overload_all, &m.type_trampoline)?;

@@ -13,7 +13,7 @@ public partial class {{ name }} : IDisposable
 
     /// Creates a new Rust-owned vector by copying elements from the given span.
     {{ _fns_decorators_all | indent }}
-    public static unsafe {{ name }} From(Span<{{ element_type }}> _data)
+    public static unsafe {{ name }} From(ReadOnlySpan<{{ element_type }}> _data)
     {
         var rval = new {{ name }}();
         fixed (void* _data_ptr = _data)
@@ -39,8 +39,7 @@ public partial class {{ name }} : IDisposable
 
     /// Copies all elements into a new managed array.
     ///
-    /// Prefer this over looping the indexer: the indexer marshals one element
-    /// per call, which is O(n) interop calls for what is a single copy.
+    /// Uses one bulk copy from the Rust-owned buffer.
     public unsafe {{ element_type }}[] ToArray()
     {
         if (_ptr == IntPtr.Zero) throw new NullReferenceException();
@@ -56,7 +55,7 @@ public partial class {{ name }} : IDisposable
         {
             if (_ptr == IntPtr.Zero) throw new NullReferenceException();
             if (i < 0 || (ulong)i >= _len) throw new IndexOutOfRangeException();
-            return Marshal.PtrToStructure<{{ element_type }}>(new IntPtr(_ptr.ToInt64() + i * sizeof({{ element_type }})));
+            return (({{ element_type }}*)_ptr)[i];
         }
     }
 }

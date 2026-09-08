@@ -222,4 +222,37 @@ public class TestPatternSlices
             value.Dispose();
         }
     }
+
+    [Fact]
+    public void span_overloads_accept_stack_memory_and_write_back()
+    {
+        ReadOnlySpan<uint> values = stackalloc uint[] { 1, 2, 3 };
+        Assert.Equal(3u, Interop.pattern_ffi_slice_1(values));
+        Assert.Equal(0u, Interop.pattern_ffi_slice_1(ReadOnlySpan<uint>.Empty));
+        Span<byte> mutable = stackalloc byte[] { 4, 5 };
+        using var callback = new CallbackSliceMut(slice =>
+        {
+            Assert.Equal((byte)5, slice[0]);
+            slice.Span[1] = 42;
+        });
+        Interop.pattern_ffi_slice_3(mutable, callback);
+        Assert.Equal((byte)5, mutable[0]);
+        Assert.Equal((byte)42, mutable[1]);
+        Interop.pattern_ffi_slice_4(ReadOnlySpan<byte>.Empty, mutable);
+        ReadOnlySpan<EnumDocumented> enums = stackalloc EnumDocumented[] { EnumDocumented.B, EnumDocumented.A };
+        Assert.Equal(1u, Interop.pattern_ffi_slice_of_unit_enum(enums));
+    }
+
+    [Fact]
+    public void span_overload_does_not_allocate_managed_wrappers()
+    {
+        ReadOnlySpan<uint> values = stackalloc uint[] { 1, 2, 3 };
+        for (var i = 0; i < 512; ++i) Interop.pattern_ffi_slice_1(values);
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        uint result = 0;
+        for (var i = 0; i < 1024; ++i) result += Interop.pattern_ffi_slice_1(values);
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        Assert.Equal(3072u, result);
+        Assert.Equal(0, allocated);
+    }
 }

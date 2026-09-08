@@ -12,7 +12,7 @@ public partial class {{ name }} : IDisposable
 
     /// Creates a new Rust-owned vector by marshalling each element from the given span.
     {{ _fns_decorators_all | indent }}
-    public static unsafe {{ name }} From(Span<{{ element_type }}> _data)
+    public static unsafe {{ name }} From(ReadOnlySpan<{{ element_type }}> _data)
     {
         var _temp = new {{ unmanaged_element_type }}[_data.Length];
         for (var i = 0; i < _data.Length; ++i)

@@ -224,3 +224,31 @@ fn csharp_suite() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+
+/// Compiles the benchmark against current bindings and exercises awaited timing under the same host.
+#[test]
+fn csharp_benchmarks() -> Result<(), Box<dyn std::error::Error>> {
+    crate::prepare_reference_bindings()?;
+    let staged = crate::stage_reference_cdylib()?;
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let project_dir = manifest.join("benches").join("dotnet");
+    let project = project_dir.join("dotnet_benchmarks.csproj");
+    let corerun = patched_corerun(&manifest)?;
+    let mut build = std::process::Command::new("dotnet");
+    build.arg("build").arg(&project).args(["-c", "Release"]).current_dir(&project_dir);
+    let status = crate::run_with_timeout(&mut build, crate::DOTNET_TIMEOUT)?;
+    assert!(status.success(), "benchmark build failed with {status}");
+    let output_dir = project_dir.join("bin").join("Release").join("net11.0");
+    // Smoke tests use this exact Cargo build. Normal benchmark runs use the release Content item.
+    std::fs::copy(&staged, output_dir.join(crate::REFERENCE_CDYLIB))?;
+    let mut run = std::process::Command::new(&corerun);
+    run.args(["-p", &format!("RUNTIME_IDENTIFIER={}", runtime_identifier()?)])
+        .arg(output_dir.join("dotnet_benchmarks.dll"))
+        .arg("--smoke")
+        .current_dir(&output_dir)
+        .env("CORE_LIBRARIES", &output_dir);
+    let status = crate::run_with_timeout(&mut run, crate::DOTNET_TIMEOUT)?;
+    assert!(status.success(), "benchmark smoke test failed under {} with {status}", corerun.display());
+    Ok(())
+}
