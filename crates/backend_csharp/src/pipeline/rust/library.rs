@@ -82,6 +82,7 @@ pub struct RustLibraryConfig {
     pub output_delegates_signature: output::common::types::delegates::signature::Config,
     pub output_slices: output::rust::pattern::slices::Config,
     pub output_vecs: output::rust::pattern::vec::Config,
+    pub output_iterators: output::rust::pattern::iterator::Config,
     pub output_fn_imports: output::rust::fns::rust::Config,
     pub output_fn_guard: output::rust::fns::guard::Config,
     pub output_fn_overload_simple: output::rust::fns::overload::simple::Config,
@@ -175,6 +176,7 @@ pub struct IntermediateOutputPasses {
     pub delegates_signature: output::common::types::delegates::signature::Pass,
     pub slices: output::rust::pattern::slices::Pass,
     pub vecs: output::rust::pattern::vec::Pass,
+    pub iterators: output::rust::pattern::iterator::Pass,
     pub fns_rust: output::rust::fns::rust::Pass,
     pub fns_guard: output::rust::fns::guard::Pass,
     pub fns_overload_simple: output::rust::fns::overload::simple::Pass,
@@ -335,6 +337,7 @@ impl RustLibrary {
                 delegates_signature: output::common::types::delegates::signature::Pass::new(config.output_delegates_signature),
                 slices: output::rust::pattern::slices::Pass::new(config.output_slices),
                 vecs: output::rust::pattern::vec::Pass::new(config.output_vecs),
+                iterators: output::rust::pattern::iterator::Pass::new(config.output_iterators),
                 fns_rust: output::rust::fns::rust::Pass::new(config.output_fn_imports),
                 fns_guard: output::rust::fns::guard::Pass::new(config.output_fn_guard),
                 fns_overload_simple: output::rust::fns::overload::simple::Pass::new(config.output_fn_overload_simple),
@@ -480,6 +483,7 @@ impl RustLibrary {
         o.delegates_signature.process(&mut pass_meta, &self.output_master, &m.type_all)?;
         o.slices.process(&mut pass_meta, &self.output_master, &m.type_all, &m.type_managed_conversion, &m.type_nullable, &o.unmanaged_names)?;
         o.vecs.process(&mut pass_meta, &self.output_master, &m.type_all, &m.type_managed_conversion, &o.unmanaged_names, &m.pattern_vec)?;
+        o.iterators.process(&mut pass_meta, &self.output_master, &m.type_all, &m.type_managed_conversion)?;
         o.fns_rust.process(&mut pass_meta, &self.output_master, &m.fns_all, &m.type_all, &m.type_managed_conversion)?;
         o.fns_guard.process(&mut pass_meta, &self.output_master, &m.fns_all, &m.type_all, &self.meta_info)?;
         o.fns_overload_simple.process(&mut pass_meta, &self.output_master, &m.fns_all, &m.type_all)?;

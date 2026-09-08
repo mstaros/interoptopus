@@ -36,4 +36,6 @@ pub enum TypePattern {
     Wire(TypeId),
     /// An opaque handle for aborting a spawned async task (`TaskHandle`).
     TaskHandle,
+    /// An owned single-pass iterator with specialized function pointers.
+    Iterator(TypeId),
 }

@@ -75,3 +75,55 @@ marshalling remain responsible for callback state and disposal.
 
 This changes the generated public API: callers naming an old `NameDelegate` type
 should use the corresponding `Func` or `Action`. Inline lambda calls retain their syntax.
+
+## Rust-owned queries
+
+Return an `ffi::Iterator<T>` from a registered Rust function or service method:
+
+```rust
+use interoptopus::ffi;
+
+#[ffi]
+pub fn numbers() -> ffi::Iterator<u32> {
+    ffi::Iterator::new(vec![1, 2, 3, 4, 5].into_iter())
+}
+```
+
+Register the export with `function!(numbers)` as usual. The Rust library backend
+automatically emits `IteratorUint` and its extension class in the namespace selected
+by the output dispatch. Import that namespace in C#:
+
+```csharp
+using var query = Interop.numbers()
+    .Where(x => x % 2 == 0)
+    .Take(2);
+bool found = query.Any(x => x > 3);
+```
+
+`Where` accepts `Func<T, bool>`. `Where` and `Take` are deferred; `Any`
+evaluates in Rust, short-circuits, and releases the pipeline. Negative `Take`
+counts behave like zero. Managed predicates are retained until the query is
+released. A predicate exception stops traversal and is rethrown by `Any` after
+cleanup. Each element reaching a managed predicate requires a native-to-managed
+callback; this does not compile C# lambdas into Rust code.
+
+Queries are owning, single-pass objects. Every operator consumes its receiver;
+use its returned stage and dispose unfinished queries with `using`. Earlier
+wrappers cannot be reused, although disposing them is harmless. This also applies
+when passing a query by value back into Rust. Unlike `IEnumerable<T>`, a consumed
+query cannot be enumerated again. Explicit disposal is required for abandoned
+queries whose predicate captures its own query wrapper.
+
+The Rust source must be `Send + 'static`. A traversal over a shared collection
+can retain an `Arc` to that collection and produce owned elements; a traversal
+borrowing a local collection cannot be exported. The source remains in Rust and
+is not materialized by the binding layer.
+
+This first version supports `Where`, `Take`, `Any()`, and `Any(predicate)`
+for scalars, plain enums, and structs composed of those values. Pointer, slice,
+string, array, payload-enum, and owning-wrapper elements are rejected during
+generation. Element structs are copied through their generated unmanaged
+representation before invoking the predicate.
+
+The initial operators use `std::iter`. Additional operators can use `itertools`
+as an ordinary dependency; no itertools fork is required.

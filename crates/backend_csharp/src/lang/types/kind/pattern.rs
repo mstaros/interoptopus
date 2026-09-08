@@ -17,4 +17,5 @@ pub enum TypePattern {
     AsyncCallback(TypeId),
     Wire(TypeId),
     TaskHandle,
+    Iterator(TypeId),
 }

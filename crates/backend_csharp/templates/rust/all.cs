@@ -52,6 +52,10 @@ public static partial class Interop {
 
 {{ vec }}
 {%- endfor %}
+{%- for iterator in iterators %}
+
+{{ iterator }}
+{%- endfor %}
 {%- for service in services %}
 
 {{ service }}

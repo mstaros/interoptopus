@@ -76,6 +76,7 @@ impl Pass {
 
                 // NamedCallback is handled by the delegate kind pass, not here.
                 lang::types::TypePattern::NamedCallback(_) => continue,
+                lang::types::TypePattern::Iterator(rust_ty) => TypePattern::Iterator(try_resolve!(id_map.ty(*rust_ty), pass_meta, self.info, crate::pass::MissingItem::RustType(*rust_ty))),
                 lang::types::TypePattern::TaskHandle => TypePattern::TaskHandle,
             };
 

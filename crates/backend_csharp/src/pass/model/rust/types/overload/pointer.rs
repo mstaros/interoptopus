@@ -143,6 +143,7 @@ fn supports_in_marshaller(kind: &TypeKind) -> bool {
                 | TypePattern::Slice(_)
                 | TypePattern::SliceMut(_)
                 | TypePattern::Vec(_)
+                | TypePattern::Iterator(_)
                 | TypePattern::Option(_, _)
                 | TypePattern::Result(_, _, _)
                 | TypePattern::Wire(_)
