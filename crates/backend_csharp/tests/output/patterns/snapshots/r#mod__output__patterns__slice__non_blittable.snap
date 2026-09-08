@@ -55,6 +55,7 @@ public static partial class Interop {
 
     
     [LibraryImport(NativeLib, EntryPoint = "count_attributes_86437")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static partial uint count_attributes_86437(SliceAttribute values);
 
