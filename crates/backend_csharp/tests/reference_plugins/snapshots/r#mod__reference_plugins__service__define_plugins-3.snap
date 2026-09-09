@@ -535,6 +535,13 @@ public partial class AsyncCancellation : IDisposable
     {
         internal IntPtr _handle;
 
+        internal void Free()
+        {
+            var handle = _handle;
+            _handle = IntPtr.Zero;
+            if (handle != IntPtr.Zero) GCHandle.FromIntPtr(handle).Free();
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         [Obsolete("This method is intended for use by generated code only.")]
         [EditorBrowsable(EditorBrowsableState.Never)]

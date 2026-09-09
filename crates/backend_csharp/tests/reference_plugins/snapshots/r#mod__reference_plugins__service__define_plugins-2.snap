@@ -367,6 +367,13 @@ internal partial struct WireBuffer
         public int len;
         public int capacity;
 
+        internal void Free()
+        {
+            var native = this;
+            this = default;
+            native.IntoManaged().Dispose();
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         [Obsolete("This method is intended for use by generated code only.")]
         [EditorBrowsable(EditorBrowsableState.Never)]
@@ -559,6 +566,8 @@ public partial class WireOfHashMapStringString : IDisposable
     {
         internal WireBuffer Buffer;
 
+        internal void Free() { Buffer.Dispose(); }
+
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         [Obsolete("This method is intended for use by generated code only.")]
         [EditorBrowsable(EditorBrowsableState.Never)]
@@ -589,6 +598,7 @@ public partial class WireOfHashMapStringString : IDisposable
     {
         private WireOfHashMapStringString _managed;
         private Unmanaged _unmanaged;
+        private bool _ownsUnmanaged;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public Marshaller(WireOfHashMapStringString managed) { _managed = managed; }
@@ -603,13 +613,22 @@ public partial class WireOfHashMapStringString : IDisposable
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { _unmanaged = _managed.IntoUnmanaged();
+            _ownsUnmanaged = true;
+            return _unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public WireOfHashMapStringString ToManaged() { return _unmanaged.IntoManaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void OnInvoked() { _ownsUnmanaged = false; }
+
+        public void Free()
+        {
+            if (!_ownsUnmanaged) return;
+            _ownsUnmanaged = false;
+            _unmanaged.Free();
+        }
     }
 }
 
@@ -913,6 +932,13 @@ public partial class AsyncBasic : IDisposable
     {
         internal IntPtr _handle;
 
+        internal void Free()
+        {
+            var handle = _handle;
+            _handle = IntPtr.Zero;
+            if (handle != IntPtr.Zero) GCHandle.FromIntPtr(handle).Free();
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         [Obsolete("This method is intended for use by generated code only.")]
         [EditorBrowsable(EditorBrowsableState.Never)]
@@ -1027,6 +1053,14 @@ public partial class ResultWireOfHashMapStringStringError : IUnion, IResult<Wire
                 _ => throw new InteropException($"Unknown variant {_variant} for ResultWireOfHashMapStringStringError. The value did not originate from a well-formed Rust enum."),
             };
         }
+
+        // Releases native fields even when only a prefix finished marshalling.
+        internal void Free()
+        {
+            var native = this;
+            this = default;
+            if (native._variant == 0) native._Ok._Ok.Free();
+        }
     }
 
 
@@ -1036,10 +1070,18 @@ public partial class ResultWireOfHashMapStringStringError : IUnion, IResult<Wire
     internal Unmanaged IntoUnmanaged()
     {
         var _unmanaged = new Unmanaged();
-        _unmanaged._variant = _variant;
-        if (_variant == 0) _unmanaged._Ok._Ok = _Ok.IntoUnmanaged();
-        if (_variant == 1) _unmanaged._Err._Err = _Err;
-        return _unmanaged;
+        try
+        {
+            _unmanaged._variant = _variant;
+            if (_variant == 0) _unmanaged._Ok._Ok = _Ok.IntoUnmanaged();
+            if (_variant == 1) _unmanaged._Err._Err = _Err;
+            return _unmanaged;
+        }
+        catch
+        {
+            _unmanaged.Free();
+            throw;
+        }
     }
 
 
@@ -1192,7 +1234,10 @@ public partial class ResultWireOfHashMapStringStringError : IUnion, IResult<Wire
 
     public void Dispose()
     {
-        if (_variant == 0) _Ok?.Dispose();
+        List<Exception> __disposeErrors = null;
+        if (_variant == 0) { try { this._Ok?.Dispose(); } catch (Exception error) { (__disposeErrors ??= new()).Add(error); } }
+        if (__disposeErrors is { Count: 1 }) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(__disposeErrors[0]).Throw();
+        if (__disposeErrors is not null) throw new AggregateException("Resource cleanup failed.", __disposeErrors);
     }
 
     [CustomMarshaller(typeof(ResultWireOfHashMapStringStringError), MarshalMode.Default, typeof(Marshaller))]
@@ -1219,6 +1264,7 @@ public partial class ResultWireOfHashMapStringStringError : IUnion, IResult<Wire
     {
         private ResultWireOfHashMapStringStringError _managed;
         private Unmanaged _unmanaged;
+        private bool _ownsUnmanaged;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public Marshaller(ResultWireOfHashMapStringStringError managed) { _managed = managed; }
@@ -1233,13 +1279,20 @@ public partial class ResultWireOfHashMapStringStringError : IUnion, IResult<Wire
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultWireOfHashMapStringStringError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultWireOfHashMapStringStringError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); _unmanaged = _managed.IntoUnmanaged(); _ownsUnmanaged = true; return _unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultWireOfHashMapStringStringError ToManaged() { return _unmanaged.IntoManaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void OnInvoked() { _ownsUnmanaged = false; }
+
+        public void Free()
+        {
+            if (!_ownsUnmanaged) return;
+            _ownsUnmanaged = false;
+            _unmanaged.Free();
+        }
     }
 
 }

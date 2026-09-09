@@ -617,6 +617,13 @@ public partial class NestedA : IDisposable
     {
         internal IntPtr _handle;
 
+        internal void Free()
+        {
+            var handle = _handle;
+            _handle = IntPtr.Zero;
+            if (handle != IntPtr.Zero) GCHandle.FromIntPtr(handle).Free();
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         [Obsolete("This method is intended for use by generated code only.")]
         [EditorBrowsable(EditorBrowsableState.Never)]
@@ -665,6 +672,13 @@ public partial class NestedB : IDisposable
     internal struct Unmanaged
     {
         internal IntPtr _handle;
+
+        internal void Free()
+        {
+            var handle = _handle;
+            _handle = IntPtr.Zero;
+            if (handle != IntPtr.Zero) GCHandle.FromIntPtr(handle).Free();
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         [Obsolete("This method is intended for use by generated code only.")]
@@ -780,6 +794,14 @@ public partial class ResultNestedAError : IUnion, IResult<NestedA, Error>, IDisp
                 _ => throw new InteropException($"Unknown variant {_variant} for ResultNestedAError. The value did not originate from a well-formed Rust enum."),
             };
         }
+
+        // Releases native fields even when only a prefix finished marshalling.
+        internal void Free()
+        {
+            var native = this;
+            this = default;
+            if (native._variant == 0) native._Ok._Ok.Free();
+        }
     }
 
 
@@ -789,10 +811,18 @@ public partial class ResultNestedAError : IUnion, IResult<NestedA, Error>, IDisp
     internal Unmanaged IntoUnmanaged()
     {
         var _unmanaged = new Unmanaged();
-        _unmanaged._variant = _variant;
-        if (_variant == 0) _unmanaged._Ok._Ok = _Ok.IntoUnmanaged();
-        if (_variant == 1) _unmanaged._Err._Err = _Err;
-        return _unmanaged;
+        try
+        {
+            _unmanaged._variant = _variant;
+            if (_variant == 0) _unmanaged._Ok._Ok = _Ok.IntoUnmanaged();
+            if (_variant == 1) _unmanaged._Err._Err = _Err;
+            return _unmanaged;
+        }
+        catch
+        {
+            _unmanaged.Free();
+            throw;
+        }
     }
 
 
@@ -945,6 +975,7 @@ public partial class ResultNestedAError : IUnion, IResult<NestedA, Error>, IDisp
 
     public void Dispose()
     {
+        
     }
 
     [CustomMarshaller(typeof(ResultNestedAError), MarshalMode.Default, typeof(Marshaller))]
@@ -971,6 +1002,7 @@ public partial class ResultNestedAError : IUnion, IResult<NestedA, Error>, IDisp
     {
         private ResultNestedAError _managed;
         private Unmanaged _unmanaged;
+        private bool _ownsUnmanaged;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public Marshaller(ResultNestedAError managed) { _managed = managed; }
@@ -985,13 +1017,20 @@ public partial class ResultNestedAError : IUnion, IResult<NestedA, Error>, IDisp
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultNestedAError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultNestedAError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); _unmanaged = _managed.IntoUnmanaged(); _ownsUnmanaged = true; return _unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultNestedAError ToManaged() { return _unmanaged.IntoManaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void OnInvoked() { _ownsUnmanaged = false; }
+
+        public void Free()
+        {
+            if (!_ownsUnmanaged) return;
+            _ownsUnmanaged = false;
+            _unmanaged.Free();
+        }
     }
 
 }
