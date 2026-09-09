@@ -28,7 +28,7 @@ use crate::pass::model::rust::fns::overload::{IntPtrEligibility, derive_overload
 use crate::pass::{ModelResult, PassInfo, model};
 use std::collections::HashSet;
 
-#[derive(Default)]
+#[derive(Clone, Copy, Default)]
 pub struct Config {
     pub value_task: bool,
 }

@@ -104,9 +104,9 @@ Task<(uint, float)> pending = service.PairLaterAsync((18u, 3f)).AsTask();
 ```
 
 The native ABI is the same for both return styles. A managed value-task source
-bridges each callback; the ValueTask wrappers use pooled async builders.
+bridges each callback; the `ValueTask` wrappers use pooled async builders.
 Individual service calls still require completion state and native task
-handles, so selecting ValueTask does not make every call allocation-free.
+handles, so selecting `ValueTask` does not make every call allocation-free.
 
 Cancellation keeps the caller's token and produces a cancelled await. A Rust
 panic while polling or starting a task produces a fault with
