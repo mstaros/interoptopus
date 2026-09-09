@@ -6,12 +6,12 @@
 //! type, so its case types would all be empty, its `Value` would be nothing, and
 //! `TryGetValue` would have nothing to get.
 //!
-//! The test is per **enum**, not per variant, and that distinction is the whole point of
-//! this file. A union-projected enum gives *every* variant a case type, unit variants
-//! included — an empty case type is what keeps a mixed enum exhaustive in the
-//! compiler-checked layer. Folding the unit variants of a mixed enum into one nested C#
-//! enum was considered and dropped (`Issues.md` `79be256e`), because it moves them into a
-//! plain-enum switch, which C# does not check for exhaustiveness.
+//! These tests preserve plain enums and mixed enums with only one genuine unit
+//! variant. The companion `enum_constants` tests cover automatic grouping of
+//! two or more true unit variants and its enum-base and empty-payload limits.
+//! Grouping preserves payload case identity while moving constants into enum-value
+//! patterns. This supersedes the earlier decision in `Issues.md` `79be256e`.
+//! The single-unit `Carrier` fixture below still retains its empty `GammaCase`.
 //!
 //! Without this test the rule is guarded only by the reference snapshot, where its effect
 //! is an *absence*. Deleting the guard in `body_case_types.rs` would move a 15,000-line

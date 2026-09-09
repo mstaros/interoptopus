@@ -1077,13 +1077,15 @@ public partial struct ResultVec3f32Error
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial struct ResultVec3f32Error : IUnion, IResult<Vec3f32, Error>
 {
+    public enum Constants : uint
+    {
+        Panic = 2,
+        Null = 3,
+    }
+
     public readonly record struct OkCase(Vec3f32 Value);
 
     public readonly record struct ErrCase(Error Value);
-
-    public readonly record struct PanicCase();
-
-    public readonly record struct NullCase();
 
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
@@ -1123,8 +1125,8 @@ public partial struct ResultVec3f32Error : IUnion, IResult<Vec3f32, Error>
             {
                 0 => new ResultVec3f32Error(new OkCase(_Ok._Ok.ToManaged())),
                 1 => new ResultVec3f32Error(new ErrCase(_Err._Err)),
-                2 => new ResultVec3f32Error(new PanicCase()),
-                3 => new ResultVec3f32Error(new NullCase()),
+                2 => new ResultVec3f32Error(Constants.Panic),
+                3 => new ResultVec3f32Error(Constants.Null),
                 _ => throw new InteropException($"Unknown variant {_variant} for ResultVec3f32Error. The value did not originate from a well-formed Rust enum."),
             };
         }
@@ -1178,10 +1180,21 @@ public partial struct ResultVec3f32Error : IUnion, IResult<Vec3f32, Error>
     {
         0 => new OkCase(_Ok),
         1 => new ErrCase(_Err),
-        2 => new PanicCase(),
-        3 => new NullCase(),
+        2 => Constants.Panic,
+        3 => Constants.Null,
         _ => null,
     };
+
+    public bool TryGetValue(out Constants value)
+    {
+        if (_hasValue && (_variant is 2 or 3))
+        {
+            value = (Constants)_variant;
+            return true;
+        }
+        value = default;
+        return false;
+    }
 
     public bool TryGetValue(out OkCase value)
     {
@@ -1193,20 +1206,6 @@ public partial struct ResultVec3f32Error : IUnion, IResult<Vec3f32, Error>
     public bool TryGetValue(out ErrCase value)
     {
         if (_hasValue && _variant == 1) { value = new ErrCase(_Err); return true; }
-        value = default;
-        return false;
-    }
-
-    public bool TryGetValue(out PanicCase value)
-    {
-        if (_hasValue && _variant == 2) { value = new PanicCase(); return true; }
-        value = default;
-        return false;
-    }
-
-    public bool TryGetValue(out NullCase value)
-    {
-        if (_hasValue && _variant == 3) { value = new NullCase(); return true; }
         value = default;
         return false;
     }
@@ -1231,10 +1230,18 @@ public partial struct ResultVec3f32Error : IUnion, IResult<Vec3f32, Error>
     public void AsNull() { if (!_hasValue || _variant != 3) throw ExceptionForVariant(); }
 
     // Case constructors — the union creation members the compiler reads case types from.
+    public ResultVec3f32Error(Constants value)
+    {
+        _variant = value switch
+        {
+            Constants.Panic => 2,
+            Constants.Null => 3,
+            _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Expected a payload-free ResultVec3f32Error variant."),
+        };
+        _hasValue = true;
+    }
     public ResultVec3f32Error(OkCase value) { _variant = 0; _Ok = value.Value; _hasValue = true; }
     public ResultVec3f32Error(ErrCase value) { _variant = 1; _Err = value.Value; _hasValue = true; }
-    public ResultVec3f32Error(PanicCase value) { _variant = 2; _hasValue = true; }
-    public ResultVec3f32Error(NullCase value) { _variant = 3; _hasValue = true; }
 
 
     

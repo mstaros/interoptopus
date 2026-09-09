@@ -68,13 +68,15 @@ public partial struct ResultUintVoid
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial struct ResultUintVoid : IUnion, IResult<uint, Unit>
 {
+    public enum Constants : uint
+    {
+        Panic = 2,
+        Null = 3,
+    }
+
     public readonly record struct OkCase(uint Value);
 
     public readonly record struct ErrCase();
-
-    public readonly record struct PanicCase();
-
-    public readonly record struct NullCase();
 
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
@@ -103,8 +105,8 @@ public partial struct ResultUintVoid : IUnion, IResult<uint, Unit>
             {
                 0 => new ResultUintVoid(new OkCase(_Ok._Ok)),
                 1 => new ResultUintVoid(new ErrCase()),
-                2 => new ResultUintVoid(new PanicCase()),
-                3 => new ResultUintVoid(new NullCase()),
+                2 => new ResultUintVoid(Constants.Panic),
+                3 => new ResultUintVoid(Constants.Null),
                 _ => throw new InteropException($"Unknown variant {_variant} for ResultUintVoid. The value did not originate from a well-formed Rust enum."),
             };
         }
@@ -156,10 +158,21 @@ public partial struct ResultUintVoid : IUnion, IResult<uint, Unit>
     {
         0 => new OkCase(_Ok),
         1 => new ErrCase(),
-        2 => new PanicCase(),
-        3 => new NullCase(),
+        2 => Constants.Panic,
+        3 => Constants.Null,
         _ => null,
     };
+
+    public bool TryGetValue(out Constants value)
+    {
+        if (_hasValue && (_variant is 2 or 3))
+        {
+            value = (Constants)_variant;
+            return true;
+        }
+        value = default;
+        return false;
+    }
 
     public bool TryGetValue(out OkCase value)
     {
@@ -171,20 +184,6 @@ public partial struct ResultUintVoid : IUnion, IResult<uint, Unit>
     public bool TryGetValue(out ErrCase value)
     {
         if (_hasValue && _variant == 1) { value = new ErrCase(); return true; }
-        value = default;
-        return false;
-    }
-
-    public bool TryGetValue(out PanicCase value)
-    {
-        if (_hasValue && _variant == 2) { value = new PanicCase(); return true; }
-        value = default;
-        return false;
-    }
-
-    public bool TryGetValue(out NullCase value)
-    {
-        if (_hasValue && _variant == 3) { value = new NullCase(); return true; }
         value = default;
         return false;
     }
@@ -209,10 +208,18 @@ public partial struct ResultUintVoid : IUnion, IResult<uint, Unit>
     public void AsNull() { if (!_hasValue || _variant != 3) throw ExceptionForVariant(); }
 
     // Case constructors — the union creation members the compiler reads case types from.
+    public ResultUintVoid(Constants value)
+    {
+        _variant = value switch
+        {
+            Constants.Panic => 2,
+            Constants.Null => 3,
+            _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Expected a payload-free ResultUintVoid variant."),
+        };
+        _hasValue = true;
+    }
     public ResultUintVoid(OkCase value) { _variant = 0; _Ok = value.Value; _hasValue = true; }
     public ResultUintVoid(ErrCase value) { _variant = 1; _hasValue = true; }
-    public ResultUintVoid(PanicCase value) { _variant = 2; _hasValue = true; }
-    public ResultUintVoid(NullCase value) { _variant = 3; _hasValue = true; }
 
 
     // FromCall

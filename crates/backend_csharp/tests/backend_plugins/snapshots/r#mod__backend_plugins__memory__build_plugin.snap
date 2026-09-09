@@ -187,13 +187,15 @@ public partial class ResultFliparooDotnetException
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class ResultFliparooDotnetException : IUnion, IResult<Fliparoo, DotnetException>, IDisposable
 {
+    public enum Constants : uint
+    {
+        Panic = 2,
+        Null = 3,
+    }
+
     public readonly record struct OkCase(Fliparoo Value);
 
     public readonly record struct ErrCase(DotnetException Value);
-
-    public readonly record struct PanicCase();
-
-    public readonly record struct NullCase();
 
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
@@ -233,8 +235,8 @@ public partial class ResultFliparooDotnetException : IUnion, IResult<Fliparoo, D
             {
                 0 => new ResultFliparooDotnetException(new OkCase(_Ok._Ok.IntoManaged())),
                 1 => new ResultFliparooDotnetException(new ErrCase(_Err._Err.ToManaged())),
-                2 => new ResultFliparooDotnetException(new PanicCase()),
-                3 => new ResultFliparooDotnetException(new NullCase()),
+                2 => new ResultFliparooDotnetException(Constants.Panic),
+                3 => new ResultFliparooDotnetException(Constants.Null),
                 _ => throw new InteropException($"Unknown variant {_variant} for ResultFliparooDotnetException. The value did not originate from a well-formed Rust enum."),
             };
         }
@@ -285,10 +287,21 @@ public partial class ResultFliparooDotnetException : IUnion, IResult<Fliparoo, D
     {
         0 => new OkCase(_Ok),
         1 => new ErrCase(_Err),
-        2 => new PanicCase(),
-        3 => new NullCase(),
+        2 => Constants.Panic,
+        3 => Constants.Null,
         _ => null,
     };
+
+    public bool TryGetValue(out Constants value)
+    {
+        if ((_variant is 2 or 3))
+        {
+            value = (Constants)_variant;
+            return true;
+        }
+        value = default;
+        return false;
+    }
 
     public bool TryGetValue(out OkCase value)
     {
@@ -300,20 +313,6 @@ public partial class ResultFliparooDotnetException : IUnion, IResult<Fliparoo, D
     public bool TryGetValue(out ErrCase value)
     {
         if (_variant == 1) { value = new ErrCase(_Err); return true; }
-        value = default;
-        return false;
-    }
-
-    public bool TryGetValue(out PanicCase value)
-    {
-        if (_variant == 2) { value = new PanicCase(); return true; }
-        value = default;
-        return false;
-    }
-
-    public bool TryGetValue(out NullCase value)
-    {
-        if (_variant == 3) { value = new NullCase(); return true; }
         value = default;
         return false;
     }
@@ -346,10 +345,17 @@ public partial class ResultFliparooDotnetException : IUnion, IResult<Fliparoo, D
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
 
     // Case constructors — the union creation members the compiler reads case types from.
+    public ResultFliparooDotnetException(Constants value)
+    {
+        _variant = value switch
+        {
+            Constants.Panic => 2,
+            Constants.Null => 3,
+            _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Expected a payload-free ResultFliparooDotnetException variant."),
+        };
+    }
     public ResultFliparooDotnetException(OkCase value) { _variant = 0; _Ok = value.Value; }
     public ResultFliparooDotnetException(ErrCase value) { _variant = 1; _Err = value.Value; }
-    public ResultFliparooDotnetException(PanicCase value) { _variant = 2; }
-    public ResultFliparooDotnetException(NullCase value) { _variant = 3; }
 
 
     
@@ -471,13 +477,15 @@ public partial class ResultHeavyDotnetException
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class ResultHeavyDotnetException : IUnion, IResult<Heavy, DotnetException>, IDisposable
 {
+    public enum Constants : uint
+    {
+        Panic = 2,
+        Null = 3,
+    }
+
     public readonly record struct OkCase(Heavy Value);
 
     public readonly record struct ErrCase(DotnetException Value);
-
-    public readonly record struct PanicCase();
-
-    public readonly record struct NullCase();
 
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
@@ -517,8 +525,8 @@ public partial class ResultHeavyDotnetException : IUnion, IResult<Heavy, DotnetE
             {
                 0 => new ResultHeavyDotnetException(new OkCase(_Ok._Ok.IntoManaged())),
                 1 => new ResultHeavyDotnetException(new ErrCase(_Err._Err.ToManaged())),
-                2 => new ResultHeavyDotnetException(new PanicCase()),
-                3 => new ResultHeavyDotnetException(new NullCase()),
+                2 => new ResultHeavyDotnetException(Constants.Panic),
+                3 => new ResultHeavyDotnetException(Constants.Null),
                 _ => throw new InteropException($"Unknown variant {_variant} for ResultHeavyDotnetException. The value did not originate from a well-formed Rust enum."),
             };
         }
@@ -569,10 +577,21 @@ public partial class ResultHeavyDotnetException : IUnion, IResult<Heavy, DotnetE
     {
         0 => new OkCase(_Ok),
         1 => new ErrCase(_Err),
-        2 => new PanicCase(),
-        3 => new NullCase(),
+        2 => Constants.Panic,
+        3 => Constants.Null,
         _ => null,
     };
+
+    public bool TryGetValue(out Constants value)
+    {
+        if ((_variant is 2 or 3))
+        {
+            value = (Constants)_variant;
+            return true;
+        }
+        value = default;
+        return false;
+    }
 
     public bool TryGetValue(out OkCase value)
     {
@@ -584,20 +603,6 @@ public partial class ResultHeavyDotnetException : IUnion, IResult<Heavy, DotnetE
     public bool TryGetValue(out ErrCase value)
     {
         if (_variant == 1) { value = new ErrCase(_Err); return true; }
-        value = default;
-        return false;
-    }
-
-    public bool TryGetValue(out PanicCase value)
-    {
-        if (_variant == 2) { value = new PanicCase(); return true; }
-        value = default;
-        return false;
-    }
-
-    public bool TryGetValue(out NullCase value)
-    {
-        if (_variant == 3) { value = new NullCase(); return true; }
         value = default;
         return false;
     }
@@ -630,10 +635,17 @@ public partial class ResultHeavyDotnetException : IUnion, IResult<Heavy, DotnetE
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
 
     // Case constructors — the union creation members the compiler reads case types from.
+    public ResultHeavyDotnetException(Constants value)
+    {
+        _variant = value switch
+        {
+            Constants.Panic => 2,
+            Constants.Null => 3,
+            _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Expected a payload-free ResultHeavyDotnetException variant."),
+        };
+    }
     public ResultHeavyDotnetException(OkCase value) { _variant = 0; _Ok = value.Value; }
     public ResultHeavyDotnetException(ErrCase value) { _variant = 1; _Err = value.Value; }
-    public ResultHeavyDotnetException(PanicCase value) { _variant = 2; }
-    public ResultHeavyDotnetException(NullCase value) { _variant = 3; }
 
 
     

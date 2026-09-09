@@ -76,6 +76,65 @@ marshalling remain responsible for callback state and disposal.
 This changes the generated public API: callers naming an old `NameDelegate` type
 should use the corresponding `Func` or `Action`. Inline lambda calls retain their syntax.
 
+## Mixed enum constants
+
+A mixed Rust enum with at least two genuinely payload-free variants groups those
+variants into one nested C# enum case automatically:
+
+```rust
+#[ffi]
+pub enum Event {
+    Started,
+    Stopped,
+    Number(i64),
+    Count(i64),
+}
+```
+
+```csharp
+Event value = Event.Constants.Stopped;
+if (value is Event.Constants.Stopped)
+    Console.WriteLine("stopped");
+
+Event payload = new Event.NumberCase(42);
+if (payload is Event.NumberCase(var number))
+    Console.WriteLine(number);
+```
+
+The existing factories and checks remain available: `Event.Stopped`,
+`Event.Number(42)`, `IsStopped`, and `AsNumber()`. The nested enum contains only
+the payload-free variants, with their original Rust discriminants and integral
+base type. Constructors reject unnamed numeric casts and payload-bearing tags.
+`TryGetValue(out Event.Constants value)` provides non-boxing access; `Value`
+returns the enum value through `object` and therefore boxes it.
+
+The shared name is `Constants`, or `Constants2`, `Constants3`, etc. when an
+existing member or enclosing type already uses that name. Existing factory names
+are preserved. The reserved enum backing-field name `value__` becomes
+`value__Constant` (with a numeric suffix on collision) inside the nested enum.
+
+Payload variants retain distinct record case types even when they carry the
+same payload type. Empty tuple/struct declarations and `Ok(())` remain payload
+cases. A mixed enum with only one true unit variant keeps its empty record case.
+Ordinary payload-free enums keep their existing plain-enum projection.
+Grouping requires one of C#'s eight legal integral enum bases; pointer-sized
+inventory discriminants retain separate cases. Automatic Rust discriminant
+selection now includes `i64` and `u64` when the values exceed 32 bits.
+
+The rule also groups `ffi::Result`'s true constants `Panic` and `Null`;
+`Ok` and `Err` remain distinct cases, including unit payloads.
+`Option.None` remains its own case because it is the only true unit variant.
+
+The compiler sees the grouped enum as one union case type. Enum-value patterns
+distinguish its members; an exhaustive switch may need an enum-type fallback for
+unnamed numeric values, plus the existing empty-union handling. This trades
+per-variant type exhaustiveness for fewer generated types.
+
+This is a managed API projection: the Rust discriminants, native layout and wire
+encoding are preserved. Regenerate C# when upgrading and replace references to
+removed empty case types (for example, `StartedCase`) with enum-value patterns.
+Both Rust-library and .NET-plugin generation use this rule.
+
 ## Async return values
 
 Rust service `async fn` methods and constructors generate `Task<T>` or
@@ -536,8 +595,9 @@ tuple marshaller. Use `callback!` for the convenient Func/Action API.
 
 Union projection follows the union specification snapshot in
 `D:\repos\Unions\src\Unions\UnionSpecification.md` (source commit
-`f23bdbed3f5a9c5f5d78f7f2a0a9f0bc54ac58b4`): distinct Rust variants retain
+`f23bdbed3f5a9c5f5d78f7f2a0a9f0bc54ac58b4`): payload-bearing Rust variants retain
 distinct generated case types, even when they carry identical tuple payloads.
+Eligible payload-free variants share the enum case described above.
 Case constructors, `Value`, `HasValue`, and typed `TryGetValue` remain
 consistent; typed pattern matching uses the non-boxing access pattern.
 Tuple projection changes the payload inside a case, not the union case identity

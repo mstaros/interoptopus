@@ -75,21 +75,45 @@ pub struct DataEnum {
 }
 
 impl DataEnum {
-    /// Whether this enum receives C# union projection.
-    ///
-    /// True when any variant *can* carry a payload. See [`Variant::can_carry_payload`] for why
-    /// that is not `ty.is_some()`; the original regression is covered by
-    /// `enum_union_members::eligibility_asks_can_carry_not_does_carry`.
-    ///
-    /// The rule is per *enum*, not per variant: an enum projected as a union gives every
-    /// variant a case type, unit variants included, while an enum with no payload-capable
-    /// variant receives no case types, no `Value`, no `HasValue` and no `TryGetValue`. See
-    /// `docs/csharp-unions.md` "Two layers, two rules" and `Issues.md` `79be256e`.
-    ///
-    /// Call this rather than re-deriving the `any`. Five output sites carried their own copy
-    /// before this existed, which is the same shape as the gate `Issues.md` `5d1ae4c7` records.
+    /// Whether any declared variant can carry a payload, including empty payload shapes.
     #[must_use]
     pub fn is_union_projected(&self) -> bool {
         self.variants.iter().any(|v| v.can_carry_payload)
+    }
+
+    /// Mixed enums combine two or more genuine unit variants into one C# enum case.
+    #[must_use]
+    pub(crate) fn groups_constants(&self) -> bool {
+        self.is_union_projected()
+            && self.discriminant_type.is_csharp_enum_underlying()
+            && self.variants.iter().filter(|v| !v.can_carry_payload).take(2).count() == 2
+    }
+
+    /// The shared nested type name, allocated by the union naming pass.
+    #[must_use]
+    pub(crate) fn constants_type(&self) -> Option<&str> {
+        self.groups_constants().then(|| {
+            self.variants.iter().find(|v| !v.can_carry_payload).expect("group has unit variants").case_type.as_str()
+        })
+    }
+
+    /// A constant's member name, excluding the C# enum's reserved backing field.
+    #[must_use]
+    pub(crate) fn constant_member(&self, variant: &Variant) -> Option<String> {
+        if !self.groups_constants() || variant.can_carry_payload {
+            return None;
+        }
+        let mut name = variant.stem.clone();
+        if name == "value__" {
+            let mut suffix = 1usize;
+            loop {
+                name = if suffix == 1 { "value__Constant".to_string() } else { format!("value__Constant{suffix}") };
+                if self.variants.iter().all(|v| v.stem != name) {
+                    break;
+                }
+                suffix += 1;
+            }
+        }
+        Some(name)
     }
 }

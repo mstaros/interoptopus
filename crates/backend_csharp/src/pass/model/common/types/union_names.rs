@@ -1,6 +1,6 @@
 //! Resolves collision-free C# member names for every `DataEnum` variant.
 //!
-//! Union projection adds one nested case type per variant on top of the members the
+//! Union projection adds nested payload cases and an eligible constants enum to the members the
 //! generator already emits (factory, `IsX`, `AsX`, payload field, unmanaged helper), and
 //! the union contract itself claims a set of fixed names. All of these share a single C#
 //! declaration space, so names are allocated centrally rather than formatted
@@ -270,6 +270,31 @@ impl Pass {
                 variant.case_type = resolved.case_type;
                 variant.field_names = resolved.field;
                 variant.case_fields = resolved.case_fields;
+            }
+
+            if target.groups_constants() {
+                // Preserve existing factories and payload case names. The shared enum moves
+                // on collision, including a Rust variant or enclosing type named Constants.
+                let mut claimed: HashSet<String> = RESERVED.iter().map(|name| (*name).to_string()).collect();
+                claimed.insert(enclosing.clone());
+                for variant in &target.variants {
+                    claimed.extend(family(&variant.stem, variant.fields.len()));
+                    claimed.insert(variant.case_type.clone());
+                }
+                let mut constants = "Constants".to_string();
+                let mut suffix = 2usize;
+                while claimed.contains(&constants) {
+                    constants = format!("Constants{suffix}");
+                    suffix += 1;
+                }
+                claimed.insert(constants.clone());
+                for (variant, payloads) in target.variants.iter_mut().zip(&payloads) {
+                    if variant.can_carry_payload {
+                        variant.case_fields = case_field_names(&variant.case_type, payloads, &claimed);
+                    } else {
+                        variant.case_type.clone_from(&constants);
+                    }
+                }
             }
 
             kinds.set(id, kind);

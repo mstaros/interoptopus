@@ -11,6 +11,7 @@ One task, in priority order:
 - [x] P1 — Verify native ownership, repeated queries, cancellation, and generated C# compilation; update examples and snapshots.
 - [x] P3 — Add generic native Rust async-stream bindings: `ffi::AsyncIterator<T>` wraps a standard `futures_core::Stream<Item = T>` and an `AsyncRuntime`; generated C# exposes `IAsyncEnumerable<T>`, cancellation, awaited cleanup, and reusable async factories.
 
+- [x] P2 — Group two or more genuine constants in mixed enums into one nested enum union case; preserve payload identities, original tags, existing factories and non-boxing matching.
 - [x] P2 — Project multi-field plain positional FFI structs to C# ValueTuple across calls, callbacks, tasks, native iterators, and union payloads; add named value constructors/deconstruction and ordinary anonymous LINQ projection examples.
 
 - [x] P0 — Distinguish Rust async panics from cancellation; preserve cancellation tokens and contain managed completion failures.

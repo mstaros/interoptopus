@@ -17,7 +17,9 @@ public unsafe struct Unmanaged
         return _variant switch
         {
             {%- for v in all_variants %}
-            {%- if v.has_payload %}
+            {%- if v.is_constant %}
+            {{ v.id }} => new {{ name }}({{ v.case_type }}.{{ v.constant_member }}),
+            {%- elif v.has_payload %}
             {{ v.id }} => new {{ name }}(new {{ v.case_type }}({% for payload in v.payloads %}_{{ v.name }}.{{ payload.field }}{{ payload.to_managed }}{% if not loop.last %}, {% endif %}{% endfor %})),
             {%- else %}
             {{ v.id }} => new {{ name }}(new {{ v.case_type }}()),

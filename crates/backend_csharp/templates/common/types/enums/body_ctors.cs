@@ -26,8 +26,24 @@ public void As{{ v.name }}() { if ({% if writes_has_value %}!_hasValue || {% end
 {%- if is_union_projected %}
 
 // Case constructors — the union creation members the compiler reads case types from.
+{%- if constants_type %}
+public {{ name }}({{ constants_type }} value)
+{
+    _variant = value switch
+    {
+        {%- for v in constants %}
+        {{ constants_type }}.{{ v.member }} => {{ v.tag }},
+        {%- endfor %}
+        _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Expected a payload-free {{ name }} variant."),
+    };
+    {%- if writes_has_value %}
+    _hasValue = true;
+    {%- endif %}
+}
+{%- endif %}
 {%- for v in variants %}
-{%- if v.has_payload %}
+{%- if v.is_constant %}
+{%- elif v.has_payload %}
 public {{ name }}({{ v.case_type }} value) { _variant = {{ v.id }};{% for payload in v.payloads %} {{ payload.field }} = value.{{ payload.case_field }};{% endfor %}{% if writes_has_value %} _hasValue = true;{% endif %} }
 {%- else %}
 public {{ name }}({{ v.case_type }} value) { _variant = {{ v.id }};{% if writes_has_value %} _hasValue = true;{% endif %} }

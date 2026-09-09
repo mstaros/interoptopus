@@ -110,13 +110,15 @@ public partial class ResultCounterError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class ResultCounterError : IUnion, IResult<IntPtr, Error>, IDisposable
 {
+    public enum Constants : uint
+    {
+        Panic = 2,
+        Null = 3,
+    }
+
     public readonly record struct OkCase(IntPtr Value);
 
     public readonly record struct ErrCase(Error Value);
-
-    public readonly record struct PanicCase();
-
-    public readonly record struct NullCase();
 
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
@@ -156,8 +158,8 @@ public partial class ResultCounterError : IUnion, IResult<IntPtr, Error>, IDispo
             {
                 0 => new ResultCounterError(new OkCase(_Ok._Ok)),
                 1 => new ResultCounterError(new ErrCase(_Err._Err)),
-                2 => new ResultCounterError(new PanicCase()),
-                3 => new ResultCounterError(new NullCase()),
+                2 => new ResultCounterError(Constants.Panic),
+                3 => new ResultCounterError(Constants.Null),
                 _ => throw new InteropException($"Unknown variant {_variant} for ResultCounterError. The value did not originate from a well-formed Rust enum."),
             };
         }
@@ -208,10 +210,21 @@ public partial class ResultCounterError : IUnion, IResult<IntPtr, Error>, IDispo
     {
         0 => new OkCase(_Ok),
         1 => new ErrCase(_Err),
-        2 => new PanicCase(),
-        3 => new NullCase(),
+        2 => Constants.Panic,
+        3 => Constants.Null,
         _ => null,
     };
+
+    public bool TryGetValue(out Constants value)
+    {
+        if ((_variant is 2 or 3))
+        {
+            value = (Constants)_variant;
+            return true;
+        }
+        value = default;
+        return false;
+    }
 
     public bool TryGetValue(out OkCase value)
     {
@@ -223,20 +236,6 @@ public partial class ResultCounterError : IUnion, IResult<IntPtr, Error>, IDispo
     public bool TryGetValue(out ErrCase value)
     {
         if (_variant == 1) { value = new ErrCase(_Err); return true; }
-        value = default;
-        return false;
-    }
-
-    public bool TryGetValue(out PanicCase value)
-    {
-        if (_variant == 2) { value = new PanicCase(); return true; }
-        value = default;
-        return false;
-    }
-
-    public bool TryGetValue(out NullCase value)
-    {
-        if (_variant == 3) { value = new NullCase(); return true; }
         value = default;
         return false;
     }
@@ -269,10 +268,17 @@ public partial class ResultCounterError : IUnion, IResult<IntPtr, Error>, IDispo
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
 
     // Case constructors — the union creation members the compiler reads case types from.
+    public ResultCounterError(Constants value)
+    {
+        _variant = value switch
+        {
+            Constants.Panic => 2,
+            Constants.Null => 3,
+            _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Expected a payload-free ResultCounterError variant."),
+        };
+    }
     public ResultCounterError(OkCase value) { _variant = 0; _Ok = value.Value; }
     public ResultCounterError(ErrCase value) { _variant = 1; _Err = value.Value; }
-    public ResultCounterError(PanicCase value) { _variant = 2; }
-    public ResultCounterError(NullCase value) { _variant = 3; }
 
 
     // FromCall

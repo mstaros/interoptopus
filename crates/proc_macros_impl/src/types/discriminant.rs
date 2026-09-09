@@ -93,15 +93,19 @@ pub fn optimal_discriminant<'a>(discriminants: impl Iterator<Item = Option<&'a s
             DiscriminantChoice { repr_ident: "i8", primitive_ident: "I8" }
         } else if min_val >= i16::MIN as isize && max_val <= i16::MAX as isize {
             DiscriminantChoice { repr_ident: "i16", primitive_ident: "I16" }
-        } else {
+        } else if min_val >= i32::MIN as isize && max_val <= i32::MAX as isize {
             DiscriminantChoice { repr_ident: "i32", primitive_ident: "I32" }
+        } else {
+            DiscriminantChoice { repr_ident: "i64", primitive_ident: "I64" }
         }
     } else if max_val <= u8::MAX as isize {
         DiscriminantChoice { repr_ident: "u8", primitive_ident: "U8" }
     } else if max_val <= u16::MAX as isize {
         DiscriminantChoice { repr_ident: "u16", primitive_ident: "U16" }
-    } else {
+    } else if u32::try_from(max_val).is_ok() {
         DiscriminantChoice { repr_ident: "u32", primitive_ident: "U32" }
+    } else {
+        DiscriminantChoice { repr_ident: "u64", primitive_ident: "U64" }
     }
 }
 

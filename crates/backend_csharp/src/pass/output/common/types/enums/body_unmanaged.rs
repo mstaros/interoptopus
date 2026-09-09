@@ -86,6 +86,9 @@ impl Pass {
                     m.insert("name", Value::normal_string(&v.stem));
                     m.insert("id", Value::from(v.tag as i64));
                     m.insert("case_type", Value::normal_string(&v.case_type));
+                    let constant = data_enum.constant_member(v);
+                    m.insert("is_constant", Value::from(constant.is_some()));
+                    m.insert("constant_member", Value::normal_string(&constant.unwrap_or_default()));
                     m.insert("has_payload", Value::from(!payloads.is_empty()));
                     m.insert("payloads", Value::from(payloads));
                     m

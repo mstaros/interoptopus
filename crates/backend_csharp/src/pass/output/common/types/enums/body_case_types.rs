@@ -1,6 +1,6 @@
 //! Renders the nested case types that union projection introduces (item 3b).
 //!
-//! One `readonly record struct` per variant, nested inside the union type. The names
+//! Payload cases use `readonly record struct`; grouped constants use a nested enum. Names
 //! come from `Variant::case_type`, already allocated and collision-resolved by
 //! `union_names`; this pass only emits them.
 //!
@@ -51,17 +51,35 @@ impl Pass {
             // Eligibility rule from `docs/csharp-unions.md` "Two layers, two rules": a
             // `DataEnum` with no payload-carrying variant receives no union machinery.
             //
-            // The test is per *enum*, not per variant. An enum that is projected as a
-            // union gives every variant a case type, unit variants included — an empty
-            // case type is what keeps a mixed enum exhaustive in the compiler-checked
-            // layer, and folding unit variants together was considered and dropped.
+            // Payload variants remain separate case types. Eligible genuine unit
+            // variants share one nested enum case.
             if !projection.is_union(*type_id) {
                 continue;
             }
 
             let mut rendered_case_types = Vec::new();
 
+            if let Some(constants_type) = data_enum.constants_type() {
+                let constants: Vec<HashMap<&str, String>> = data_enum.variants.iter().filter_map(|variant| {
+                    let member = data_enum.constant_member(variant)?;
+                    Some(HashMap::from([
+                        ("name", member),
+                        ("id", variant.tag.to_string()),
+                        ("docs", crate::pass::format_docs(&variant.docs.lines)),
+                    ]))
+                }).collect();
+                let mut context = Context::new();
+                context.insert("is_constants", &true);
+                context.insert("case_type", constants_type);
+                context.insert("discriminant_type", data_enum.discriminant_type.cs_name());
+                context.insert("constants", &constants);
+                rendered_case_types.push(templates.render("common/types/enums/body_case_types.cs", &context)?);
+            }
+
             for variant in &data_enum.variants {
+                if data_enum.constant_member(variant).is_some() {
+                    continue;
+                }
                 let payloads: Vec<HashMap<&str, String>> = variant
                     .payloads()
                     .enumerate()
@@ -73,6 +91,7 @@ impl Pass {
                     .collect();
 
                 let mut context = Context::new();
+                context.insert("is_constants", &false);
                 context.insert("case_type", &variant.case_type);
                 context.insert("payloads", &payloads);
 

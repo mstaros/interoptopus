@@ -69,6 +69,9 @@ impl Pass {
                     m.insert("field", Value::normal_string(&field));
                     m.insert("payloads", Value::from(payloads));
                     m.insert("case_type", Value::normal_string(&v.case_type));
+                    let constant = data_enum.constant_member(v);
+                    m.insert("is_constant", Value::from(constant.is_some()));
+                    m.insert("constant_member", Value::normal_string(&constant.unwrap_or_default()));
                     m.insert("docs", Value::normal_string(&format_docs(&v.docs.lines)));
                     m
                 })
@@ -80,7 +83,17 @@ impl Pass {
             // would report `null` for every value the consumer constructs.
             let writes_has_value = struct_class.is_struct(*type_id) && projection.is_union(*type_id);
 
+            let constants: Vec<HashMap<&str, Value>> = data_enum.variants.iter().filter_map(|variant| {
+                let member = data_enum.constant_member(variant)?;
+                Some(HashMap::from([
+                    ("member", Value::normal_string(&member)),
+                    ("tag", Value::from(variant.tag)),
+                ]))
+            }).collect();
             let mut context = Context::new();
+            context.insert("constants_type", data_enum.constants_type().unwrap_or_default());
+            context.insert("constants", &constants);
+            context.insert("discriminant_type", data_enum.discriminant_type.cs_name());
             context.insert("writes_has_value", &writes_has_value);
 
             // Case constructors are the union *creation members*: the compiler establishes the

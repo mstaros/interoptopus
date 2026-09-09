@@ -68,6 +68,9 @@ impl Pass {
                     let mut m = HashMap::new();
                     m.insert("stem", Value::normal_string(&v.stem));
                     m.insert("case_type", Value::normal_string(&v.case_type));
+                    let constant = data_enum.constant_member(v);
+                    m.insert("is_constant", Value::from(constant.is_some()));
+                    m.insert("constant_member", Value::normal_string(&constant.unwrap_or_default()));
                     m.insert("tag", Value::from(v.tag));
                     let payloads: Vec<_> = model::common::types::union_names::payload_fields(v).map(|(_, field)| HashMap::from([("field", field)])).collect();
                     m.insert("payloads", Value::from(payloads));
@@ -75,7 +78,17 @@ impl Pass {
                 })
                 .collect();
 
+            let constants: Vec<HashMap<&str, Value>> = data_enum.variants.iter().filter_map(|variant| {
+                let member = data_enum.constant_member(variant)?;
+                Some(HashMap::from([
+                    ("member", Value::normal_string(&member)),
+                    ("tag", Value::from(variant.tag)),
+                ]))
+            }).collect();
             let mut context = Context::new();
+            context.insert("constants_type", data_enum.constants_type().unwrap_or_default());
+            context.insert("constants", &constants);
+            context.insert("discriminant_type", data_enum.discriminant_type.cs_name());
             context.insert("is_struct", &is_struct);
             context.insert("variants", &variants);
 

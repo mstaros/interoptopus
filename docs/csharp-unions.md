@@ -131,16 +131,32 @@ problems that do not actually arise: unit variants get an empty case type, and t
 sharing a payload type (`E { A(u32), B(u32) }`) get two distinct case types rather than
 colliding.
 
-**Scope: this applies per *enum*, not per variant.** A pure unit-only `DataEnum` is excluded from
-union machinery entirely by the eligibility rule in §"Two layers, two rules" and never reaches
-this step. But every variant of an enum that *is* projected as a union gets a case type,
-**including its unit variants** — an empty case type is the solution to the unit-variant problem,
-not a cost. Folding the unit variants of a mixed enum into one nested C# enum was considered and
-dropped: it moves those variants out of the compiler-checked layer into a plain-enum switch, which
-C# does not check for exhaustiveness. See `Issues.md` `79be256e`.
+**Current grouping rule (2026-09-09).** Pure unit-only enums retain the plain-enum
+or discriminant projection above. A mixed enum with at least two genuine unit
+variants and a legal C# integral enum base emits those variants as one nested
+`Constants` enum case. The naming pass moves that type to `Constants2`,
+`Constants3`, etc. on collision rather than renaming existing factories.
 
-So 3b's scoping condition is a single check at the top of the pass — *does this enum have any
-payload-carrying variant?* — not a filter applied to each variant.
+Each enum member preserves its original Rust tag. Payload variants retain
+distinct record case types, including empty tuple/struct declarations and
+`Ok(())` / `Err(())`. A mixed enum with only one genuine unit variant retains
+its empty case record. The same rule groups `Result`'s `Panic` and `Null`;
+it does not group `Option.None` with `Some`.
+
+The union has one validating constructor and one typed `TryGetValue` overload
+for the constants group. Its `Value` returns the selected enum value; the
+typed access pattern avoids boxing. Existing factories, `IsX`, `AsX`,
+disposal, native layout and wire encoding remain intact. Undefined enum values
+and tags assigned to payload variants are rejected by the constructor.
+
+This supersedes the earlier decision in `Issues.md` `79be256e`. Grouping
+reduces generated types, at the cost of per-variant type exhaustiveness: the
+compiler sees one enum case, and a switch over its named values may need an
+enum-type fallback for unnamed numeric values. Consumers must replace references
+to removed empty case records with enum-value patterns after regenerating.
+
+The existing `EnumPayload` example below has only one unit variant and therefore
+keeps its prior surface. See the backend README for a grouped example.
 
 ### Resulting consumer API
 
