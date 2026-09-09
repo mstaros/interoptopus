@@ -1,7 +1,7 @@
 //! Owned native asynchronous streams for foreign async enumeration.
 //!
-//! Wrap any standard futures-core Stream with AsyncIterator::new(stream, runtime).
-//! The stream is pinned, Send, and owned; the runtime implements AsyncRuntime.
+//! Wrap any standard `futures_core::Stream` with `AsyncIterator::new(stream, runtime)`.
+//! The stream is pinned, `Send`, and owned; the runtime implements [`AsyncRuntime`].
 //! Each foreign request spawns one next-item operation. No collection is buffered.
 
 use crate::inventory::{Inventory, TypeId};
@@ -57,7 +57,7 @@ impl Completion {
 /// An owning, single-pass asynchronous FFI iterator.
 ///
 /// Three pointer-sized fields: state, next, drop. The next function returns an
-/// existing TaskHandle and completes exactly once, possibly before returning.
+/// existing [`TaskHandle`] and completes exactly once, possibly before returning.
 /// Completion status is 1 (item), 0 (end), -1 (panic/protocol failure), or -2
 /// (cancelled). An item's borrowed pointer is valid only during completion.
 /// Backends must copy the value and restrict elements to non-owning value layouts.
@@ -105,7 +105,7 @@ struct Advance<T> {
 impl<T> Advance<T> {
     // Drop user stream code before acknowledging cancellation, end, or failure.
     fn close(&mut self, status: i32) {
-        self.state.slot.lock().unwrap_or_else(|e| e.into_inner()).closed = true;
+        self.state.slot.lock().unwrap_or_else(std::sync::PoisonError::into_inner).closed = true;
         let stream = self.stream.take();
         let dropped = catch_unwind(AssertUnwindSafe(|| drop(stream))).is_ok();
         self.completion.finish(if dropped { status } else { -1 }, std::ptr::null());
@@ -144,7 +144,7 @@ impl<T> Future for Advance<T> {
                     return Poll::Ready(());
                 }
                 let closed = {
-                    let mut slot = this.state.slot.lock().unwrap_or_else(|e| e.into_inner());
+                    let mut slot = this.state.slot.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
                     if slot.closed {
                         true
                     } else {
@@ -181,7 +181,7 @@ unsafe extern "C" fn next<T: Send + 'static>(data: *mut c_void, callback: Comple
     };
     let mut completion = Completion { callback: Some(callback), context };
     let (stream, closed) = {
-        let mut slot = state.slot.lock().unwrap_or_else(|e| e.into_inner());
+        let mut slot = state.slot.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         (slot.stream.take(), slot.closed)
     };
     let Some(stream) = stream else {
@@ -199,7 +199,7 @@ unsafe extern "C" fn destroy<T>(data: *mut c_void) {
     let _ = catch_unwind(AssertUnwindSafe(|| {
         let state = unsafe { Arc::from_raw(data.cast::<State<T>>()) };
         let stream = {
-            let mut slot = state.slot.lock().unwrap_or_else(|e| e.into_inner());
+            let mut slot = state.slot.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             slot.closed = true;
             slot.stream.take()
         };
