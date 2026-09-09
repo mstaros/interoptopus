@@ -84,6 +84,13 @@ public partial class {{ name }}
         internal ulong _len;
         internal ulong _capacity;
 
+        internal void Free()
+        {
+            var native = this;
+            this = default;
+            if (native._ptr != IntPtr.Zero) InteropHelper.interoptopus_vec_destroy(native);
+        }
+
         {{ _fns_decorators_all | indent(width = 8) }}
         {{ _fns_decorators_internal | indent(width = 8) }}
         internal {{ name }} IntoManaged()
@@ -117,6 +124,7 @@ public partial class {{ name }}
     {
         private {{ name }} _managed;
         private Unmanaged _unmanaged;
+        private bool _ownsUnmanaged;
 
         {{ _fns_decorators_all | indent(width = 8) }}
         public Marshaller({{ name }} managed) { _managed = managed; }
@@ -131,12 +139,21 @@ public partial class {{ name }}
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         {{ _fns_decorators_all | indent(width = 8) }}
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { _unmanaged = _managed.IntoUnmanaged();
+            _ownsUnmanaged = true;
+            return _unmanaged; }
 
         {{ _fns_decorators_all | indent(width = 8) }}
         public {{ name }} ToManaged() { return _unmanaged.IntoManaged(); }
 
         {{ _fns_decorators_all | indent(width = 8) }}
-        public void Free() {}
+        public void OnInvoked() { _ownsUnmanaged = false; }
+
+        public void Free()
+        {
+            if (!_ownsUnmanaged) return;
+            _ownsUnmanaged = false;
+            _unmanaged.Free();
+        }
     }
 }

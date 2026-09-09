@@ -12,9 +12,7 @@
 {% if is_disposable %}
     public void Dispose()
     {
-        {%- for field in disposable_fields %}
-        {{ field.name }}?.Dispose();
-        {%- endfor %}
+        {{ dispose_body | indent(width = 8) }}
     }
 {% endif %}
     {{ _fns_decorators_all | indent }}
@@ -46,6 +44,9 @@
     {
         private {{ name }} _managed;
         private Unmanaged _unmanaged;
+        {%- if marshaller_to_unmanaged == "IntoUnmanaged" %}
+        private bool _ownsUnmanaged;
+        {%- endif %}
 
         {{ _fns_decorators_all | indent(width = 8) }}
         public Marshaller({{ name }} managed) { _managed = managed; }
@@ -60,13 +61,21 @@
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         {{ _fns_decorators_all | indent(width = 8) }}
-        public Unmanaged ToUnmanaged() { return _managed.{{ marshaller_to_unmanaged }}(); }
+        public Unmanaged ToUnmanaged() { {% if marshaller_to_unmanaged == "IntoUnmanaged" %}_unmanaged = _managed.IntoUnmanaged(); _ownsUnmanaged = true; return _unmanaged;{% else %}return _managed.{{ marshaller_to_unmanaged }}();{% endif %} }
 
         {{ _fns_decorators_all | indent(width = 8) }}
         public {{ name }} ToManaged() { return _unmanaged.{{ marshaller_to_managed }}(); }
 
         {{ _fns_decorators_all | indent(width = 8) }}
-        public void Free() {}
-    }
+{% if marshaller_to_unmanaged == "IntoUnmanaged" %}        public void OnInvoked() { _ownsUnmanaged = false; }
+
+        public void Free()
+        {
+            if (!_ownsUnmanaged) return;
+            _ownsUnmanaged = false;
+            _unmanaged.Free();
+        }
+{% else %}        public void Free() {}
+{% endif %}    }
 
 }

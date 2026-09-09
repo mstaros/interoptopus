@@ -64,9 +64,7 @@
         // a null payload — correct by accident rather than by construction.
         if (!_hasValue) return;
         {%- endif %}
-        {%- for v in disposable_variants %}
-        if (_variant == {{ v.tag }}) {{ v.name }}?.Dispose();
-        {%- endfor %}
+        {{ dispose_body | indent(width = 8) }}
     }
 {% endif -%}
 {%- if not is_managed_only %}
@@ -94,6 +92,9 @@
     {
         private {{ name }} _managed;
         private Unmanaged _unmanaged;
+        {%- if marshaller_to_unmanaged == "IntoUnmanaged" %}
+        private bool _ownsUnmanaged;
+        {%- endif %}
 
         {{ _fns_decorators_all | indent(width = 8) }}
         public Marshaller({{ name }} managed) { _managed = managed; }
@@ -108,14 +109,22 @@
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         {{ _fns_decorators_all | indent(width = 8) }}
-        public Unmanaged ToUnmanaged() { {% if rejects_null %}if (_managed is null) throw new InvalidOperationException("Cannot marshal a null {{ name }}: it corresponds to no Rust variant. Construct it through a case constructor or factory."); {% endif %}return _managed.{{ marshaller_to_unmanaged }}(); }
+        public Unmanaged ToUnmanaged() { {% if rejects_null %}if (_managed is null) throw new InvalidOperationException("Cannot marshal a null {{ name }}: it corresponds to no Rust variant. Construct it through a case constructor or factory."); {% endif %}{% if marshaller_to_unmanaged == "IntoUnmanaged" %}_unmanaged = _managed.IntoUnmanaged(); _ownsUnmanaged = true; return _unmanaged;{% else %}return _managed.{{ marshaller_to_unmanaged }}();{% endif %} }
 
         {{ _fns_decorators_all | indent(width = 8) }}
         public {{ name }} ToManaged() { return _unmanaged.{{ marshaller_to_managed }}(); }
 
         {{ _fns_decorators_all | indent(width = 8) }}
-        public void Free() {}
-    }
+{% if marshaller_to_unmanaged == "IntoUnmanaged" %}        public void OnInvoked() { _ownsUnmanaged = false; }
+
+        public void Free()
+        {
+            if (!_ownsUnmanaged) return;
+            _ownsUnmanaged = false;
+            _unmanaged.Free();
+        }
+{% else %}        public void Free() {}
+{% endif %}    }
 
 {% endif -%}
 }

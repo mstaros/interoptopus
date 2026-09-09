@@ -1,11 +1,17 @@
 {%- if has_managed_class %}
 {%- if field_decls %}
-public partial class {{ inner_type }}
+public partial class {{ inner_type }}{% if dispose_body | trim %} : IDisposable{% endif %}
 {
 {%- for field in field_decls %}
     {{ field }}
 {%- endfor %}
-}
+{% if dispose_body | trim %}
+    public void Dispose()
+    {
+        {{ dispose_body | indent(width = 8) }}
+    }
+{% endif %}}
+
 
 {% endif -%}
 {% endif -%}
@@ -97,6 +103,8 @@ public partial class {{ wire_name }} : IDisposable
     {
         internal WireBuffer Buffer;
 
+        internal void Free() { Buffer.Dispose(); }
+
         {{ _fns_decorators_all | indent(width = 8) }}
         {{ _fns_decorators_internal | indent(width = 8) }}
         internal {{ wire_name }} IntoManaged()
@@ -126,6 +134,7 @@ public partial class {{ wire_name }} : IDisposable
     {
         private {{ wire_name }} _managed;
         private Unmanaged _unmanaged;
+        private bool _ownsUnmanaged;
 
         {{ _fns_decorators_all | indent(width = 8) }}
         public Marshaller({{ wire_name }} managed) { _managed = managed; }
@@ -140,12 +149,21 @@ public partial class {{ wire_name }} : IDisposable
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         {{ _fns_decorators_all | indent(width = 8) }}
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { _unmanaged = _managed.IntoUnmanaged();
+            _ownsUnmanaged = true;
+            return _unmanaged; }
 
         {{ _fns_decorators_all | indent(width = 8) }}
         public {{ wire_name }} ToManaged() { return _unmanaged.IntoManaged(); }
 
         {{ _fns_decorators_all | indent(width = 8) }}
-        public void Free() {}
+        public void OnInvoked() { _ownsUnmanaged = false; }
+
+        public void Free()
+        {
+            if (!_ownsUnmanaged) return;
+            _ownsUnmanaged = false;
+            _unmanaged.Free();
+        }
     }
 }

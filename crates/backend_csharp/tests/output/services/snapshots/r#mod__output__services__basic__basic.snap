@@ -163,6 +163,13 @@ public partial class ResultCounterError : IUnion, IResult<IntPtr, Error>, IDispo
                 _ => throw new InteropException($"Unknown variant {_variant} for ResultCounterError. The value did not originate from a well-formed Rust enum."),
             };
         }
+
+        // Releases native fields even when only a prefix finished marshalling.
+        internal void Free()
+        {
+            var native = this;
+            this = default;
+        }
     }
 
 
@@ -172,10 +179,18 @@ public partial class ResultCounterError : IUnion, IResult<IntPtr, Error>, IDispo
     internal Unmanaged IntoUnmanaged()
     {
         var _unmanaged = new Unmanaged();
-        _unmanaged._variant = _variant;
-        if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
-        if (_variant == 1) _unmanaged._Err._Err = _Err;
-        return _unmanaged;
+        try
+        {
+            _unmanaged._variant = _variant;
+            if (_variant == 0) _unmanaged._Ok._Ok = _Ok;
+            if (_variant == 1) _unmanaged._Err._Err = _Err;
+            return _unmanaged;
+        }
+        catch
+        {
+            _unmanaged.Free();
+            throw;
+        }
     }
 
 
@@ -310,6 +325,7 @@ public partial class ResultCounterError : IUnion, IResult<IntPtr, Error>, IDispo
 
     public void Dispose()
     {
+        
     }
 
     [CustomMarshaller(typeof(ResultCounterError), MarshalMode.Default, typeof(Marshaller))]
@@ -336,6 +352,7 @@ public partial class ResultCounterError : IUnion, IResult<IntPtr, Error>, IDispo
     {
         private ResultCounterError _managed;
         private Unmanaged _unmanaged;
+        private bool _ownsUnmanaged;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public Marshaller(ResultCounterError managed) { _managed = managed; }
@@ -350,13 +367,20 @@ public partial class ResultCounterError : IUnion, IResult<IntPtr, Error>, IDispo
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultCounterError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultCounterError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); _unmanaged = _managed.IntoUnmanaged(); _ownsUnmanaged = true; return _unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultCounterError ToManaged() { return _unmanaged.IntoManaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void OnInvoked() { _ownsUnmanaged = false; }
+
+        public void Free()
+        {
+            if (!_ownsUnmanaged) return;
+            _ownsUnmanaged = false;
+            _unmanaged.Free();
+        }
     }
 
 }
@@ -400,9 +424,17 @@ public partial class Counter : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        Interop.counter_destroy_14679(_context);
-        _context = IntPtr.Zero;
+        var context = System.Threading.Interlocked.Exchange(ref _context, IntPtr.Zero);
+        if (context != IntPtr.Zero) Interop.counter_destroy_14679(context);
     }
 
-    internal IntPtr Context => _context;
+    internal IntPtr Context
+    {
+        get
+        {
+            var context = _context;
+            ObjectDisposedException.ThrowIf(context == IntPtr.Zero, this);
+            return context;
+        }
+    }
 }

@@ -45,7 +45,8 @@ impl Pass {
                         .map(|(payload_ty, field)| {
                             let variant_ty = super::resolve_service_variant(payload_ty, types, mode);
                             let to_managed = managed.to_managed_suffix(variant_ty).to_string();
-                            HashMap::from([("field", field), ("to_managed", to_managed)])
+                            let is_owned = (to_managed == ".IntoManaged()").to_string();
+                            HashMap::from([("field", field), ("to_managed", to_managed), ("is_owned", is_owned)])
                         })
                         .collect();
                     if payloads.is_empty() {
@@ -78,7 +79,8 @@ impl Pass {
                         .map(|(payload_ty, field)| {
                             let variant_ty = super::resolve_service_variant(payload_ty, types, mode);
                             let to_managed = managed.to_managed_suffix(variant_ty).to_string();
-                            HashMap::from([("field", field), ("to_managed", to_managed)])
+                            let is_owned = (to_managed == ".IntoManaged()").to_string();
+                            HashMap::from([("field", field), ("to_managed", to_managed), ("is_owned", is_owned)])
                         })
                         .collect();
 

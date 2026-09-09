@@ -59,6 +59,12 @@ pub fn inventory() -> RustInventory {
     let mut inventory = RustInventory::new();
     let _ = inventory
         // Functions
+        .register(function!(functions::disposal::disposal_take_strings))
+        .register(function!(functions::disposal::disposal_take_callback))
+        .register(function!(functions::disposal::disposal_fields_invoke))
+        .register(function!(functions::disposal::disposal_callbacks_invoke))
+        .register(function!(functions::disposal::disposal_mixed_echo))
+        .register(function!(functions::disposal::disposal_mixed_fields_echo))
         .register(builtins_string!())
         .register(function!(patterns::iterator::pattern_iterator_create))
         .register(function!(patterns::iterator::pattern_iterator_panic))

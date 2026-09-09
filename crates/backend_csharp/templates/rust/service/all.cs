@@ -15,9 +15,17 @@ public partial class {{ name }} : IDisposable
     {{ _fns_decorators_all | indent }}
     public void Dispose()
     {
-        Interop.{{ dtor }}(_context);
-        _context = IntPtr.Zero;
+        var context = System.Threading.Interlocked.Exchange(ref _context, IntPtr.Zero);
+        if (context != IntPtr.Zero) Interop.{{ dtor }}(context);
     }
 
-    internal IntPtr Context => _context;
+    internal IntPtr Context
+    {
+        get
+        {
+            var context = _context;
+            ObjectDisposedException.ThrowIf(context == IntPtr.Zero, this);
+            return context;
+        }
+    }
 }

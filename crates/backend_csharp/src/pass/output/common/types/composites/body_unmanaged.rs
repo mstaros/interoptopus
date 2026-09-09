@@ -62,6 +62,7 @@ impl Pass {
                     }
 
                     let to_managed = managed.to_managed_suffix(f.ty).to_string();
+                    m.insert("is_owned", Value::from(to_managed == ".IntoManaged()"));
                     m.insert("to_managed", Value::normal_string(&to_managed));
                     if let Some(custom) = field_conversions.custom_to_managed(*type_id, &f.name) {
                         m.insert("custom_to_managed", Value::normal_string(custom));

@@ -38,4 +38,12 @@ public unsafe struct Unmanaged
         return _managed;
         {%- endif %}
     }
-}
+{% if to_managed_method == "IntoManaged" %}
+    // Releases native fields even when only a prefix finished marshalling.
+    internal void Free()
+    {
+        var native = this;
+        this = default;
+{% for v in variants %}{% for payload in v.payloads %}{% if payload.is_owned == "true" %}        if (native._variant == {{ v.id }}) native._{{ v.name }}.{{ payload.field }}.Free();
+{% endif %}{% endfor %}{% endfor %}    }
+{% endif %}}

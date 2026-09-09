@@ -248,6 +248,14 @@ public partial class SumDelegate2 : IDisposable
         internal IntPtr _data;
         internal IntPtr _destructor;
 
+        internal unsafe void Free()
+        {
+            var native = this;
+            this = default;
+            if (native._destructor != IntPtr.Zero)
+                ((delegate* unmanaged[Cdecl]<IntPtr, void>)native._destructor)(native._data);
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         [Obsolete("This method is intended for use by generated code only.")]
         [EditorBrowsable(EditorBrowsableState.Never)]
@@ -283,6 +291,7 @@ public partial class SumDelegate2 : IDisposable
     {
         private SumDelegate2 _managed;
         private Unmanaged _unmanaged;
+        private bool _ownsUnmanaged;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public Marshaller(SumDelegate2 managed) { _managed = managed; }
@@ -297,13 +306,22 @@ public partial class SumDelegate2 : IDisposable
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { _unmanaged = _managed.IntoUnmanaged();
+            _ownsUnmanaged = true;
+            return _unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public SumDelegate2 ToManaged() { return _unmanaged.IntoManaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void OnInvoked() { _ownsUnmanaged = false; }
+
+        public void Free()
+        {
+            if (!_ownsUnmanaged) return;
+            _ownsUnmanaged = false;
+            _unmanaged.Free();
+        }
     }
 }
 
@@ -500,6 +518,14 @@ public partial class MyCallback : IDisposable
         internal IntPtr _data;
         internal IntPtr _destructor;
 
+        internal unsafe void Free()
+        {
+            var native = this;
+            this = default;
+            if (native._destructor != IntPtr.Zero)
+                ((delegate* unmanaged[Cdecl]<IntPtr, void>)native._destructor)(native._data);
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         [Obsolete("This method is intended for use by generated code only.")]
         [EditorBrowsable(EditorBrowsableState.Never)]
@@ -535,6 +561,7 @@ public partial class MyCallback : IDisposable
     {
         private MyCallback _managed;
         private Unmanaged _unmanaged;
+        private bool _ownsUnmanaged;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public Marshaller(MyCallback managed) { _managed = managed; }
@@ -549,13 +576,22 @@ public partial class MyCallback : IDisposable
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { _unmanaged = _managed.IntoUnmanaged();
+            _ownsUnmanaged = true;
+            return _unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public MyCallback ToManaged() { return _unmanaged.IntoManaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void OnInvoked() { _ownsUnmanaged = false; }
+
+        public void Free()
+        {
+            if (!_ownsUnmanaged) return;
+            _ownsUnmanaged = false;
+            _unmanaged.Free();
+        }
     }
 }
 

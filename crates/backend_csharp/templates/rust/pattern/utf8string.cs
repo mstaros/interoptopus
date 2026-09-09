@@ -137,6 +137,13 @@ public partial class Utf8String : IDisposable
         public ulong _len;
         public ulong _capacity;
 
+        internal void Free()
+        {
+            var native = this;
+            this = default;
+            if (native._ptr != IntPtr.Zero) InteropHelper.interoptopus_string_destroy(native);
+        }
+
         {{ _fns_decorators_all | indent(width = 8) }}
         {{ _fns_decorators_internal | indent(width = 8) }}
         internal Utf8String IntoManaged()
@@ -196,7 +203,8 @@ public partial class Utf8String : IDisposable
     public ref struct Marshaller
     {
         private Utf8String _managed; // Used when converting managed -> unmanaged
-        private Unmanaged _unmanaged; // Used when converting unmanaged -> managed
+        private Unmanaged _unmanaged;
+        private bool _ownsUnmanaged; // Used when converting unmanaged -> managed
 
         {{ _fns_decorators_all | indent(width = 8) }}
         public Marshaller(Utf8String managed) { _managed = managed; }
@@ -211,7 +219,9 @@ public partial class Utf8String : IDisposable
         {{ _fns_decorators_all | indent(width = 8) }}
         public unsafe Unmanaged ToUnmanaged()
         {
-            return _managed.IntoUnmanaged();
+            _unmanaged = _managed.IntoUnmanaged();
+            _ownsUnmanaged = true;
+            return _unmanaged;
         }
 
         {{ _fns_decorators_all | indent(width = 8) }}
@@ -221,7 +231,14 @@ public partial class Utf8String : IDisposable
         }
 
         {{ _fns_decorators_all | indent(width = 8) }}
-        public void Free() { }
+        public void OnInvoked() { _ownsUnmanaged = false; }
+
+        public void Free()
+        {
+            if (!_ownsUnmanaged) return;
+            _ownsUnmanaged = false;
+            _unmanaged.Free();
+        }
     }
 }
 

@@ -5,7 +5,7 @@
 use crate::lang::TypeId;
 use crate::lang::types::kind::TypeKind;
 use crate::pass::{OutputResult, PassInfo, model, output};
-use interoptopus_backends::template::{Context, Value};
+use interoptopus_backends::template::Context;
 use std::collections::HashMap;
 
 #[derive(Default)]
@@ -46,21 +46,9 @@ impl Pass {
             let to_unmanaged = composite_body_to_unmanaged.get(*type_id).map_or("", std::string::String::as_str);
             let as_unmanaged = composite_body_as_unmanaged.get(*type_id).map_or("", std::string::String::as_str);
 
-            // Collect disposable fields for the Dispose() method.
-            let disposable_fields: Vec<HashMap<&str, Value>> = if is_disposable {
-                composite
-                    .fields
-                    .iter()
-                    .filter(|f| disposable.is_disposable(f.ty).unwrap_or(false))
-                    .map(|f| {
-                        let mut m = HashMap::new();
-                        m.insert("name", Value::normal_string(&f.name));
-                        m
-                    })
-                    .collect()
-            } else {
-                Vec::new()
-            };
+            let dispose_body = output::common::types::util::dispose_body(composite.fields.iter().map(|field| {
+                output::common::types::util::dispose_value(field.ty, &format!("this.{}", field.name), types, disposable, 0)
+            }));
 
             // The Marshaller always exposes `ToUnmanaged()`/`ToManaged()` to the runtime,
             // but internally must call the correct method based on conversion category.
@@ -75,7 +63,7 @@ impl Pass {
             context.insert("unmanaged", &unmanaged);
             context.insert("to_unmanaged", &to_unmanaged);
             context.insert("as_unmanaged", &as_unmanaged);
-            context.insert("disposable_fields", &disposable_fields);
+            context.insert("dispose_body", &dispose_body);
             context.insert("marshaller_to_unmanaged", marshaller_to_unmanaged);
             context.insert("marshaller_to_managed", marshaller_to_managed);
 

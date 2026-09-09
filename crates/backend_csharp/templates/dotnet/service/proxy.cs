@@ -5,6 +5,13 @@ public partial class {{ name }} : IDisposable
     {
         internal IntPtr _handle;
 
+        internal void Free()
+        {
+            var handle = _handle;
+            _handle = IntPtr.Zero;
+            if (handle != IntPtr.Zero) GCHandle.FromIntPtr(handle).Free();
+        }
+
         {{ _fns_decorators_all | indent(width = 8) }}
         {{ _fns_decorators_internal | indent(width = 8) }}
         internal {{ name }} IntoManaged()

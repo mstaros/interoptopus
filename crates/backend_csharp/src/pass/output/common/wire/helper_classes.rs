@@ -36,6 +36,7 @@ impl Pass {
         id_map: &model::common::id_map::Pass,
         struct_class: &model::common::types::info::struct_class::Pass,
         projection: &model::common::types::info::projection::Pass,
+        disposable: &model::common::types::info::disposable::Pass,
         rs_types: &RsTypes,
         wire_types: &output::common::wire::wire_type::Pass,
     ) -> OutputResult {
@@ -71,6 +72,10 @@ impl Pass {
             let mut ctx = Context::new();
             ctx.insert("class_name", &ty.name);
             ctx.insert("field_decls", &field_decls);
+            let dispose_body = output::common::types::util::dispose_body(composite.fields.iter().map(|field| {
+                output::common::types::util::dispose_value(field.ty, &format!("this.{}", field.name), types, disposable, 0)
+            }));
+            ctx.insert("dispose_body", &dispose_body);
 
             let result = templates.render("common/wire/wire_helper_class.cs", &ctx)?;
 

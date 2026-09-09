@@ -196,6 +196,14 @@ delegate void {{ name }}Destructor(IntPtr data);
         internal IntPtr _data;
         internal IntPtr _destructor;
 
+        internal unsafe void Free()
+        {
+            var native = this;
+            this = default;
+            if (native._destructor != IntPtr.Zero)
+                ((delegate* unmanaged[Cdecl]<IntPtr, void>)native._destructor)(native._data);
+        }
+
         {{ _fns_decorators_all | indent(width = 8) }}
         {{ _fns_decorators_internal | indent(width = 8) }}
         internal {{ name }} IntoManaged()
@@ -230,6 +238,7 @@ delegate void {{ name }}Destructor(IntPtr data);
     {
         private {{ name }} _managed;
         private Unmanaged _unmanaged;
+        private bool _ownsUnmanaged;
 
         {{ _fns_decorators_all | indent(width = 8) }}
         public Marshaller({{ name }} managed) { _managed = managed; }
@@ -244,12 +253,21 @@ delegate void {{ name }}Destructor(IntPtr data);
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         {{ _fns_decorators_all | indent(width = 8) }}
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { _unmanaged = _managed.IntoUnmanaged();
+            _ownsUnmanaged = true;
+            return _unmanaged; }
 
         {{ _fns_decorators_all | indent(width = 8) }}
         public {{ name }} ToManaged() { return _unmanaged.IntoManaged(); }
 
         {{ _fns_decorators_all | indent(width = 8) }}
-        public void Free() {}
+        public void OnInvoked() { _ownsUnmanaged = false; }
+
+        public void Free()
+        {
+            if (!_ownsUnmanaged) return;
+            _ownsUnmanaged = false;
+            _unmanaged.Free();
+        }
     }
 }

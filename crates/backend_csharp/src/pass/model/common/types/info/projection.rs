@@ -4,19 +4,12 @@
 //! `output/common/types/enums/body.rs` at render time and shared with nobody — which is why the
 //! four unmanaged output passes cannot consult them; see `Issues.md` `5d1ae4c7`.
 //!
-//! **They are two questions, not one.** `crosses_ffi` is false for a `DataEnum` with a `WireOnly`
-//! variant payload *and* for a `Result`/`Option` whose `Ok` side is a `Service`. But only the
-//! first also forces the type non-disposable — a wire-only payload is GC-managed and holds no
-//! native resource, whereas a Service-backed `Result` still owns one. Collapsing the two would
-//! silently make Service-backed results non-disposable.
+//! FFI projection and disposal are independent: a wire-only payload can contain native-owning
+//! leaves, and Service-backed results also retain native ownership. The disposable pass
+//! recursively classifies those resources without changing whether a type crosses FFI.
 //!
-//! **Why this recomputes rather than writing once.** `struct_class` and `disposable` may skip a
-//! type they have already answered, because their input is `managed_conversion`, which returns
-//! `None` while a type is still being resolved. This pass reads raw `TypeKind`s instead — a
-//! `WireOnly` variant payload, a `Service` on a `Result`'s `Ok` side — and a kind is *always*
-//! something. There is no not-ready signal to defer on, so an answer cached early would go stale
-//! when a later kind pass reclassifies a payload. Recomputing each round and reporting `changed`
-//! only on difference converges correctly under the same fixed-point contract.
+//! This pass reads raw kinds, which can change while the model resolves. It recomputes each
+//! round and reports changes only when the answer differs, preserving fixed-point convergence.
 
 use crate::lang::TypeId;
 use crate::lang::types::kind::{TypeKind, TypePattern, Variant};

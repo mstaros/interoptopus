@@ -30,8 +30,10 @@ Scripts are authored and executed elsewhere. That application is outside this ta
 
 Async cancellation produces a cancelled await with the original token; Rust panics fault the await. Native completion contexts remain alive until acknowledgement. Consume a ValueTask once, or convert it with AsTask() once for repeated awaits and Task.WhenAll. Regenerate bindings and rebuild native libraries together after the async outcome protocol update.
 
+- [x] Make generated disposal complete: reject disposed service calls, roll back failed owning transfers, recursively clean mixed wire/native payloads, and preserve every child cleanup error. Allocation and callback-root regressions cover the failure paths.
+
 ## Validation
 
-The reference bindings and benchmark compile; 353 default-Task and 15 ValueTask C# integration tests pass under the configured patched .NET 11 runtime. The ValueTask suite exercises constructors, primitive/struct/wire/tuple results, cancellation, panic and conversion faults, failed input marshalling, and stream cleanup. A synchronous 10,000-item stream test checks managed allocations remain below 4 KiB after warmup. Required transaction gates also validate Rust generation, plugin-enabled core tests, naming collisions, and updated snapshots before integration.
+The reference bindings and benchmark compile; 365 default-Task and 16 ValueTask C# integration tests pass under the configured patched .NET 11 runtime. The ValueTask suite exercises constructors, primitive/struct/wire/tuple results, cancellation, panic and conversion faults, failed input marshalling, and stream cleanup. A synchronous 10,000-item stream test checks managed allocations remain below 4 KiB after warmup. Required transaction gates also validate Rust generation, plugin-enabled core tests, naming collisions, and updated snapshots before integration.
 
 Mixed-enum regressions additionally verify enum-value matching without per-value boxing, signed and unsigned 64-bit discriminants, invalid casts, naming collisions, native/wire round trips, owned-payload cleanup, and preservation of empty payload cases. Generator tests cover all eight legal C# enum bases and pointer-sized fallback.

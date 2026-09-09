@@ -39,6 +39,7 @@ impl Pass {
         id_map: &model::common::id_map::Pass,
         struct_class: &model::common::types::info::struct_class::Pass,
         projection: &model::common::types::info::projection::Pass,
+        disposable: &model::common::types::info::disposable::Pass,
         rs_types: &RsTypes,
     ) -> OutputResult {
         let templates = output_master.templates();
@@ -106,6 +107,18 @@ impl Pass {
                 context.insert("inner_type", &inner_name);
                 context.insert("has_managed_class", &has_managed_class);
                 context.insert("field_decls", &field_decls);
+                let dispose_body = if inner_is_composite {
+                    String::new()
+                } else {
+                    id_map.ty(inner_rust_id).and_then(|id| types.get(id)).and_then(|ty| {
+                        if let crate::lang::types::kind::TypeKind::WireOnly(crate::lang::types::kind::wire::WireOnly::Composite(composite)) = &ty.kind {
+                            Some(output::common::types::util::dispose_body(composite.fields.iter().map(|field| {
+                                output::common::types::util::dispose_value(field.ty, &format!("this.{}", field.name), types, disposable, 0)
+                            })))
+                        } else { None }
+                    }).unwrap_or_default()
+                };
+                context.insert("dispose_body", &dispose_body);
                 context.insert("serialize_body", &serialize_body);
                 context.insert("deserialize_body", &deserialize_body);
                 context.insert("size_body", &size_body);

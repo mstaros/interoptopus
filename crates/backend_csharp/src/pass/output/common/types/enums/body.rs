@@ -3,7 +3,7 @@
 use crate::lang::TypeId;
 use crate::lang::types::kind::{DataEnum, Primitive, TypeKind, TypePattern, Variant};
 use crate::pass::{OutputResult, PassInfo, model, output};
-use interoptopus_backends::template::{Context, Value};
+use interoptopus_backends::template::Context;
 use std::collections::HashMap;
 
 #[derive(Default)]
@@ -61,24 +61,12 @@ impl Pass {
             let name = &ty.name;
             let visibility = ty.visibility.to_string();
 
-            // DataEnum carrying a WireOnly variant payload (e.g. `S(String)`) has no
-            // FFI-safe Unmanaged form — it only flows through `Wire<T>`. Such enums
-            // also hold no native resources (their payloads are GC-managed) so they
-            // are not disposable.
-            let has_wire_only_payload = projection.has_wire_only_payload(*type_id).unwrap_or(false);
-
-            // Managed-only types have no Unmanaged representation:
-            //   - Result/Option whose Ok side is a Service.
-            //   - DataEnum with WireOnly variant payloads.
+            // Wire-only projection and resource ownership are independent.
             let is_managed_only = !projection.crosses_ffi(*type_id).unwrap_or(true);
 
             let ty = *type_id;
             let struct_or_class = if struct_class.is_struct(ty) { "struct" } else { "class" };
-            let is_disposable = if has_wire_only_payload {
-                false
-            } else {
-                disposable.is_disposable(*type_id).unwrap_or(false)
-            };
+            let is_disposable = disposable.is_disposable(*type_id).unwrap_or(false);
 
             let case_types = enum_body_case_types.get(*type_id).unwrap_or(&[]);
             let union_members = enum_body_union_members.get(*type_id).map_or("", std::string::String::as_str);
@@ -91,30 +79,17 @@ impl Pass {
             let exception_for_variant = enum_body_exception_for_variant.get(*type_id).map_or("", std::string::String::as_str);
             let to_string = enum_body_tostring.get(*type_id).map_or("", std::string::String::as_str);
 
-            // Collect disposable variant fields for the Dispose() method.
-            let disposable_variants: Vec<HashMap<&str, Value>> = if is_disposable {
-                let variants: &[Variant] = match type_kind {
-                    TypeKind::DataEnum(de) => &de.variants,
-                    TypeKind::TypePattern(TypePattern::Option(_, de)) => &de.variants,
-                    TypeKind::TypePattern(TypePattern::Result(_, _, de)) => &de.variants,
-                    _ => &[],
-                };
-                variants
-                    .iter()
-                    .flat_map(|v| {
-                        model::common::types::union_names::payload_fields(v)
-                            .filter(|(payload_ty, _)| disposable.is_disposable(*payload_ty).unwrap_or(false))
-                            .map(move |(_, field)| {
-                                let mut m = HashMap::new();
-                                m.insert("name", Value::normal_string(&field));
-                                m.insert("tag", Value::from(v.tag as i64));
-                                m
-                            })
-                    })
-                    .collect()
-            } else {
-                Vec::new()
+            let variants: &[Variant] = match type_kind {
+                TypeKind::DataEnum(de) => &de.variants,
+                TypeKind::TypePattern(TypePattern::Option(_, de) | TypePattern::Result(_, _, de)) => &de.variants,
+                _ => &[],
             };
+            let dispose_body = output::common::types::util::dispose_body(variants.iter().flat_map(|variant| {
+                model::common::types::union_names::payload_fields(variant).filter_map(|(ty, field)| {
+                    let body = output::common::types::util::dispose_value(ty, &format!("this.{field}"), types, disposable, 0);
+                    (!body.is_empty()).then(|| format!("if (_variant == {}) {{ {body} }}", variant.tag))
+                })
+            }));
 
             // Position (a) of `docs/csharp-unions.md` Open items 1: the union arrives here by
             // argument, and the marshaller dereferences it. `NullPolicy::Throw` is exactly "this
@@ -157,7 +132,7 @@ impl Pass {
             context.insert("result_ok_is_unit", &result_interface.as_ref().is_some_and(|r| r.ok_is_unit));
             context.insert("result_err_is_unit", &result_interface.as_ref().is_some_and(|r| r.err_is_unit));
             context.insert("result_has_unit_methods", &result_interface.as_ref().is_some_and(|r| r.ok_is_unit || r.err_is_unit));
-            context.insert("disposable_variants", &disposable_variants);
+            context.insert("dispose_body", &dispose_body);
             context.insert("case_types", &case_types);
             context.insert("union_members", &union_members);
             context.insert("unmanaged_variants", &unmanaged_variants);

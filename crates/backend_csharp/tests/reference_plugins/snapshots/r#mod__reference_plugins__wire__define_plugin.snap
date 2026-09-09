@@ -367,6 +367,13 @@ internal partial struct WireBuffer
         public int len;
         public int capacity;
 
+        internal void Free()
+        {
+            var native = this;
+            this = default;
+            native.IntoManaged().Dispose();
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         [Obsolete("This method is intended for use by generated code only.")]
         [EditorBrowsable(EditorBrowsableState.Never)]
@@ -559,6 +566,8 @@ public partial class WireOfHashMapStringString : IDisposable
     {
         internal WireBuffer Buffer;
 
+        internal void Free() { Buffer.Dispose(); }
+
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         [Obsolete("This method is intended for use by generated code only.")]
         [EditorBrowsable(EditorBrowsableState.Never)]
@@ -589,6 +598,7 @@ public partial class WireOfHashMapStringString : IDisposable
     {
         private WireOfHashMapStringString _managed;
         private Unmanaged _unmanaged;
+        private bool _ownsUnmanaged;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public Marshaller(WireOfHashMapStringString managed) { _managed = managed; }
@@ -603,13 +613,22 @@ public partial class WireOfHashMapStringString : IDisposable
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { _unmanaged = _managed.IntoUnmanaged();
+            _ownsUnmanaged = true;
+            return _unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public WireOfHashMapStringString ToManaged() { return _unmanaged.IntoManaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void OnInvoked() { _ownsUnmanaged = false; }
+
+        public void Free()
+        {
+            if (!_ownsUnmanaged) return;
+            _ownsUnmanaged = false;
+            _unmanaged.Free();
+        }
     }
 }
 
@@ -712,6 +731,8 @@ public partial class WireOfString : IDisposable
     {
         internal WireBuffer Buffer;
 
+        internal void Free() { Buffer.Dispose(); }
+
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         [Obsolete("This method is intended for use by generated code only.")]
         [EditorBrowsable(EditorBrowsableState.Never)]
@@ -742,6 +763,7 @@ public partial class WireOfString : IDisposable
     {
         private WireOfString _managed;
         private Unmanaged _unmanaged;
+        private bool _ownsUnmanaged;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public Marshaller(WireOfString managed) { _managed = managed; }
@@ -756,13 +778,22 @@ public partial class WireOfString : IDisposable
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { _unmanaged = _managed.IntoUnmanaged();
+            _ownsUnmanaged = true;
+            return _unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public WireOfString ToManaged() { return _unmanaged.IntoManaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void OnInvoked() { _ownsUnmanaged = false; }
+
+        public void Free()
+        {
+            if (!_ownsUnmanaged) return;
+            _ownsUnmanaged = false;
+            _unmanaged.Free();
+        }
     }
 }
 

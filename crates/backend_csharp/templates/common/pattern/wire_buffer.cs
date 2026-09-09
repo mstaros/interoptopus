@@ -91,6 +91,13 @@ internal partial struct WireBuffer
         public int len;
         public int capacity;
 
+        internal void Free()
+        {
+            var native = this;
+            this = default;
+            native.IntoManaged().Dispose();
+        }
+
         {{ _fns_decorators_all | indent(width = 8) }}
         {{ _fns_decorators_internal | indent(width = 8) }}
         internal unsafe WireBuffer IntoManaged()

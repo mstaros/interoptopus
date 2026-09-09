@@ -240,6 +240,14 @@ public partial class ResultFliparooDotnetException : IUnion, IResult<Fliparoo, D
                 _ => throw new InteropException($"Unknown variant {_variant} for ResultFliparooDotnetException. The value did not originate from a well-formed Rust enum."),
             };
         }
+
+        // Releases native fields even when only a prefix finished marshalling.
+        internal void Free()
+        {
+            var native = this;
+            this = default;
+            if (native._variant == 0) native._Ok._Ok.Free();
+        }
     }
 
 
@@ -249,10 +257,18 @@ public partial class ResultFliparooDotnetException : IUnion, IResult<Fliparoo, D
     internal Unmanaged IntoUnmanaged()
     {
         var _unmanaged = new Unmanaged();
-        _unmanaged._variant = _variant;
-        if (_variant == 0) _unmanaged._Ok._Ok = _Ok.IntoUnmanaged();
-        if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
-        return _unmanaged;
+        try
+        {
+            _unmanaged._variant = _variant;
+            if (_variant == 0) _unmanaged._Ok._Ok = _Ok.IntoUnmanaged();
+            if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
+            return _unmanaged;
+        }
+        catch
+        {
+            _unmanaged.Free();
+            throw;
+        }
     }
 
 
@@ -406,6 +422,7 @@ public partial class ResultFliparooDotnetException : IUnion, IResult<Fliparoo, D
 
     public void Dispose()
     {
+        
     }
 
     [CustomMarshaller(typeof(ResultFliparooDotnetException), MarshalMode.Default, typeof(Marshaller))]
@@ -432,6 +449,7 @@ public partial class ResultFliparooDotnetException : IUnion, IResult<Fliparoo, D
     {
         private ResultFliparooDotnetException _managed;
         private Unmanaged _unmanaged;
+        private bool _ownsUnmanaged;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public Marshaller(ResultFliparooDotnetException managed) { _managed = managed; }
@@ -446,13 +464,20 @@ public partial class ResultFliparooDotnetException : IUnion, IResult<Fliparoo, D
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultFliparooDotnetException: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultFliparooDotnetException: it corresponds to no Rust variant. Construct it through a case constructor or factory."); _unmanaged = _managed.IntoUnmanaged(); _ownsUnmanaged = true; return _unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultFliparooDotnetException ToManaged() { return _unmanaged.IntoManaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void OnInvoked() { _ownsUnmanaged = false; }
+
+        public void Free()
+        {
+            if (!_ownsUnmanaged) return;
+            _ownsUnmanaged = false;
+            _unmanaged.Free();
+        }
     }
 
 }
@@ -530,6 +555,14 @@ public partial class ResultHeavyDotnetException : IUnion, IResult<Heavy, DotnetE
                 _ => throw new InteropException($"Unknown variant {_variant} for ResultHeavyDotnetException. The value did not originate from a well-formed Rust enum."),
             };
         }
+
+        // Releases native fields even when only a prefix finished marshalling.
+        internal void Free()
+        {
+            var native = this;
+            this = default;
+            if (native._variant == 0) native._Ok._Ok.Free();
+        }
     }
 
 
@@ -539,10 +572,18 @@ public partial class ResultHeavyDotnetException : IUnion, IResult<Heavy, DotnetE
     internal Unmanaged IntoUnmanaged()
     {
         var _unmanaged = new Unmanaged();
-        _unmanaged._variant = _variant;
-        if (_variant == 0) _unmanaged._Ok._Ok = _Ok.IntoUnmanaged();
-        if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
-        return _unmanaged;
+        try
+        {
+            _unmanaged._variant = _variant;
+            if (_variant == 0) _unmanaged._Ok._Ok = _Ok.IntoUnmanaged();
+            if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
+            return _unmanaged;
+        }
+        catch
+        {
+            _unmanaged.Free();
+            throw;
+        }
     }
 
 
@@ -696,6 +737,7 @@ public partial class ResultHeavyDotnetException : IUnion, IResult<Heavy, DotnetE
 
     public void Dispose()
     {
+        
     }
 
     [CustomMarshaller(typeof(ResultHeavyDotnetException), MarshalMode.Default, typeof(Marshaller))]
@@ -722,6 +764,7 @@ public partial class ResultHeavyDotnetException : IUnion, IResult<Heavy, DotnetE
     {
         private ResultHeavyDotnetException _managed;
         private Unmanaged _unmanaged;
+        private bool _ownsUnmanaged;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public Marshaller(ResultHeavyDotnetException managed) { _managed = managed; }
@@ -736,13 +779,20 @@ public partial class ResultHeavyDotnetException : IUnion, IResult<Heavy, DotnetE
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultHeavyDotnetException: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultHeavyDotnetException: it corresponds to no Rust variant. Construct it through a case constructor or factory."); _unmanaged = _managed.IntoUnmanaged(); _ownsUnmanaged = true; return _unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultHeavyDotnetException ToManaged() { return _unmanaged.IntoManaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void OnInvoked() { _ownsUnmanaged = false; }
+
+        public void Free()
+        {
+            if (!_ownsUnmanaged) return;
+            _ownsUnmanaged = false;
+            _unmanaged.Free();
+        }
     }
 
 }
@@ -1389,6 +1439,13 @@ public partial class Fliparoo : IDisposable
     {
         internal IntPtr _handle;
 
+        internal void Free()
+        {
+            var handle = _handle;
+            _handle = IntPtr.Zero;
+            if (handle != IntPtr.Zero) GCHandle.FromIntPtr(handle).Free();
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         [Obsolete("This method is intended for use by generated code only.")]
         [EditorBrowsable(EditorBrowsableState.Never)]
@@ -1437,6 +1494,13 @@ public partial class Heavy : IDisposable
     internal struct Unmanaged
     {
         internal IntPtr _handle;
+
+        internal void Free()
+        {
+            var handle = _handle;
+            _handle = IntPtr.Zero;
+            if (handle != IntPtr.Zero) GCHandle.FromIntPtr(handle).Free();
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         [Obsolete("This method is intended for use by generated code only.")]

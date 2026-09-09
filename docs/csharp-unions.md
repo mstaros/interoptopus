@@ -19,6 +19,28 @@ snapshot leaves a question open the shipped implementation is authoritative — 
 sections in it are headed `[Resolved]` and carry no resolution text, including both sections on
 classes as union types. Do not read those as unresolved.
 
+## Ownership and disposal
+
+Resource-owning unions and composite values implement `IDisposable`. Ownership is
+determined from all payloads, independently of whether the type crosses FFI directly
+or uses `Wire<T>`. A mixed union can therefore contain ordinary managed strings and
+native `Utf8String` values while still disposing its native payloads. Native leaves
+inside managed lists, maps, nullable values and arrays are cleaned up recursively.
+
+The outer union owns its active payload. Case records returned by matching or
+`AsX()` are views of those same wrappers; the grouped `Constants` case owns nothing.
+Disposal attempts every active field. One cleanup exception is rethrown with its
+identity and stack preserved; multiple failures are reported together.
+
+A by-value call transfers ownership. If marshalling a later field or argument fails,
+already-transferred native values are released; earlier managed wrappers remain
+consumed. Do not retry with those wrappers. The native layout and calling convention
+are unchanged. Borrowed `in` arguments retain their existing ownership.
+
+Generated service methods reject access after disposal with
+`ObjectDisposedException`; repeated service disposal is harmless. This does not
+make concurrent service calls and disposal thread-safe.
+
 ## Two layers, two rules
 
 This plan governs the **generated layer** only. It is not a campaign to replace C# enums.

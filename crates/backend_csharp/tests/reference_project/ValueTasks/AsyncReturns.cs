@@ -17,6 +17,22 @@ using Interop = My.Company.Interop;
 public class AsyncReturns
 {
     [Fact]
+    public async Task disposed_service_returns_a_faulted_value_task()
+    {
+        var service = ServiceAsyncCancel.Create();
+        service.Dispose();
+        service.Dispose();
+        Assert.Throws<ObjectDisposedException>(() => service.Counter());
+        for (int i = 0; i < 16; ++i)
+        {
+            ValueTask<ulong> work = service.LongRunningAsync(1, 1, TestContext.Current.CancellationToken);
+            var task = work.AsTask();
+            await Assert.ThrowsAsync<ObjectDisposedException>(() => task);
+            Assert.True(task.IsFaulted);
+        }
+    }
+
+    [Fact]
     public async Task generic_value_tasks_preserve_primitive_struct_wire_and_tuple_results()
     {
         using var scalar = ServiceAsyncRval.Simple();

@@ -3,6 +3,7 @@
 pub mod alignment;
 pub mod array;
 pub mod behavior;
+pub mod disposal;
 pub mod enum_constants;
 pub mod enums;
 pub mod fnptrs;

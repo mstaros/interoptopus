@@ -272,6 +272,14 @@ public sealed partial class {{ name }} : global::Rust.Linq.IRustEnumerable<{{ ma
         internal IntPtr _drop;
         internal IntPtr _next;
 
+        internal unsafe void Free()
+        {
+            var native = this;
+            this = default;
+            if (native._data != IntPtr.Zero)
+                ((delegate* unmanaged[Cdecl]<IntPtr, void>)native._drop)(native._data);
+        }
+
         internal {{ name }} IntoManaged()
         {
             var managed = new {{ name }} { _native = this };
@@ -287,11 +295,21 @@ public sealed partial class {{ name }} : global::Rust.Linq.IRustEnumerable<{{ ma
     {
         private {{ name }} _managed;
         private Unmanaged _unmanaged;
+        private bool _ownsUnmanaged;
         public void FromManaged({{ name }} managed) { _managed = managed; }
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
-        public Unmanaged ToUnmanaged() { return _managed.IntoUnmanaged(); }
+        public Unmanaged ToUnmanaged() { _unmanaged = _managed.IntoUnmanaged();
+            _ownsUnmanaged = true;
+            return _unmanaged; }
         public {{ name }} ToManaged() { return _unmanaged.IntoManaged(); }
-        public void Free() { }
+        public void OnInvoked() { _ownsUnmanaged = false; }
+
+        public void Free()
+        {
+            if (!_ownsUnmanaged) return;
+            _ownsUnmanaged = false;
+            _unmanaged.Free();
+        }
     }
 
     [CustomMarshaller(typeof({{ name }}), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]
