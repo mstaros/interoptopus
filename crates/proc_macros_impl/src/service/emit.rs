@@ -75,11 +75,8 @@ impl ServiceModel {
                                 GenericArgument::Type(inner_type) => {
                                     *inner_type = Self::replace_anonymous_lifetimes(inner_type, method_generics);
                                 }
-                                GenericArgument::Lifetime(lifetime) => {
-                                    // Replace anonymous lifetime with explicit one
-                                    if lifetime.ident == "_" {
-                                        *lifetime = Self::get_replacement_lifetime(method_generics);
-                                    }
+                                GenericArgument::Lifetime(lifetime) if lifetime.ident == "_" => {
+                                    *lifetime = Self::get_replacement_lifetime(method_generics);
                                 }
                                 _ => {}
                             }
@@ -135,10 +132,8 @@ impl ServiceModel {
                                         return true;
                                     }
                                 }
-                                GenericArgument::Lifetime(lifetime) => {
-                                    if lifetime.ident == "_" {
-                                        return true;
-                                    }
+                                GenericArgument::Lifetime(lifetime) if lifetime.ident == "_" => {
+                                    return true;
                                 }
                                 _ => {}
                             }
@@ -505,9 +500,8 @@ impl ServiceModel {
                 if method.is_async {
                     // This shouldn't happen as async methods should have Async<Self> parameter
                     panic!("Async methods in services should have Async<Self> as their first parameter")
-                } else {
-                    unreachable!("Non-async methods with no receiver should be constructors")
                 }
+                unreachable!("Non-async methods with no receiver should be constructors")
             }
         }
     }
