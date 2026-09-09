@@ -486,9 +486,7 @@ impl ServiceModel {
         let service_name_snake = self.service_name_snake_case();
         let method_name = &method.name;
         let function_name = format_ident!("{}_{}", service_name_snake, method_name);
-
         let docs = self.emit_docs(&method.docs);
-
         match method.receiver_kind {
             ReceiverKind::Shared => self.emit_shared_method(method, &function_name, &docs),
             ReceiverKind::Mutable => self.emit_mutable_method(method, &function_name, &docs),
@@ -496,11 +494,10 @@ impl ServiceModel {
             ReceiverKind::AsyncCtor(_) => {
                 unreachable!("Async constructors should be in the constructors list, not methods")
             }
+            ReceiverKind::None if method.is_async => {
+                panic!("Async methods in services should have Async<Self> as their first parameter")
+            }
             ReceiverKind::None => {
-                if method.is_async {
-                    // This shouldn't happen as async methods should have Async<Self> parameter
-                    panic!("Async methods in services should have Async<Self> as their first parameter")
-                }
                 unreachable!("Non-async methods with no receiver should be constructors")
             }
         }
