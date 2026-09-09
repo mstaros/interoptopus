@@ -1,5 +1,6 @@
 ---
 source: crates/proc_macros_impl/tests/ty_module.rs
+assertion_line: 27
 expression: expand_ffi!(item)
 ---
 #[repr(C)]
@@ -23,6 +24,7 @@ unsafe impl ::interoptopus::lang::types::TypeInfo for Foo {
     }
     fn kind() -> ::interoptopus::lang::types::TypeKind {
         ::interoptopus::lang::types::TypeKind::Struct(::interoptopus::lang::types::Struct {
+            is_positional: false,
             fields: vec![
                 ::interoptopus::lang::types::Field { name : "x".to_string(), docs :
                 ::interoptopus::lang::meta::Docs::from_line(""), visibility :
