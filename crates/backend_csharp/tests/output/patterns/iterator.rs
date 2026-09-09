@@ -41,6 +41,11 @@ fn owning_and_borrowed_elements_are_rejected_before_emission() {
         RustInventory::new().register(extra_type!(ffi::Iterator<ffi::Slice<'static, u8>>)),
         RustInventory::new().register(extra_type!(ffi::Iterator<BorrowedRecord<'static>>)),
         RustInventory::new().register(extra_type!(ffi::Iterator<*const u32>)),
+        RustInventory::new().register(extra_type!(ffi::AsyncIterator<ffi::String>)),
+        RustInventory::new().register(extra_type!(ffi::AsyncIterator<OwnedRecord>)),
+        RustInventory::new().register(extra_type!(ffi::AsyncIterator<ffi::Slice<'static, u8>>)),
+        RustInventory::new().register(extra_type!(ffi::AsyncIterator<BorrowedRecord<'static>>)),
+        RustInventory::new().register(extra_type!(ffi::AsyncIterator<*const u32>)),
     ] {
         let error = RustLibrary::builder(inventory.validate()).build().process().err().expect("unsafe element must be rejected");
         assert!(error.to_string().contains("Iterator predicates support"), "{error}");

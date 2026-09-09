@@ -250,14 +250,15 @@ struct ResultRval {
     is_void: bool,
 }
 
-fn collection_rval(item: crate::lang::TypeId, types: &model::common::types::all::Pass) -> Option<String> {
+fn collection_rval(item: crate::lang::TypeId, types: &model::common::types::all::Pass, asynchronous: bool) -> Option<String> {
     let item = types.get(item)?;
     let element = if matches!(item.kind, TypeKind::Primitive(Primitive::Bool) | TypeKind::TypePattern(TypePattern::Bool)) {
         "bool"
     } else {
         &item.name
     };
-    Some(format!("global::Rust.Linq.IRustEnumerable<{element}>"))
+    let interface = if asynchronous { "global::System.Collections.Generic.IAsyncEnumerable" } else { "global::Rust.Linq.IRustEnumerable" };
+    Some(format!("{interface}<{element}>"))
 }
 
 fn resolve_result_rval(rval_kind: Option<&TypeKind>, types: &model::common::types::all::Pass) -> ResultRval {
@@ -270,15 +271,16 @@ fn resolve_result_rval(rval_kind: Option<&TypeKind>, types: &model::common::type
                 types.get(*ok_ty).map_or_else(|| "void".to_string(), |t| t.name.clone())
             };
             let rval_name = types.get(*ok_ty).and_then(|ty| {
-                if let TypeKind::TypePattern(TypePattern::Iterator(item)) = ty.kind {
-                    collection_rval(item, types)
-                } else {
-                    None
+                match ty.kind {
+                    TypeKind::TypePattern(TypePattern::Iterator(item)) => collection_rval(item, types, false),
+                    TypeKind::TypePattern(TypePattern::AsyncIterator(item)) => collection_rval(item, types, true),
+                    _ => None,
                 }
             }).unwrap_or(ok_name);
             ResultRval { as_ok: true, rval_name: Some(rval_name), is_void: ok_is_void }
         }
-        Some(TypeKind::TypePattern(TypePattern::Iterator(item))) => ResultRval { as_ok: false, rval_name: collection_rval(*item, types), is_void: false },
+        Some(TypeKind::TypePattern(TypePattern::Iterator(item))) => ResultRval { as_ok: false, rval_name: collection_rval(*item, types, false), is_void: false },
+        Some(TypeKind::TypePattern(TypePattern::AsyncIterator(item))) => ResultRval { as_ok: false, rval_name: collection_rval(*item, types, true), is_void: false },
         _ => ResultRval { as_ok: false, rval_name: None, is_void: false },
     }
 }

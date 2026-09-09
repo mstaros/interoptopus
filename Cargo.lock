@@ -480,6 +480,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "futures-core"
+version = "0.3.34"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92d699e522242e69e3003b94ecc1f960f3a5e015aa7c5d7486e65ad01dd94f5e"
+
+[[package]]
 name = "generic-array"
 version = "0.14.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -783,6 +789,7 @@ dependencies = [
 name = "interoptopus_mps"
 version = "0.18.0"
 dependencies = [
+ "futures-core",
  "interoptopus_proc_mps",
  "serde",
  "tokio",
@@ -1171,6 +1178,7 @@ dependencies = [
 name = "reference_project"
 version = "0.18.0"
 dependencies = [
+ "futures-core",
  "interoptopus_mps",
  "serde",
  "serde_json",

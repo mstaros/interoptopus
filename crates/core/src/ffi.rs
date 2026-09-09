@@ -35,6 +35,7 @@
 
 pub use crate::pattern::cstr::CStrPtr;
 pub use crate::pattern::iterator::Iterator;
+pub use crate::pattern::async_iterator::AsyncIterator;
 pub use crate::pattern::option::{Option, Option::None, Option::Some};
 pub use crate::pattern::primitive::{Bool, CChar};
 pub use crate::pattern::result::{Result, Result::Err, Result::Ok};

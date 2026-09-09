@@ -38,4 +38,6 @@ pub enum TypePattern {
     TaskHandle,
     /// An owned single-pass iterator with specialized function pointers.
     Iterator(TypeId),
+    /// An owned asynchronous stream with specialized next/drop function pointers.
+    AsyncIterator(TypeId),
 }

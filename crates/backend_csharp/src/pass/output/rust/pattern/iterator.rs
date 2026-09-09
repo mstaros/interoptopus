@@ -43,7 +43,11 @@ impl Pass {
         for file in output_master.outputs_of(FileType::Csharp) {
             let mut rendered = Vec::new();
             for (id, ty) in types.iter() {
-                let TypeKind::TypePattern(TypePattern::Iterator(item)) = ty.kind else { continue };
+                let (item, asynchronous) = match ty.kind {
+                    TypeKind::TypePattern(TypePattern::Iterator(item)) => (item, false),
+                    TypeKind::TypePattern(TypePattern::AsyncIterator(item)) => (item, true),
+                    _ => continue,
+                };
                 if !output_master.type_belongs_to(*id, file) { continue; }
                 let Some(element) = types.get(item) else { continue };
                 let item_conversion = conversion.managed_conversion(item);
@@ -71,7 +75,8 @@ impl Pass {
                 context.insert("unmanaged_element_type", &unmanaged_element);
                 context.insert("copied_element", copied_element);
                 context.insert("managed_element_type", managed_element);
-                rendered.push(output_master.templates().render("rust/pattern/iterator.cs", &context)?);
+                let template = if asynchronous { "rust/pattern/async_iterator.cs" } else { "rust/pattern/iterator.cs" };
+                rendered.push(output_master.templates().render(template, &context)?);
             }
             rendered.sort();
             self.iterators.insert(file.clone(), rendered);

@@ -108,6 +108,7 @@ pub mod callback;
 pub mod cstr;
 pub mod guard;
 pub mod iterator;
+pub mod async_iterator;
 pub mod option;
 pub mod primitive;
 pub mod result;

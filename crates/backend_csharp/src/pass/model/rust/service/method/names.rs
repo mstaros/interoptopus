@@ -23,6 +23,12 @@ fn managed_method_name(type_name: &str, func: &crate::lang::functions::Function,
     use crate::lang::types::kind::{TypeKind, TypePattern};
     let is_async = matches!(&func.kind, FunctionKind::Overload(overload) if matches!(overload.kind, OverloadKind::Async(_)))
         || func.signature.arguments.iter().any(|arg| types.get(arg.ty).is_some_and(|ty| matches!(ty.kind, TypeKind::TypePattern(TypePattern::AsyncCallback(_)))));
+    let stream_result = types.get(func.signature.rval).is_some_and(|ty| match ty.kind {
+        TypeKind::TypePattern(TypePattern::AsyncIterator(_)) => true,
+        TypeKind::TypePattern(TypePattern::Result(ok, _, _)) => types.get(ok).is_some_and(|ok| matches!(ok.kind, TypeKind::TypePattern(TypePattern::AsyncIterator(_)))),
+        _ => false,
+    });
+    let is_async = is_async || stream_result;
     let mut name = service_method_name(type_name, &func.name);
     if is_async && !name.ends_with("Async") {
         name.push_str("Async");
@@ -71,16 +77,16 @@ impl Pass {
                 .collect();
 
             for fn_id in &source_fns {
-                if self.names.contains_key(fn_id) {
-                    continue;
-                }
+                
 
                 let Some(func) = fns.get(*fn_id) else { continue };
 
                 let method_name = managed_method_name(type_name, func, types);
 
-                self.names.insert(*fn_id, method_name);
-                outcome.changed();
+                if self.names.get(fn_id) != Some(&method_name) {
+                    self.names.insert(*fn_id, method_name);
+                    outcome.changed();
+                }
             }
 
             // Also assign names to overloads of source functions so they're
@@ -88,13 +94,13 @@ impl Pass {
             // renderable lists.
             for &fn_id in service.sources.ctors.iter().chain(service.sources.methods.iter()) {
                 for (overload_id, overload_fn) in fns.overloads_for(fn_id) {
-                    if self.names.contains_key(overload_id) {
-                        continue;
-                    }
+                    
 
                     let method_name = managed_method_name(type_name, overload_fn, types);
-                    self.names.insert(*overload_id, method_name);
-                    outcome.changed();
+                    if self.names.get(overload_id) != Some(&method_name) {
+                        self.names.insert(*overload_id, method_name);
+                        outcome.changed();
+                    }
                 }
             }
         }

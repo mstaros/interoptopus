@@ -17,6 +17,7 @@ pub mod patterns {
     pub mod callback;
     pub mod guard;
     pub mod iterator;
+    pub mod async_iterator;
     pub mod option;
     pub mod primitive;
     pub mod result;
@@ -66,6 +67,13 @@ pub fn inventory() -> RustInventory {
         .register(function!(patterns::iterator::pattern_iterator_points))
         .register(function!(patterns::iterator::pattern_iterator_bools))
         .register(service!(patterns::iterator::ServiceIterator))
+        .register(function!(patterns::async_iterator::pattern_async_iterator_create))
+        .register(function!(patterns::async_iterator::pattern_async_iterator_live))
+        .register(function!(patterns::async_iterator::pattern_async_iterator_produced))
+        .register(function!(patterns::async_iterator::pattern_async_iterator_echo))
+        .register(function!(patterns::async_iterator::pattern_async_iterator_bools))
+        .register(function!(patterns::async_iterator::pattern_async_iterator_points))
+        .register(service!(patterns::async_iterator::ServiceAsyncStream))
         .register(builtins_wire!())
         .register(builtins_vec!(u8))
         .register(builtins_vec!(ffi::String))

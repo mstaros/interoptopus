@@ -109,6 +109,13 @@ impl Pass {
                     let Some(cs_void_ptr) = id_map.ty(<*mut std::ffi::c_void>::id()) else { continue };
                     TypeKind::Composite(Composite { fields: vec![field("fnptr", cs_void_ptr), field("data", cs_void_ptr)], repr: Repr::c() })
                 }
+                lang::types::TypePattern::AsyncIterator(_) => {
+                    let Some(cs_ptr) = id_map.ty(<*mut std::ffi::c_void>::id()) else { continue };
+                    TypeKind::Composite(Composite {
+                        fields: ["data", "next_fn", "drop_fn"].into_iter().map(|name| field(name, cs_ptr)).collect(),
+                        repr: Repr::c(),
+                    })
+                }
                 lang::types::TypePattern::Iterator(_) => {
                     let Some(cs_ptr) = id_map.ty(<*mut std::ffi::c_void>::id()) else { continue };
                     TypeKind::Composite(Composite {

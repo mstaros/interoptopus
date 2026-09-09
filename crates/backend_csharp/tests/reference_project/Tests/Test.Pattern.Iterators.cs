@@ -769,8 +769,8 @@ public class TestPatternIterators
         fail = false;
         Assert.Equal(new uint[] { 2, 3 }, query.ToArray());
         Assert.Equal(before, Interop.pattern_iterator_live());
-        Assert.Throws<ArgumentNullException>(() => RustEnumerable.FromFactory<uint>(null!));
-        Assert.Throws<InvalidOperationException>(() => RustEnumerable.FromFactory<uint>(() => null!).Any());
+        Assert.Throws<ArgumentNullException>(() => RustEnumerable.FromFactory<uint>((Func<IRustEnumerable<uint>>)null!));
+        Assert.Throws<InvalidOperationException>(() => RustEnumerable.FromFactory<uint>((Func<IRustEnumerable<uint>>)(() => null!)).Any());
     }
 
     [Fact]

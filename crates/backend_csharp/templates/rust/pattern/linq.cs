@@ -24,12 +24,13 @@ public interface IRustEnumerable<out T> : IEnumerable<T>, IDisposable
 
 /// Owns native query state created during one script execution. Keep this scope
 /// alive through consumption of lazy or async results. Persistent services remain host-owned.
-public sealed class ScriptScope : IDisposable
+public sealed class ScriptScope : IDisposable, IAsyncDisposable
 {
     private static readonly AsyncLocal<ScriptScope?> Ambient = new();
     private readonly object _gate = new();
     private readonly HashSet<IDisposable> _resources = new(ReferenceEqualityComparer.Instance);
     private readonly ScriptScope? _parent;
+    private readonly TaskCompletionSource _cleanup = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private bool _disposed;
 
     public ScriptScope(CancellationToken cancellationToken = default)
@@ -89,12 +90,47 @@ public sealed class ScriptScope : IDisposable
             _resources.Clear();
         }
         List<Exception>? errors = null;
+        List<Task>? pending = null;
         foreach (var resource in resources)
         {
-            try { resource.Dispose(); }
+            try
+            {
+                if (resource is IAsyncDisposable asynchronous)
+                {
+                    var cleanup = asynchronous.DisposeAsync();
+                    if (cleanup.IsCompletedSuccessfully) cleanup.GetAwaiter().GetResult();
+                    else (pending ??= new()).Add(cleanup.AsTask());
+                }
+                else resource.Dispose();
+            }
             catch (Exception error) { (errors ??= new()).Add(error); }
         }
-        if (errors is not null) throw new AggregateException("Script query cleanup failed.", errors);
+        var immediateError = errors is null ? null : new AggregateException("Script query cleanup failed.", errors);
+        _ = FinishCleanupAsync(pending, errors);
+        if (immediateError is not null) throw immediateError;
+    }
+
+    /// Cancels pending native stream pulls and waits until Rust has released them.
+    public ValueTask DisposeAsync()
+    {
+        // Restore the ambient scope synchronously in the caller's execution context.
+        try { Dispose(); }
+        catch (AggregateException) { } // The same errors are retained in _cleanup.
+        return new ValueTask(_cleanup.Task);
+    }
+
+    private async Task FinishCleanupAsync(List<Task>? pending, List<Exception>? errors)
+    {
+        if (pending is not null)
+        {
+            foreach (var task in pending)
+            {
+                try { await task.ConfigureAwait(false); }
+                catch (Exception error) { (errors ??= new()).Add(error); }
+            }
+        }
+        if (errors is null) _cleanup.TrySetResult();
+        else _cleanup.TrySetException(new AggregateException("Script query cleanup failed.", errors));
     }
 }
 
@@ -107,6 +143,32 @@ public static class RustEnumerable
     {
         ArgumentNullException.ThrowIfNull(factory);
         return new FactoryEnumerable<T>(factory);
+    }
+
+    /// Creates a reusable native async view from a fresh-traversal factory.
+    public static IAsyncEnumerable<T> FromFactory<T>(Func<IAsyncEnumerable<T>> factory)
+    {
+        ArgumentNullException.ThrowIfNull(factory);
+        return EnumerateFactory(factory);
+    }
+
+    private static async IAsyncEnumerable<T> EnumerateFactory<T>(
+        Func<IAsyncEnumerable<T>> factory,
+        [global::System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        cancellationToken = ScriptScope.ResolveCancellation(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        var source = factory() ?? throw new InvalidOperationException("The async traversal factory returned null.");
+        try
+        {
+            await foreach (var item in source.WithCancellation(cancellationToken).ConfigureAwait(false))
+                yield return item;
+        }
+        finally
+        {
+            if (source is IAsyncDisposable asynchronous) await asynchronous.DisposeAsync().ConfigureAwait(false);
+            else if (source is IDisposable disposable) disposable.Dispose();
+        }
     }
 
     /// Selects this query API without enumerating or copying the source.

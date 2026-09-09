@@ -79,7 +79,7 @@ impl Pass {
                         // Move semantics (ownership transfer)
                         TypePattern::Utf8String => ManagedConversion::Into,
                         TypePattern::Vec(_) => ManagedConversion::Into,
-                        TypePattern::Iterator(_) => ManagedConversion::Into,
+                        TypePattern::Iterator(_) | TypePattern::AsyncIterator(_) => ManagedConversion::Into,
                         // AsyncCallbackCommonNative is already the blittable struct — it IS the unmanaged form.
                         TypePattern::AsyncCallback(_) => ManagedConversion::AsIs,
                         // TaskHandle is a blittable struct (three IntPtrs) — no marshalling needed.

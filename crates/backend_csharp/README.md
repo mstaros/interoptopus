@@ -159,13 +159,16 @@ The application may establish one scope around script execution **and result
 consumption**:
 
 ```csharp
-using var scope = new ScriptScope(cancellationToken);
+await using var scope = new ScriptScope(cancellationToken);
 // Invoke the script and consume any returned lazy/async results inside this scope.
 ```
 
 Generated native queries and enumerators automatically join the active scope.
 Disposal and ownership transfer remove old wrappers from tracking. Scope exit
-releases abandoned queries, even if execution fails; ordinary `foreach` and
+releases abandoned queries, even if execution fails. `await using` also waits for
+pending native stream requests to acknowledge cancellation and release their
+state; synchronous `Dispose()` initiates this cleanup without blocking.
+Ordinary `foreach` and
 LINQ terminals still release traversals immediately. Nested scopes and awaits
 are supported. A scope does not take ownership of persistent service objects
 or cancel/wait for detached tasks. Await those tasks before leaving the scope.
@@ -276,6 +279,109 @@ Rust `Stream` values. They require no native ABI change.
 The new `Where` overloads make a bare `null` or an always-throwing lambda
 ambiguous. Give those expressions their intended delegate type, for example
 `source.Where((Func<uint, bool>)(_ => throw new Exception()))`.
+
+### Native Rust async streams
+
+Use `ffi::AsyncIterator<T>` when producing the next Rust item can itself await.
+It wraps a standard [`futures_core::Stream<Item = T>`](https://docs.rs/futures-core/0.3.31/futures_core/stream/trait.Stream.html)
+and the existing `AsyncRuntime`; it does not depend on a particular collection
+or require an itertools fork.
+
+For example, a bridge service can wrap its own asynchronous traversal:
+
+```rust
+use interoptopus::ffi;
+use interoptopus::rt::Tokio;
+
+#[ffi(service)]
+pub struct Tree {
+    runtime: Tokio,
+    // Shared tree state owned by this bridge.
+}
+
+#[ffi]
+impl Tree {
+    pub fn create() -> Self {
+        Self { runtime: Tokio::new() }
+    }
+
+    pub fn nodes(&self) -> ffi::AsyncIterator<u32> {
+        // open_node_stream() is application code returning an owned,
+        // Send + 'static Stream<Item = u32> over the tree.
+        ffi::AsyncIterator::new(open_node_stream(), self.runtime.clone())
+    }
+}
+```
+
+Register the service as usual. The generated method is
+`IAsyncEnumerable<uint> NodesAsync()`. A result-wrapped stream,
+`ffi::Result<ffi::AsyncIterator<T>, E>`, also exposes `IAsyncEnumerable<T>`;
+opening errors follow the normal generated result-to-exception conversion.
+Free functions remain on the configured `Interop` class and return the concrete
+owning wrapper in the configured binding namespace.
+
+Scripts use ordinary async enumeration and framework async LINQ:
+
+```csharp
+using System.Linq;
+using Rust.Linq;
+
+await using var scope = new ScriptScope(cancellationToken);
+
+await foreach (var node in tree.NodesAsync()
+    .Where(x => x > 10)
+    .Take(5))
+{
+    Console.WriteLine(node);
+}
+```
+
+Each `MoveNextAsync()` asks Rust for one item. Rust polls the pinned stream on
+the supplied runtime and completes the pending request when an item, end, or
+failure is available. The binding neither copies the whole collection nor
+prefetches another item. The producer may have its own internal buffering.
+C# receives a copy of the current value; the same scalar, enum, and plain-struct
+element restrictions as synchronous native iterators apply. Async LINQ operators
+run in C#; put native filtering in the Rust stream when needed.
+
+A native stream is owning and single-pass. Its creation is synchronous; waiting
+for individual items is asynchronous. This pattern cannot currently be returned
+from a Rust `async fn`; return the descriptor from a regular function and put
+asynchronous initialization inside the stream. The runtime is retained for the
+traversal and its final pending request. Reuse a service's runtime instead of
+creating an executor for every item.
+
+To expose a reusable collection, register a fresh-stream factory once:
+
+```csharp
+IAsyncEnumerable<uint> nodes = RustEnumerable.FromFactory(tree.NodesAsync);
+var first = await nodes.Take(5).ToArrayAsync();
+var again = await nodes.Take(5).ToArrayAsync();
+```
+
+The async factory runs when enumeration first advances. An unstarted traversal
+or `Take(0)` does not open a native stream. Each enumeration owns and disposes
+its fresh stream. As with the synchronous overload, the factory determines
+whether subsequent traversals observe live data or a snapshot. Cast a bare
+`null` factory to its intended `Func<...>` type to select the overload.
+
+Cancellation is terminal for that traversal. Pass a token with
+`.WithCancellation(token)`, or use the active `ScriptScope` default.
+The binding aborts the native task and keeps its completion context alive until
+Rust acknowledges cancellation. `DisposeAsync()` waits for this acknowledgement;
+`await foreach` therefore releases native state on exhaustion, `break`, or an
+exception. Overlapping moves on one enumerator are rejected. A Rust stream panic
+faults enumeration; cancellation produces a cancelled await.
+
+As with other Rust futures, cancellation is cooperative: a `poll_next`
+implementation that blocks a runtime worker or never returns cannot be
+interrupted by the binding. Use `await using ScriptScope` to release native
+sources in pipelines that never start. Outside a scope, retain and dispose the
+concrete source (or use `RustEnumerable.FromFactory`).
+
+The async stream ABI is three pointers: state, next, and drop; each next call
+returns the existing `TaskHandle`. Regenerate C# and rebuild the Rust library
+together when adding this pattern.
 
 ### Exposing a Rust traversal
 

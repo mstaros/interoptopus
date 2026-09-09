@@ -18,4 +18,6 @@ pub enum TypePattern {
     Wire(TypeId),
     TaskHandle,
     Iterator(TypeId),
+    /// An owned asynchronous stream with specialized next/drop function pointers.
+    AsyncIterator(TypeId),
 }

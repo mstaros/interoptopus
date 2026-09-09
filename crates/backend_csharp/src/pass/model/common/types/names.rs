@@ -123,6 +123,7 @@ impl Pass {
                         let err_name = rust_to_pascal(resolve_compositional_name!(self, *err, kinds, pass_meta));
                         format!("Result{ok_name}{err_name}")
                     }
+                    TypePattern::AsyncIterator(t) => format!("AsyncIterator{}", rust_to_pascal(resolve_compositional_name!(self, *t, kinds, pass_meta))),
                     TypePattern::Iterator(t) => format!("Iterator{}", rust_to_pascal(resolve_compositional_name!(self, *t, kinds, pass_meta))),
                     TypePattern::TaskHandle => "TaskHandle".to_string(),
                 },

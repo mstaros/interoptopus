@@ -20,6 +20,7 @@ crate-type = ["cdylib", "rlib"]
 allocation-tracking = []
 
 [dependencies]
+futures-core.workspace = true
 interoptopus = { workspace = true, features = ["macros", "serde", "tokio", "unstable-plugins"] }
 tokio = { version = "1", features = ["full"] }
 

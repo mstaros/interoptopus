@@ -25,6 +25,7 @@ macros = ["dep:interoptopus_proc"]
 unstable-plugins = []
 
 [dependencies]
+futures-core.workspace = true
 interoptopus_proc = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"], optional = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "io-std"], optional = true }
