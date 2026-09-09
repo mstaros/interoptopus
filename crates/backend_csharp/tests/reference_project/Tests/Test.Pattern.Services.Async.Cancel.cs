@@ -12,7 +12,7 @@ public class TestPatternServicesAsyncCancel
     public async Task LongRunningCompletesNormally()
     {
         using var s = ServiceAsyncCancel.Create();
-        var result = await s.LongRunning(5, 10, TestContext.Current.CancellationToken);
+        var result = await s.LongRunningAsync(5, 10, TestContext.Current.CancellationToken);
         Assert.Equal(5u, result);
     }
 
@@ -23,7 +23,7 @@ public class TestPatternServicesAsyncCancel
         using var cts = new CancellationTokenSource();
 
         // Start a task that would take ~5 seconds
-        var task = s.LongRunning(100, 50, cts.Token);
+        var task = s.LongRunningAsync(100, 50, cts.Token);
 
         // Cancel after 200ms
         cts.CancelAfter(200);
@@ -43,7 +43,7 @@ public class TestPatternServicesAsyncCancel
         using var cts = new CancellationTokenSource(300);
 
         var sw = Stopwatch.StartNew();
-        await Assert.ThrowsAnyAsync<Exception>(async () => await s.SleepForever(cts.Token));
+        await Assert.ThrowsAnyAsync<Exception>(async () => await s.SleepForeverAsync(cts.Token));
         sw.Stop();
 
         Assert.True(sw.ElapsedMilliseconds < 3000);
@@ -58,7 +58,7 @@ public class TestPatternServicesAsyncCancel
         cts.Cancel(); // Already cancelled
 
         var sw = Stopwatch.StartNew();
-        await Assert.ThrowsAnyAsync<Exception>(async () => await s.LongRunning(1000, 100, cts.Token));
+        await Assert.ThrowsAnyAsync<Exception>(async () => await s.LongRunningAsync(1000, 100, cts.Token));
         sw.Stop();
 
         Assert.True(sw.ElapsedMilliseconds < 3000);
@@ -68,7 +68,7 @@ public class TestPatternServicesAsyncCancel
     public async Task DefaultTokenDoesNotCancel()
     {
         using var s = ServiceAsyncCancel.Create();
-        var result = await s.LongRunning(5, 10, CancellationToken.None);
+        var result = await s.LongRunningAsync(5, 10, CancellationToken.None);
         Assert.Equal(5u, result);
     }
 
@@ -80,11 +80,11 @@ public class TestPatternServicesAsyncCancel
         using var cts = new CancellationTokenSource(200);
 
         // This task will be cancelled
-        var cancelledTask = s.LongRunning(1000, 50, cts.Token);
+        var cancelledTask = s.LongRunningAsync(1000, 50, cts.Token);
 
         // These tasks run with no cancellation and complete normally
         var normalTasks = Enumerable.Range(0, 3)
-            .Select(_ => s.LongRunning(3, 10, TestContext.Current.CancellationToken))
+            .Select(_ => s.LongRunningAsync(3, 10, TestContext.Current.CancellationToken))
             .ToArray();
 
         // Normal tasks should complete fine
@@ -104,7 +104,7 @@ public class TestPatternServicesAsyncCancel
         using var cts = new CancellationTokenSource();
 
         // Start counting work that would run for 200 iterations * 20ms = 4s
-        var task = s.CountingWork(200, 20, cts.Token);
+        var task = s.CountingWorkAsync(200, 20, cts.Token);
 
         // Let it run for 500ms, then cancel
         await Task.Delay(500, TestContext.Current.CancellationToken);
@@ -133,11 +133,11 @@ public class TestPatternServicesAsyncCancel
         for (var i = 0; i < 5; i++)
         {
             using var cts = new CancellationTokenSource(100);
-            await Assert.ThrowsAnyAsync<Exception>(async () => await s.SleepForever(cts.Token));
+            await Assert.ThrowsAnyAsync<Exception>(async () => await s.SleepForeverAsync(cts.Token));
         }
 
         // Service should still be usable after repeated cancellations
-        var result = await s.LongRunning(3, 10, TestContext.Current.CancellationToken);
+        var result = await s.LongRunningAsync(3, 10, TestContext.Current.CancellationToken);
         Assert.Equal(3u, result);
     }
 }

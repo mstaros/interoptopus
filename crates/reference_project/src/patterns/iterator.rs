@@ -1,6 +1,31 @@
 use interoptopus::ffi;
 use std::sync::atomic::{AtomicU32, Ordering};
 
+
+#[ffi(service)]
+pub struct ServiceIterator {
+    count: u32,
+}
+
+#[ffi]
+impl ServiceIterator {
+    pub fn create(count: u32) -> Self {
+        Self { count }
+    }
+
+    pub fn values(&self) -> ffi::Iterator<u32> {
+        tracked(self.count, false)
+    }
+
+    pub fn try_values(&self) -> ffi::Result<ffi::Iterator<u32>, crate::patterns::result::Error> {
+        ffi::Result::Ok(tracked(self.count, false))
+    }
+
+    pub fn bools(&self) -> ffi::Iterator<ffi::Bool> {
+        ffi::Iterator::new((0..self.count).map(|x| ffi::Bool::from(x != 0)))
+    }
+}
+
 static LIVE: AtomicU32 = AtomicU32::new(0);
 static VISITS: AtomicU32 = AtomicU32::new(0);
 

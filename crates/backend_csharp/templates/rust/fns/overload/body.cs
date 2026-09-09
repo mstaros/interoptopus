@@ -4,7 +4,9 @@
 {{ _fns_decorators_all }}
 {{ visibility }} static {% if is_async %}async {% endif %}{% if has_wraps %}unsafe {% endif %}{{rval}} {{name}}({% for arg in args %}{{arg.ty}} {{arg.name}}{% if arg.has_default == "true" %} = {{arg.default_value}}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %})
 {
-{% for arg in args %}{% if arg.is_wrap == "true" %}    var {{arg.name}}_wrapped = new {{arg.wrapper_type}}({{arg.name}});
+{% if is_async %}    _ct = global::Rust.Linq.ScriptScope.ResolveCancellation(_ct);
+    _ct.ThrowIfCancellationRequested();
+{% endif %}{% for arg in args %}{% if arg.is_wrap == "true" %}    var {{arg.name}}_wrapped = new {{arg.wrapper_type}}({{arg.name}});
 {% endif %}{% endfor %}{% if has_wraps %}    try
     {
         {% if is_async %}var (_cb, _cs) = Interop.{{ trampoline_field }}.NewCall();

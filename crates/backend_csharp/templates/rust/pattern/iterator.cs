@@ -5,8 +5,15 @@ public sealed partial class {{ name }} : global::Rust.Linq.IRustEnumerable<{{ ma
 {
     private readonly object _gate = new();
     private Unmanaged _native;
+    private global::Rust.Linq.ScriptScope? _scope;
 
     private {{ name }}() { }
+
+    private void Track(global::Rust.Linq.ScriptScope? scope)
+    {
+        _scope = scope;
+        scope?.Register(this);
+    }
 
     ~{{ name }}() { Dispose(); }
 
@@ -17,6 +24,7 @@ public sealed partial class {{ name }} : global::Rust.Linq.IRustEnumerable<{{ ma
             ObjectDisposedException.ThrowIf(_native._data == IntPtr.Zero, this);
             var native = _native;
             _native = default;
+            _scope?.Unregister(this);
             GC.SuppressFinalize(this);
             return native;
         }
@@ -40,6 +48,7 @@ public sealed partial class {{ name }} : global::Rust.Linq.IRustEnumerable<{{ ma
             native = _native;
             _native = default;
         }
+        _scope?.Unregister(this);
         if (native._data != IntPtr.Zero)
             ((delegate* unmanaged[Cdecl]<IntPtr, void>)native._drop)(native._data);
         GC.SuppressFinalize(this);
@@ -62,7 +71,9 @@ public sealed partial class {{ name }} : global::Rust.Linq.IRustEnumerable<{{ ma
                 (IntPtr)(delegate* unmanaged[Cdecl]<IntPtr, void>)&ReleasePredicate);
             next._native = _native;
             _native = default;
+            _scope?.Unregister(this);
             GC.SuppressFinalize(this);
+            next.Track(_scope ?? global::Rust.Linq.ScriptScope.Current);
             return next;
         }
     }
@@ -76,7 +87,9 @@ public sealed partial class {{ name }} : global::Rust.Linq.IRustEnumerable<{{ ma
             ((delegate* unmanaged[Cdecl]<IntPtr, ulong, void>)_native._take)(_native._data, (ulong)Math.Max(count, 0));
             next._native = _native;
             _native = default;
+            _scope?.Unregister(this);
             GC.SuppressFinalize(this);
+            next.Track(_scope ?? global::Rust.Linq.ScriptScope.Current);
             return next;
         }
     }
@@ -115,6 +128,7 @@ public sealed partial class {{ name }} : global::Rust.Linq.IRustEnumerable<{{ ma
     {
         var enumerator = new Enumerator();
         enumerator.Native = IntoUnmanaged();
+        enumerator.Track(_scope ?? global::Rust.Linq.ScriptScope.Current);
         return enumerator;
     }
 
@@ -123,6 +137,12 @@ public sealed partial class {{ name }} : global::Rust.Linq.IRustEnumerable<{{ ma
     private sealed class Enumerator : global::System.Collections.Generic.IEnumerator<{{ managed_element_type }}>
     {
         internal Unmanaged Native;
+        private global::Rust.Linq.ScriptScope? _scope;
+        internal void Track(global::Rust.Linq.ScriptScope? scope)
+        {
+            _scope = scope;
+            scope?.Register(this);
+        }
         private readonly object _gate = new();
         private bool _running;
         private bool _disposed;
@@ -204,6 +224,7 @@ public sealed partial class {{ name }} : global::Rust.Linq.IRustEnumerable<{{ ma
                 native = Native;
                 Native = default;
             }
+            _scope?.Unregister(this);
             if (native._data != IntPtr.Zero)
                 ((delegate* unmanaged[Cdecl]<IntPtr, void>)native._drop)(native._data);
             GC.SuppressFinalize(this);
@@ -251,7 +272,12 @@ public sealed partial class {{ name }} : global::Rust.Linq.IRustEnumerable<{{ ma
         internal IntPtr _drop;
         internal IntPtr _next;
 
-        internal {{ name }} IntoManaged() => new {{ name }} { _native = this };
+        internal {{ name }} IntoManaged()
+        {
+            var managed = new {{ name }} { _native = this };
+            managed.Track(global::Rust.Linq.ScriptScope.Current);
+            return managed;
+        }
     }
 
     [CustomMarshaller(typeof({{ name }}), MarshalMode.Default, typeof(Marshaller))]

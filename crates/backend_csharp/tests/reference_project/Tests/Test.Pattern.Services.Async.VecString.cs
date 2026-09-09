@@ -9,7 +9,7 @@ public class TestPatternServicesAsyncVecString
     public async Task HandleString()
     {
         using var s = ServiceAsyncVecString.Create();
-        var r = await s.HandleString("abc".Utf8(), TestContext.Current.CancellationToken);
+        var r = await s.HandleStringAsync("abc".Utf8(), TestContext.Current.CancellationToken);
         Assert.Equal("abc", r.IntoString());
     }
 
@@ -22,7 +22,7 @@ public class TestPatternServicesAsyncVecString
             "abc".Utf8()
         }.IntoVec();
 
-        var r = await s.HandleVecString(v, TestContext.Current.CancellationToken);
+        var r = await s.HandleVecStringAsync(v, TestContext.Current.CancellationToken);
         Assert.Equal("abc", r[0].IntoString());
     }
 
@@ -31,7 +31,7 @@ public class TestPatternServicesAsyncVecString
     public async Task HandleNestedString()
     {
         using var s = ServiceAsyncVecString.Create();
-        var r = await s.HandleNestedString("abc".Utf8(), TestContext.Current.CancellationToken);
+        var r = await s.HandleNestedStringAsync("abc".Utf8(), TestContext.Current.CancellationToken);
         Assert.Equal("abc", r.s1.IntoString());
         Assert.Equal("abc", r.s2.IntoString());
     }

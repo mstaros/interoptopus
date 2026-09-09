@@ -15,7 +15,7 @@ public class TestPatternServicesAsyncShutdown
             Assert.Null(SynchronizationContext.Current);
 
             var s = ServiceAsyncSleep.Create();
-            await s.ReturnAfterMs(0, 100, TestContext.Current.CancellationToken);
+            await s.ReturnAfterMsAsync(0, 100, TestContext.Current.CancellationToken);
             s.Dispose();
         }, TestContext.Current.CancellationToken);
 

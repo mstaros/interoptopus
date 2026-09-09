@@ -541,7 +541,7 @@ public class TestPatternIterators
         using var service = ServiceAsyncSleep.Create();
         using var source = Interop.pattern_iterator_create(5);
         var query = source.Where(async (x, token) =>
-            await service.ReturnAfterMs(x, 1, token) >= 2).Take(2);
+            await service.ReturnAfterMsAsync(x, 1, token) >= 2).Take(2);
         Assert.Equal(new uint[] { 2, 3 }, await query.ToArrayAsync());
         Assert.Equal(before, Interop.pattern_iterator_live());
     }
@@ -576,5 +576,270 @@ public class TestPatternIterators
         Assert.Equal(visits + 1, Interop.pattern_iterator_visits());
         Assert.Equal(before, Interop.pattern_iterator_live());
         Assert.False(await enumerator.MoveNextAsync());
+    }
+
+    [Fact]
+    public void script_scope_releases_abandoned_stages_and_enumerators()
+    {
+        var before = Interop.pattern_iterator_live();
+        var scope = new ScriptScope();
+        var abandoned = Interop.pattern_iterator_create(5).Where(x => x > 0).Take(2);
+        var enumerator = Interop.pattern_iterator_create(5).GetEnumerator();
+        Assert.True(enumerator.MoveNext());
+        Assert.Equal(before + 2, Interop.pattern_iterator_live());
+        scope.Dispose();
+        scope.Dispose();
+        Assert.Equal(before, Interop.pattern_iterator_live());
+        Assert.False(enumerator.MoveNext());
+        Assert.Throws<ObjectDisposedException>(() => abandoned.Any());
+    }
+
+    [Fact]
+    public void script_scope_cleans_up_after_failure_and_native_roundtrip()
+    {
+        var before = Interop.pattern_iterator_live();
+        Assert.Throws<InvalidOperationException>((Action)(() =>
+        {
+            using var scope = new ScriptScope();
+            var original = Interop.pattern_iterator_create(5);
+            _ = Interop.pattern_iterator_echo(original).Where(x => x > 1);
+            throw new InvalidOperationException("script failure");
+        }));
+        Assert.Equal(before, Interop.pattern_iterator_live());
+    }
+
+    [Fact]
+    public void script_scope_nesting_preserves_parent_queries()
+    {
+        var before = Interop.pattern_iterator_live();
+        using var parent = new ScriptScope();
+        var outer = Interop.pattern_iterator_create(3);
+        using (var child = new ScriptScope())
+            _ = Interop.pattern_iterator_create(3);
+        Assert.Equal(before + 1, Interop.pattern_iterator_live());
+        Assert.True(outer.Any());
+        Assert.Equal(before, Interop.pattern_iterator_live());
+    }
+
+    [Fact]
+    public void script_scope_disposal_inside_predicate_defers_native_drop()
+    {
+        var before = Interop.pattern_iterator_live();
+        using var scope = new ScriptScope();
+        var query = Interop.pattern_iterator_create(3).Where(x =>
+        {
+            Task.Run(() => scope.Dispose(), TestContext.Current.CancellationToken).GetAwaiter().GetResult();
+            return true;
+        });
+        using var enumerator = query.GetEnumerator();
+        Assert.False(enumerator.MoveNext());
+        Assert.Equal(before, Interop.pattern_iterator_live());
+    }
+
+    [Fact]
+    public async Task script_scope_flows_across_await_and_rejects_late_queries()
+    {
+        var before = Interop.pattern_iterator_live();
+        var scope = new ScriptScope();
+        await Task.Yield();
+        _ = Interop.pattern_iterator_create(3);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var late = Task.Run(async () =>
+        {
+            await release.Task;
+            Assert.Throws<ObjectDisposedException>(() => Interop.pattern_iterator_create(3));
+        }, TestContext.Current.CancellationToken);
+        scope.Dispose();
+        Assert.Equal(before, Interop.pattern_iterator_live());
+        release.SetResult();
+        await late;
+        Assert.Equal(before, Interop.pattern_iterator_live());
+    }
+
+    [Fact]
+    public async Task script_scope_supplies_query_and_predicate_cancellation()
+    {
+        var before = Interop.pattern_iterator_live();
+        using var cancellation = new CancellationTokenSource();
+        using var scope = new ScriptScope(cancellation.Token);
+        await Task.Yield();
+        var query = Interop.pattern_iterator_create(4).Where(
+            (uint x, CancellationToken token) =>
+            {
+                Assert.Equal(cancellation.Token, token);
+                cancellation.Cancel();
+                return ValueTask.FromResult(false);
+            });
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await query.AnyAsync());
+        Assert.Equal(before, Interop.pattern_iterator_live());
+    }
+
+    [Fact]
+    public async Task script_scope_default_service_token_is_checked_before_native_work()
+    {
+        using var service = ServiceAsyncCancel.Create();
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        using var scope = new ScriptScope(cancellation.Token);
+        await Task.Yield();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.CountingWorkAsync(1, 1));
+        Assert.Equal(0ul, service.Counter());
+        using var explicitToken = new CancellationTokenSource();
+        Assert.Equal(1ul, await service.LongRunningAsync(1, 1, explicitToken.Token));
+    }
+
+    [Fact]
+    public async Task script_scope_cancels_an_inflight_native_task()
+    {
+        using var service = ServiceAsyncCancel.Create();
+        using var cancellation = new CancellationTokenSource();
+        using var scope = new ScriptScope(cancellation.Token);
+        var task = service.SleepForeverAsync();
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => task);
+        Assert.True(task.IsCanceled);
+    }
+
+    [Fact]
+    public void script_scope_restores_parent_token()
+    {
+        var original = ScriptScope.CurrentCancellationToken;
+        using var first = new CancellationTokenSource();
+        using var second = new CancellationTokenSource();
+        using (var parent = new ScriptScope(first.Token))
+        {
+            using (var inherited = new ScriptScope())
+                Assert.Equal(first.Token, ScriptScope.CurrentCancellationToken);
+            using (var child = new ScriptScope(second.Token))
+                Assert.Equal(second.Token, ScriptScope.CurrentCancellationToken);
+            Assert.Equal(first.Token, ScriptScope.CurrentCancellationToken);
+        }
+        Assert.Equal(original, ScriptScope.CurrentCancellationToken);
+    }
+
+    [Fact]
+    public void factory_queries_are_deferred_and_reusable()
+    {
+        var before = Interop.pattern_iterator_live();
+        int opens = 0;
+        var values = RustEnumerable.FromFactory(() =>
+        {
+            ++opens;
+            return Interop.pattern_iterator_create(6);
+        });
+        var query = values.Where(x => x % 2 == 0).Take(2);
+        Assert.Equal(0, opens);
+        using (var unstarted = query.GetEnumerator()) { }
+        Assert.Equal(0, opens);
+        Assert.Equal(new uint[] { 0, 2 }, query.ToArray());
+        Assert.Equal(new uint[] { 0, 2 }, query.ToArray());
+        Assert.True(query.Any());
+        Assert.Equal(3, opens);
+        Assert.Equal(before, Interop.pattern_iterator_live());
+    }
+
+    [Fact]
+    public void factory_queries_open_independent_traversals_and_observe_current_data()
+    {
+        var before = Interop.pattern_iterator_live();
+        uint count = 2;
+        var values = RustEnumerable.FromFactory(() => Interop.pattern_iterator_create(count));
+        using var first = values.GetEnumerator();
+        using var second = values.GetEnumerator();
+        Assert.True(first.MoveNext());
+        Assert.True(second.MoveNext());
+        Assert.Equal(0u, first.Current);
+        Assert.Equal(0u, second.Current);
+        first.Dispose();
+        second.Dispose();
+        count = 4;
+        Assert.Equal(new uint[] { 0, 1, 2, 3 }, values.ToArray());
+        Assert.Equal(before, Interop.pattern_iterator_live());
+    }
+
+    [Fact]
+    public void factory_query_failures_release_traversal_and_allow_retry()
+    {
+        var before = Interop.pattern_iterator_live();
+        bool fail = true;
+        var query = RustEnumerable.FromFactory(() => Interop.pattern_iterator_create(4))
+            .Where(x => fail ? throw new InvalidOperationException("predicate") : x > 1);
+        Assert.Throws<InvalidOperationException>(() => query.ToArray());
+        Assert.Equal(before, Interop.pattern_iterator_live());
+        fail = false;
+        Assert.Equal(new uint[] { 2, 3 }, query.ToArray());
+        Assert.Equal(before, Interop.pattern_iterator_live());
+        Assert.Throws<ArgumentNullException>(() => RustEnumerable.FromFactory<uint>(null!));
+        Assert.Throws<InvalidOperationException>(() => RustEnumerable.FromFactory<uint>(() => null!).Any());
+    }
+
+    [Fact]
+    public async Task factory_async_queries_repeat_and_scope_cleans_abandoned_enumeration()
+    {
+        var before = Interop.pattern_iterator_live();
+        var values = RustEnumerable.FromFactory(() => Interop.pattern_iterator_create(4));
+        var query = values.Where(x => Task.FromResult(x >= 2));
+        Assert.Equal(new uint[] { 2, 3 }, await query.ToArrayAsync());
+        Assert.Equal(new uint[] { 2, 3 }, await query.ToArrayAsync());
+        using (var scope = new ScriptScope())
+        {
+            var abandoned = values.GetAsyncEnumerator();
+            Assert.True(await abandoned.MoveNextAsync());
+        }
+        Assert.Equal(before, Interop.pattern_iterator_live());
+    }
+
+    [Fact]
+    public void service_collection_results_have_script_facing_types()
+    {
+        var before = Interop.pattern_iterator_live();
+        using var service = ServiceIterator.Create(4);
+        Assert.Equal(typeof(IRustEnumerable<uint>), typeof(ServiceIterator).GetMethod("Values")!.ReturnType);
+        Assert.Equal(typeof(IRustEnumerable<uint>), typeof(ServiceIterator).GetMethod("TryValues")!.ReturnType);
+        Assert.Equal(typeof(IRustEnumerable<bool>), typeof(ServiceIterator).GetMethod("Bools")!.ReturnType);
+        var values = RustEnumerable.FromFactory(service.Values);
+        Assert.Equal(new uint[] { 1, 2 }, values.Where(x => x > 0).Take(2).ToArray());
+        Assert.Equal(new uint[] { 1, 2 }, values.Where(x => x > 0).Take(2).ToArray());
+        Assert.Equal(new uint[] { 0, 1, 2, 3 }, service.TryValues().ToArray());
+        Assert.Equal(new[] { false, true, true, true }, service.Bools().ToArray());
+        Assert.Equal(before, Interop.pattern_iterator_live());
+    }
+
+    [Fact]
+    public void shared_scope_provider_hooks_clean_all_resources_even_when_one_throws()
+    {
+        var before = Interop.pattern_iterator_live();
+        var scope = new ScriptScope();
+        var marker = new CleanupProbe();
+        scope.Register(marker); // Compiles from a different assembly than Rust.Linq.cs.
+        _ = Interop.pattern_iterator_create(3);
+        Assert.Throws<AggregateException>(() => scope.Dispose());
+        Assert.Equal(1, marker.Calls);
+        Assert.Equal(before, Interop.pattern_iterator_live());
+        scope.Dispose();
+        Assert.Equal(1, marker.Calls);
+    }
+
+    [Fact]
+    public void nested_scope_disposal_does_not_restore_a_closed_parent()
+    {
+        var original = ScriptScope.Current;
+        var outer = new ScriptScope();
+        var inner = new ScriptScope();
+        outer.Dispose();
+        inner.Dispose();
+        Assert.Same(original, ScriptScope.Current);
+        using var query = Interop.pattern_iterator_create(1);
+        Assert.True(query.Any());
+    }
+
+    private sealed class CleanupProbe : IDisposable
+    {
+        public int Calls;
+        public void Dispose()
+        {
+            ++Calls;
+            throw new InvalidOperationException("cleanup failure");
+        }
     }
 }

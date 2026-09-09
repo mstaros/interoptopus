@@ -14,7 +14,7 @@ public class TestPatternServicesAsyncWire
         {
             { "hello", "world" }
         };
-        var r = await s.WirePassthrough(d.Wire(), TestContext.Current.CancellationToken);
+        var r = await s.WirePassthroughAsync(d.Wire(), TestContext.Current.CancellationToken);
         r.Unwire();
     }
 }

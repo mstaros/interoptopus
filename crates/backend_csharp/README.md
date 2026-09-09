@@ -125,12 +125,67 @@ element; `MoveNext()` advances the Rust traversal. Exhaustion, an exception, or
 enumerator disposal releases the native state and retained predicates. A
 `foreach` break therefore cleans up correctly. Dispose unfinished queries with
 `using`; earlier moved wrappers cannot be reused, though disposing them is harmless.
-Explicit disposal is necessary if a predicate captures its own query or enumerator.
+Use explicit disposal or a `ScriptScope` if a predicate captures its own query or enumerator.
 `Reset()` is unsupported.
 
 A predicate exception stops native traversal and is rethrown after cleanup.
 Negative `Take` counts behave like zero. Managed callbacks are rooted until the
 native query is released.
+
+### Reusable collections and script execution
+
+The consolidated implementation task is [Agent scripting TODO](../../docs/agent-scripting-todo.md).
+Scripts are authored and executed in another application; this fork supplies bindings
+and shared support, not a scripting engine.
+
+A native `ffi::Iterator<T>` is one traversal. For a persistent Rust collection,
+register a fresh-traversal factory once in the bridge/application:
+
+```csharp
+// service.Values() opens a new owning traversal over the Rust collection.
+IRustEnumerable<uint> values = RustEnumerable.FromFactory(service.Values);
+```
+
+A generated service method returning `ffi::Iterator<T>`, or
+`ffi::Result<ffi::Iterator<T>, E>`, exposes `IRustEnumerable<T>` in C#.
+The underlying import and marshaller retain the concrete native wrapper.
+The reusable view invokes the factory only when evaluation starts. Each
+enumeration, `Any`, or async traversal gets independent native state; filters
+and limits remain deferred. It observes whatever data the factory exposes on
+that call, so repeatability does not imply snapshot isolation. The view owns
+no traversal between evaluations, and its `Dispose()` is a no-op.
+
+The application may establish one scope around script execution **and result
+consumption**:
+
+```csharp
+using var scope = new ScriptScope(cancellationToken);
+// Invoke the script and consume any returned lazy/async results inside this scope.
+```
+
+Generated native queries and enumerators automatically join the active scope.
+Disposal and ownership transfer remove old wrappers from tracking. Scope exit
+releases abandoned queries, even if execution fails; ordinary `foreach` and
+LINQ terminals still release traversals immediately. Nested scopes and awaits
+are supported. A scope does not take ownership of persistent service objects
+or cancel/wait for detached tasks. Await those tasks before leaving the scope.
+A captured context cannot create new native queries after its scope closes.
+
+The script itself can use normal query syntax without interop types or a
+`using` for each stage:
+
+```csharp
+using System.Linq;
+using Rust.Linq;
+
+var first = values.Where(x => x > 1).Take(2).ToArray();
+var again = values.Where(x => x > 1).Take(2).ToArray();
+```
+
+Do not return a live native traversal beyond its scope. Consume/materialize it
+inside the scope, or keep the scope alive until the caller finishes consuming it.
+An already-reusable factory view may outlive a scope if its persistent collection
+is still valid.
 
 ### Async queries
 
@@ -170,7 +225,7 @@ bool found = await query.AnyAsync(cancellationToken);
 
 The token-aware predicate is `Func<T, CancellationToken, ValueTask<bool>>`,
 matching framework async LINQ. A predicate may await an already-generated Rust
-service method, such as `await service.ReturnAfterMs(x, 1, token)`. There is no
+service method, such as `await service.ReturnAfterMsAsync(x, 1, token)`. There is no
 extra native callback protocol for async predicates: C# awaits the predicate
 between native pulls. Only the current value is copied; the collection remains
 in Rust. Synchronous stages before the transition keep their native dispatch;
@@ -195,6 +250,21 @@ the original source still owns the native state and its `using` scope releases
 it. Async query objects themselves are standard `IAsyncEnumerable<T>`, so use
 `var query`, not `using var query`. Managed sources retain their ordinary
 repeatability. Native sources remain single-pass.
+
+Generated async service methods and constructors end in `Async`. Names already
+ending in `Async` keep their suffix; conflicting generated member names are
+reported as a generation error. Update callers of previous names, for example
+`ReturnAfterMs` becomes `ReturnAfterMsAsync`. Native export names do not change.
+
+Async service calls and Rust.Linq enumeration use the active
+`ScriptScope` cancellation token when the caller supplies no cancellable token.
+A supplied cancellable token takes precedence. `default` and
+`CancellationToken.None` both mean "use the scope default" inside a scope.
+Pre-cancelled service calls fail before starting native work. Generated service
+calls made inside an async predicate therefore need no repeated token argument;
+arbitrary managed operations such as `Task.Delay` still need their token passed
+explicitly. Framework operators added after conversion to `IAsyncEnumerable<T>`
+retain their standard token rules; the native source still observes the scope token.
 
 Predicates are awaited sequentially. A predicate that does not accept or
 observe cancellation must finish before enumeration can unwind; pass the token

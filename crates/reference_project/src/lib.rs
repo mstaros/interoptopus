@@ -65,6 +65,7 @@ pub fn inventory() -> RustInventory {
         .register(function!(patterns::iterator::pattern_iterator_echo))
         .register(function!(patterns::iterator::pattern_iterator_points))
         .register(function!(patterns::iterator::pattern_iterator_bools))
+        .register(service!(patterns::iterator::ServiceIterator))
         .register(builtins_wire!())
         .register(builtins_vec!(u8))
         .register(builtins_vec!(ffi::String))

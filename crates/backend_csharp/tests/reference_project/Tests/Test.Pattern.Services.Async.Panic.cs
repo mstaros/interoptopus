@@ -14,7 +14,7 @@ public class TestPatternServicesAsyncPanic
         // turns into a TaskCanceledException on the .NET side.
         await Assert.ThrowsAsync<TaskCanceledException>(async () =>
         {
-            await s.Panicking(TestContext.Current.CancellationToken);
+            await s.PanickingAsync(TestContext.Current.CancellationToken);
         });
     }
 
@@ -22,7 +22,7 @@ public class TestPatternServicesAsyncPanic
     public async Task NotPanickingSucceeds()
     {
         using var s = ServiceAsyncPanic.Create();
-        await s.NotPanicking(TestContext.Current.CancellationToken);
+        await s.NotPanickingAsync(TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -33,11 +33,11 @@ public class TestPatternServicesAsyncPanic
         // First call panics
         await Assert.ThrowsAsync<TaskCanceledException>(async () =>
         {
-            await s.Panicking(TestContext.Current.CancellationToken);
+            await s.PanickingAsync(TestContext.Current.CancellationToken);
         });
 
         // Service is still functional after the panic
-        await s.NotPanicking(TestContext.Current.CancellationToken);
+        await s.NotPanickingAsync(TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -49,11 +49,11 @@ public class TestPatternServicesAsyncPanic
         {
             await Assert.ThrowsAsync<TaskCanceledException>(async () =>
             {
-                await s.Panicking(TestContext.Current.CancellationToken);
+                await s.PanickingAsync(TestContext.Current.CancellationToken);
             });
         }
 
         // Service is still functional after repeated panics
-        await s.NotPanicking(TestContext.Current.CancellationToken);
+        await s.NotPanickingAsync(TestContext.Current.CancellationToken);
     }
 }

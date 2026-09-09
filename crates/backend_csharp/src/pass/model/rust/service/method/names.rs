@@ -18,6 +18,18 @@ pub struct Pass {
     names: HashMap<FunctionId, String>,
 }
 
+fn managed_method_name(type_name: &str, func: &crate::lang::functions::Function, types: &model::common::types::all::Pass) -> String {
+    use crate::lang::functions::{FunctionKind, overload::OverloadKind};
+    use crate::lang::types::kind::{TypeKind, TypePattern};
+    let is_async = matches!(&func.kind, FunctionKind::Overload(overload) if matches!(overload.kind, OverloadKind::Async(_)))
+        || func.signature.arguments.iter().any(|arg| types.get(arg.ty).is_some_and(|ty| matches!(ty.kind, TypeKind::TypePattern(TypePattern::AsyncCallback(_)))));
+    let mut name = service_method_name(type_name, &func.name);
+    if is_async && !name.ends_with("Async") {
+        name.push_str("Async");
+    }
+    name
+}
+
 impl Pass {
     #[must_use]
     pub fn new(_: Config) -> Self {
@@ -35,6 +47,17 @@ impl Pass {
 
         for (_service_id, service) in services.iter() {
             let Some(type_name) = types.get(service.ty).map(|t| &t.name) else { continue };
+
+            let mut declared_names = HashMap::new();
+            for fn_id in service.sources.ctors.iter().chain(service.sources.methods.iter()) {
+                let Some(func) = fns.get(*fn_id) else { continue };
+                let name = managed_method_name(type_name, func, types);
+                if let Some(previous) = declared_names.insert(name.clone(), *fn_id) {
+                    if previous != *fn_id {
+                        return Err(format!("Service {type_name} has conflicting generated member {name}; rename one Rust method.").into());
+                    }
+                }
+            }
 
             let source_fns: Vec<_> = service
                 .sources
@@ -54,7 +77,7 @@ impl Pass {
 
                 let Some(func) = fns.get(*fn_id) else { continue };
 
-                let method_name = service_method_name(type_name, &func.name);
+                let method_name = managed_method_name(type_name, func, types);
 
                 self.names.insert(*fn_id, method_name);
                 outcome.changed();
@@ -69,7 +92,7 @@ impl Pass {
                         continue;
                     }
 
-                    let method_name = service_method_name(type_name, &overload_fn.name);
+                    let method_name = managed_method_name(type_name, overload_fn, types);
                     self.names.insert(*overload_id, method_name);
                     outcome.changed();
                 }

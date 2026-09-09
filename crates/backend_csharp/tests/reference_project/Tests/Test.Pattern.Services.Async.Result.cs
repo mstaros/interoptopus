@@ -9,7 +9,7 @@ public class TestPatternServicesAsyncResult
     public async Task Success()
     {
         using var s = ServiceAsyncResult.Create();
-        await s.Success(TestContext.Current.CancellationToken);
+        await s.SuccessAsync(TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -20,7 +20,7 @@ public class TestPatternServicesAsyncResult
 
         try
         {
-            await s.Fail(TestContext.Current.CancellationToken);
+            await s.FailAsync(TestContext.Current.CancellationToken);
         }
         catch (EnumException<Error> e)
         {

@@ -110,8 +110,8 @@ static class Benchmark {
         result = await MeasureResult.MeasureAsync(iterations, () => Task.CompletedTask);
         writer.Add("await Task.CompletedTask", result);
 
-        result = await MeasureResult.MeasureAsync(iterations, () => serviceAsync.Success());
-        writer.Add("await serviceAsync.Success()", result);
+        result = await MeasureResult.MeasureAsync(iterations, () => serviceAsync.SuccessAsync());
+        writer.Add("await serviceAsync.SuccessAsync()", result);
 
         result = MeasureResult.Measure(iterations, () => Interop.wire_accept_string_1(WireOfString.From("hello world")));
         writer.Add("wire_accept_string_1()", result);

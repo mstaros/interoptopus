@@ -22,9 +22,93 @@ public interface IRustEnumerable<out T> : IEnumerable<T>, IDisposable
     bool AnyCore();
 }
 
+/// Owns native query state created during one script execution. Keep this scope
+/// alive through consumption of lazy or async results. Persistent services remain host-owned.
+public sealed class ScriptScope : IDisposable
+{
+    private static readonly AsyncLocal<ScriptScope?> Ambient = new();
+    private readonly object _gate = new();
+    private readonly HashSet<IDisposable> _resources = new(ReferenceEqualityComparer.Instance);
+    private readonly ScriptScope? _parent;
+    private bool _disposed;
+
+    public ScriptScope(CancellationToken cancellationToken = default)
+    {
+        _parent = Ambient.Value;
+        CancellationToken = ResolveCancellation(cancellationToken);
+        Ambient.Value = this;
+    }
+
+    public CancellationToken CancellationToken { get; }
+    public static CancellationToken CurrentCancellationToken => Ambient.Value?.CancellationToken ?? default;
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public static ScriptScope? Current => Ambient.Value;
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public static CancellationToken ResolveCancellation(CancellationToken token)
+        => token.CanBeCanceled ? token : CurrentCancellationToken;
+
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public void Register(IDisposable resource)
+    {
+        ArgumentNullException.ThrowIfNull(resource);
+        lock (_gate)
+        {
+            if (!_disposed)
+            {
+                _resources.Add(resource);
+                return;
+            }
+        }
+        // A captured execution context cannot create query state after its scope closes.
+        resource.Dispose();
+        throw new ObjectDisposedException(nameof(ScriptScope));
+    }
+
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public void Unregister(IDisposable resource)
+    {
+        lock (_gate) _resources.Remove(resource);
+    }
+
+    public void Dispose()
+    {
+        // Restore this context even when another captured context already closed the scope.
+        if (ReferenceEquals(Ambient.Value, this))
+        {
+            var parent = _parent;
+            while (parent is not null && Volatile.Read(ref parent._disposed)) parent = parent._parent;
+            Ambient.Value = parent;
+        }
+        IDisposable[] resources;
+        lock (_gate)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            resources = new IDisposable[_resources.Count];
+            _resources.CopyTo(resources);
+            _resources.Clear();
+        }
+        List<Exception>? errors = null;
+        foreach (var resource in resources)
+        {
+            try { resource.Dispose(); }
+            catch (Exception error) { (errors ??= new()).Add(error); }
+        }
+        if (errors is not null) throw new AggregateException("Script query cleanup failed.", errors);
+    }
+}
+
 /// Query operators for explicitly selected Rust.Linq sources.
 public static class RustEnumerable
 {
+    /// Creates a reusable live view. The bridge must supply a fresh owned traversal
+    /// on every call. Creating or composing this view does not invoke the factory.
+    public static IRustEnumerable<T> FromFactory<T>(Func<IRustEnumerable<T>> factory)
+    {
+        ArgumentNullException.ThrowIfNull(factory);
+        return new FactoryEnumerable<T>(factory);
+    }
+
     /// Selects this query API without enumerating or copying the source.
     /// Existing Rust sources retain native execution; other sources use managed LINQ.
     public static IRustEnumerable<T> ToRust<T>(this IEnumerable<T> source)
@@ -90,7 +174,8 @@ public static class RustEnumerable
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(predicate);
-        return global::System.Linq.AsyncEnumerable.Where(source.ToAsyncEnumerable(), predicate);
+        return global::System.Linq.AsyncEnumerable.Where(source.ToAsyncEnumerable(),
+            (item, token) => predicate(item, ScriptScope.ResolveCancellation(token)));
     }
 
     /// Adapts Task-returning predicates to the framework async LINQ operators.
@@ -106,7 +191,7 @@ public static class RustEnumerable
 
     public static ValueTask<bool> AnyAsync<T>(
         this IRustEnumerable<T> source, CancellationToken cancellationToken = default)
-        => global::System.Linq.AsyncEnumerable.AnyAsync(source.ToAsyncEnumerable(), cancellationToken);
+        => global::System.Linq.AsyncEnumerable.AnyAsync(source.ToAsyncEnumerable(), ScriptScope.ResolveCancellation(cancellationToken));
 
     public static ValueTask<bool> AnyAsync<T>(
         this IRustEnumerable<T> source, Func<T, bool> predicate,
@@ -115,7 +200,7 @@ public static class RustEnumerable
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(predicate);
         return global::System.Linq.AsyncEnumerable.AnyAsync(
-            source.ToAsyncEnumerable(), predicate, cancellationToken);
+            source.ToAsyncEnumerable(), predicate, ScriptScope.ResolveCancellation(cancellationToken));
     }
 
     public static ValueTask<bool> AnyAsync<T>(
@@ -124,7 +209,7 @@ public static class RustEnumerable
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(predicate);
-        return source.ToAsyncEnumerable().AnyAsync(predicate, cancellationToken);
+        return source.ToAsyncEnumerable().AnyAsync(predicate, ScriptScope.ResolveCancellation(cancellationToken));
     }
 
     public static ValueTask<bool> AnyAsync<T>(
@@ -134,7 +219,7 @@ public static class RustEnumerable
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(predicate);
         return global::System.Linq.AsyncEnumerable.AnyAsync(
-            source.ToAsyncEnumerable(), predicate, cancellationToken);
+            source.ToAsyncEnumerable(), predicate, ScriptScope.ResolveCancellation(cancellationToken));
     }
 
     public static ValueTask<bool> AnyAsync<T>(
@@ -144,7 +229,7 @@ public static class RustEnumerable
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(predicate);
         return global::System.Linq.AsyncEnumerable.AnyAsync(
-            source, (item, _) => new ValueTask<bool>(predicate(item)), cancellationToken);
+            source, (item, _) => new ValueTask<bool>(predicate(item)), ScriptScope.ResolveCancellation(cancellationToken));
     }
 
 
@@ -155,6 +240,7 @@ public static class RustEnumerable
 
         public IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
         {
+            cancellationToken = ScriptScope.ResolveCancellation(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             return new AsyncEnumerator<T>(_source.GetEnumerator(), cancellationToken);
         }
@@ -198,6 +284,50 @@ public static class RustEnumerable
         {
             Interlocked.Exchange(ref _inner, null)?.Dispose();
             return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class FactoryEnumerable<T> : IRustEnumerable<T>
+    {
+        private readonly Func<IRustEnumerable<T>> _factory;
+        internal FactoryEnumerable(Func<IRustEnumerable<T>> factory) { _factory = factory; }
+        private IRustEnumerable<T> Open()
+            => _factory() ?? throw new InvalidOperationException("The traversal factory returned null.");
+
+        public IEnumerator<T> GetEnumerator() => Enumerate().GetEnumerator();
+
+        // Open inside the iterator body: disposing an enumerator before its first
+        // MoveNext must not leave an unstarted native traversal behind.
+        private IEnumerable<T> Enumerate()
+        {
+            using var source = Open();
+            using var enumerator = source.GetEnumerator();
+            while (enumerator.MoveNext()) yield return enumerator.Current;
+        }
+
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        public void Dispose() { } // A view owns no traversal between enumerations.
+        IRustEnumerable<T> IRustEnumerable<T>.WhereCore(Func<T, bool> predicate)
+        {
+            ArgumentNullException.ThrowIfNull(predicate);
+            return new FactoryEnumerable<T>(() =>
+            {
+                var source = Open();
+                try { return source.WhereCore(predicate); }
+                catch { source.Dispose(); throw; }
+            });
+        }
+        IRustEnumerable<T> IRustEnumerable<T>.TakeCore(int count)
+            => new FactoryEnumerable<T>(() =>
+            {
+                var source = Open();
+                try { return source.TakeCore(count); }
+                catch { source.Dispose(); throw; }
+            });
+        bool IRustEnumerable<T>.AnyCore()
+        {
+            using var source = Open();
+            return source.AnyCore();
         }
     }
 

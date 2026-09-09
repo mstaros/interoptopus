@@ -23,7 +23,7 @@ public class TestPatternServicesAsyncStructs
                 data = new byte[16]
             }
         };
-        var r = await s.ProcessStruct(a, TestContext.Current.CancellationToken);
+        var r = await s.ProcessStructAsync(a, TestContext.Current.CancellationToken);
         Assert.Equal(124, r.field_int);
     }
 }

@@ -17,6 +17,8 @@ mod backend_plugins;
 mod output;
 mod reference_plugins;
 mod reference_project;
+#[path = "script_api.rs"]
+mod script_api;
 
 pub const FILE_NOT_FOUND_EXCEPTION: Exception = Exception::new("System.IO.FileNotFoundException");
 
