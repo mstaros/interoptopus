@@ -57,9 +57,10 @@ impl Pass {
                         ty.name, element.name
                     )));
                 }
+                let api_name = types.managed_name(item).expect("resolved iterator element");
                 let managed_element = if matches!(element.kind, TypeKind::Primitive(Primitive::Bool) | TypeKind::TypePattern(TypePattern::Bool)) {
                     "bool"
-                } else { &element.name };
+                } else { &api_name };
                 let read_element = if item_conversion == Some(ManagedConversion::To) {
                     format!("(({}.Unmanaged*)item)->ToManaged()", element.name)
                 } else {

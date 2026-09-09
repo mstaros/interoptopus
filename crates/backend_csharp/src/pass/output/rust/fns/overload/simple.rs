@@ -50,8 +50,7 @@ impl Pass {
 
                 let name = &function.name;
                 let rval = types
-                    .get(function.signature.rval)
-                    .map(|t| &t.name)
+                    .managed_name(function.signature.rval)
                     .ok_or_else(|| crate::Error::from(format!("rval of overload `{name}`")))?;
 
                 let mut args: Vec<HashMap<&str, String>> = Vec::new();
@@ -63,8 +62,11 @@ impl Pass {
                     m.insert("name", arg.name.clone());
                     let decorated = match &arg_type.decorators.param {
                         Some(d) => format!("{d} {}", arg_type.name),
-                        None => arg_type.name.clone(),
+                        None => types.managed_name(arg.ty).expect("resolved argument type"),
                     };
+                    let decorated = if types.tuple_name(arg.ty).is_some() {
+                        format!("[MarshalUsing(typeof({}.TupleMarshallerMeta))] {decorated}", arg_type.name)
+                    } else { decorated };
                     m.insert("ty", decorated);
                     args.push(m);
                 }
@@ -75,7 +77,11 @@ impl Pass {
                 context.insert("name", name);
                 context.insert("symbol", name);
                 context.insert("args", &args);
-                context.insert("rval", rval);
+                context.insert("rval", &rval);
+                let rval_decorator = types.tuple_name(function.signature.rval).map(|_| {
+                    format!("return: MarshalUsing(typeof({}.TupleMarshallerMeta))", types.get(function.signature.rval).expect("resolved return type").name)
+                });
+                context.insert("rval_decorator", &rval_decorator);
                 context.insert("docs", &docs);
                 context.insert("visibility", &function.visibility.to_string());
 

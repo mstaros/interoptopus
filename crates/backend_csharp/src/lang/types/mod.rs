@@ -1,5 +1,6 @@
 pub mod csharp;
 pub mod kind;
+pub(crate) mod tuple;
 mod overload;
 
 use crate::lang::meta::{Emission, Visibility};

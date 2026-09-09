@@ -79,6 +79,20 @@ impl Pass {
             context.insert("marshaller_to_unmanaged", marshaller_to_unmanaged);
             context.insert("marshaller_to_managed", marshaller_to_managed);
 
+            let mut conveniences = Context::new();
+            let value_fields: Vec<HashMap<&str, String>> = composite.fields.iter().map(|f| {
+                let mut field = HashMap::new();
+                field.insert("name", f.name.clone());
+                field.insert("ty", types.managed_name(f.ty).unwrap_or_default());
+                field
+            }).collect();
+            conveniences.insert("name", name);
+            conveniences.insert("fields", &value_fields);
+            conveniences.insert("is_value", &types.is_value(*type_id));
+            conveniences.insert("deconstruct", &(composite.fields.len() >= 2 && name != "Deconstruct" && composite.fields.iter().all(|f| f.name != "Deconstruct")));
+            conveniences.insert("tuple_type", &types.tuple_name(*type_id));
+            context.insert("conveniences", &templates.render("common/types/composite/conveniences.cs", &conveniences)?);
+
             let rendered = templates.render("common/types/composite/body.cs", &context)?;
             self.composite_body.insert(*type_id, rendered);
         }

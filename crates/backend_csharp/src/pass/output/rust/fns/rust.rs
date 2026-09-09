@@ -43,7 +43,7 @@ impl Pass {
                 let rval_type = types
                     .get(function.signature.rval)
                     .ok_or_else(|| crate::Error::from(format!("rval of function `{name}`")))?;
-                let rval = &rval_type.name;
+                let rval = &types.managed_name(function.signature.rval).expect("resolved return type");
 
                 let mut args: Vec<HashMap<&str, String>> = Vec::new();
                 for arg in &function.signature.arguments {
@@ -54,8 +54,11 @@ impl Pass {
                     m.insert("name", arg.name.clone());
                     let decorated = match &arg_type.decorators.param {
                         Some(d) => format!("{d} {}", arg_type.name),
-                        None => arg_type.name.clone(),
+                        None => types.managed_name(arg.ty).expect("resolved argument type"),
                     };
+                    let decorated = if types.tuple_name(arg.ty).is_some() {
+                        format!("[MarshalUsing(typeof({}.TupleMarshallerMeta))] {decorated}", arg_type.name)
+                    } else { decorated };
                     m.insert("ty", decorated);
                     args.push(m);
                 }
@@ -66,6 +69,10 @@ impl Pass {
                     crate::lang::types::RvalDecorator::MarshalAs(m) => format!("return: MarshalAs({m})"),
                     crate::lang::types::RvalDecorator::MarshalUsing(t) => format!("return: MarshalUsing(typeof({t}))"),
                 });
+
+                let rval_decorator = if types.tuple_name(function.signature.rval).is_some() {
+                    Some(format!("return: MarshalUsing(typeof({}.TupleMarshallerMeta))", rval_type.name))
+                } else { rval_decorator };
 
                 let docs = format_docs(&function.docs);
 

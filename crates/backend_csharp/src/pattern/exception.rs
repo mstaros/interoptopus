@@ -85,7 +85,7 @@ unsafe impl TypeInfo for ExceptionError {
 
     fn kind() -> TypeKind {
         let s =
-            Struct { fields: vec![Field { name: "exception_id".to_string(), docs: Docs::default(), visibility: Visibility::default(), ty: u64::id() }], repr: Repr::c() };
+            Struct { is_positional: false, fields: vec![Field { name: "exception_id".to_string(), docs: Docs::default(), visibility: Visibility::default(), ty: u64::id() }], repr: Repr::c() };
         TypeKind::Struct(s)
     }
 

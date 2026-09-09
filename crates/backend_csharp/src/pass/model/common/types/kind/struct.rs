@@ -46,7 +46,7 @@ impl Pass {
 
             let fields = try_resolve!(fields.get(cs_id), pass_meta, self.info, crate::pass::MissingItem::CsType(cs_id));
 
-            let composite = Composite { fields: fields.clone(), repr: rust_struct.repr };
+            let composite = Composite { fields: fields.clone(), repr: rust_struct.repr, is_positional: rust_struct.is_positional };
 
             kinds.set(cs_id, TypeKind::Composite(composite));
             outcome.changed();

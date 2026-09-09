@@ -74,6 +74,26 @@ impl Pass {
     }
 
     #[must_use]
+    pub fn managed_name(&self, ty: TypeId) -> Option<String> {
+        crate::lang::types::tuple::managed_name(ty, &|id| self.get(id))
+    }
+
+    #[must_use]
+    pub fn tuple_name(&self, ty: TypeId) -> Option<String> {
+        crate::lang::types::tuple::name(ty, &|id| self.get(id))
+    }
+
+    #[must_use]
+    pub fn native_value(&self, ty: TypeId, expression: &str) -> String {
+        crate::lang::types::tuple::native_value(ty, expression, &|id| self.get(id))
+    }
+
+    #[must_use]
+    pub fn is_value(&self, ty: TypeId) -> bool {
+        crate::lang::types::tuple::is_value(ty, &|id| self.get(id))
+    }
+
+    #[must_use]
     pub fn get(&self, ty: TypeId) -> Option<&Type> {
         self.types.get(&ty)
     }

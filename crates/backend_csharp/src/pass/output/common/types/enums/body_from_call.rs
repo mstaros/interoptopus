@@ -78,7 +78,7 @@ impl Pass {
             let ok_has_payload = !matches!(types.get(resolved_ok).map(|t| &t.kind), Some(TypeKind::Primitive(crate::lang::types::kind::Primitive::Void)));
 
             let ok_type = if ok_has_payload {
-                types.get(resolved_ok).map_or("void", |t| t.name.as_str()).to_string()
+                types.managed_name(resolved_ok).unwrap_or_else(|| "void".to_string())
             } else {
                 String::new()
             };

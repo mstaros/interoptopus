@@ -829,7 +829,7 @@ public static unsafe class Trampoline
 
     public static long QueryU64(long id)
     {
-        if (id == QUERY_API_GUARD_HASH) return unchecked((long)0xEAB2DA208B03AA87);
+        if (id == QUERY_API_GUARD_HASH) return unchecked((long)0xCBB9070BCD1A6AAA);
         return 0;
     }
 
@@ -942,6 +942,22 @@ public partial struct Vec3f32
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial struct Vec3f32
 {
+    [global::System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public Vec3f32(float x, float y, float z)
+    {
+        this = default;
+        this.x = x;
+        this.y = y;
+        this.z = z;
+    }
+
+    public void Deconstruct(out float value1, out float value2, out float value3)
+    {
+        value1 = this.x;
+        value2 = this.y;
+        value3 = this.z;
+    }
+
     
     [StructLayout(LayoutKind.Sequential)]
     public unsafe struct Unmanaged

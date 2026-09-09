@@ -68,7 +68,7 @@ impl Pass {
                 })
                 .collect();
 
-            let composite = Composite { fields: cs_fields, repr: Repr::c() };
+            let composite = Composite { is_positional: false, fields: cs_fields, repr: Repr::c() };
 
             // Kind only. `names.rs` owns naming and already has a `WireOnly::Composite` arm;
             // writing here made this a second authority, so a transform added there would
@@ -123,7 +123,7 @@ impl Pass {
                     })
                     .collect();
 
-                let composite = Composite { fields: cs_fields, repr: Repr::c() };
+                let composite = Composite { is_positional: false, fields: cs_fields, repr: Repr::c() };
 
                 type_kinds.set(cs_id, TypeKind::WireOnly(CsWireOnly::Composite(composite)));
                 outcome.changed();

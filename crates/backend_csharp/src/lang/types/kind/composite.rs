@@ -13,6 +13,7 @@ pub struct Field {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Composite {
+    pub is_positional: bool,
     pub fields: Vec<Field>,
     pub repr: Repr,
 }

@@ -11,6 +11,8 @@ One task, in priority order:
 - [x] P1 — Verify native ownership, repeated queries, cancellation, and generated C# compilation; update examples and snapshots.
 - [x] P3 — Add generic native Rust async-stream bindings: `ffi::AsyncIterator<T>` wraps a standard `futures_core::Stream<Item = T>` and an `AsyncRuntime`; generated C# exposes `IAsyncEnumerable<T>`, cancellation, awaited cleanup, and reusable async factories.
 
+- [x] P2 — Project multi-field plain positional FFI structs to C# ValueTuple across calls, callbacks, tasks, native iterators, and union payloads; add named value constructors/deconstruction and ordinary anonymous LINQ projection examples.
+
 ## Contracts
 
 Factories are registered once by the bridge/host, not written in every script. A factory must return a fresh traversal each time; this is a live view unless the bridge explicitly snapshots the collection. Arbitrary `ffi::Iterator<T>` exports cannot be inferred to be repeatable.
@@ -23,4 +25,4 @@ Scripts are authored and executed elsewhere. That application is outside this ta
 
 ## Validation
 
-The reference bindings and benchmark compile; all 326 C# integration tests pass under the configured patched .NET 11 runtime. The transaction gate additionally validates Rust generation, naming collisions, and the updated snapshot before integration.
+The reference bindings and benchmark compile; all 343 C# integration tests pass under the configured patched .NET 11 runtime. The transaction gate additionally validates Rust generation, naming collisions, and the updated snapshot before integration.

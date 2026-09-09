@@ -25,6 +25,9 @@ impl Field {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Struct {
+    /// Whether the Rust declaration uses positional fields.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub is_positional: bool,
     /// The struct's fields.
     pub fields: Vec<Field>,
     /// The memory representation (e.g., `#[repr(C)]`).

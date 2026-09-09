@@ -18,6 +18,7 @@ pub mod patterns {
     pub mod guard;
     pub mod iterator;
     pub mod async_iterator;
+    pub mod tuples;
     pub mod option;
     pub mod primitive;
     pub mod result;
@@ -74,6 +75,24 @@ pub fn inventory() -> RustInventory {
         .register(function!(patterns::async_iterator::pattern_async_iterator_bools))
         .register(function!(patterns::async_iterator::pattern_async_iterator_points))
         .register(service!(patterns::async_iterator::ServiceAsyncStream))
+        .register(function!(patterns::tuples::tuple_echo))
+        .register(function!(patterns::tuples::tuple_bare_apply))
+        .register(function!(patterns::tuples::tuple_choice_echo))
+        .register(function!(patterns::tuples::tuple_option_echo))
+        .register(function!(patterns::tuples::tuple_result_echo))
+        .register(function!(patterns::tuples::tuple_nested_echo))
+        .register(function!(patterns::tuples::tuple_aligned_echo))
+        .register(function!(patterns::tuples::tuple_eight_echo))
+        .register(function!(patterns::tuples::tuple_id_echo))
+        .register(function!(patterns::tuples::tuple_owned_echo))
+        .register(function!(patterns::tuples::tuple_container_echo))
+        .register(function!(patterns::tuples::tuple_borrowed_sum))
+        .register(function!(patterns::tuples::tuple_apply))
+        .register(function!(patterns::tuples::tuple_visit))
+        .register(function!(patterns::tuples::tuple_native_callback))
+        .register(function!(patterns::tuples::tuple_borrow))
+        .register(function!(patterns::tuples::tuple_slice_sum))
+        .register(service!(patterns::tuples::ServiceTuple))
         .register(builtins_wire!())
         .register(builtins_vec!(u8))
         .register(builtins_vec!(ffi::String))

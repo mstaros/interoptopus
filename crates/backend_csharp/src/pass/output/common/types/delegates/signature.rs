@@ -10,6 +10,26 @@ use crate::pass::{OutputResult, PassInfo, model, output};
 use interoptopus_backends::template::Context;
 use std::collections::HashMap;
 
+
+/// Runtime delegate marshalling does not use `LibraryImport`'s custom marshallers.
+/// A composite containing projected tuple fields must use its native mirror here.
+fn abi_name(id: crate::lang::TypeId, types: &model::common::types::all::Pass) -> Option<String> {
+    fn contains_tuple(id: crate::lang::TypeId, types: &model::common::types::all::Pass) -> bool {
+        if types.tuple_name(id).is_some() { return true; }
+        match types.get(id).map(|ty| &ty.kind) {
+            Some(TypeKind::Composite(c)) => c.fields.iter().any(|f| contains_tuple(f.ty, types)),
+            Some(TypeKind::Array(a)) => contains_tuple(a.ty, types),
+            _ => false,
+        }
+    }
+    let ty = types.get(id)?;
+    if matches!(ty.kind, TypeKind::Composite(_)) && contains_tuple(id, types) {
+        Some(format!("{}.Unmanaged", ty.name))
+    } else {
+        Some(ty.name.clone())
+    }
+}
+
 #[derive(Default)]
 pub struct Config {}
 
@@ -47,11 +67,11 @@ impl Pass {
                 let signature = &delegate.signature;
                 let name = &ty.name;
 
-                let rval_managed = types.get(signature.rval).map_or_else(|| "void".to_string(), |t| t.name.clone());
+                let rval_managed = abi_name(signature.rval, types).unwrap_or_else(|| "void".to_string());
 
                 let mut args: Vec<HashMap<String, String>> = Vec::new();
                 for arg in &signature.arguments {
-                    let Some(arg_managed) = types.get(arg.ty).map(|t| &t.name) else {
+                    let Some(arg_managed) = abi_name(arg.ty, types) else {
                         continue;
                     };
                     let mut m = HashMap::new();

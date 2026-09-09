@@ -66,6 +66,13 @@ public partial struct DotnetException
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial struct DotnetException
 {
+    [global::System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public DotnetException(ulong exception_id)
+    {
+        this = default;
+        this.exception_id = exception_id;
+    }
+
     
     [StructLayout(LayoutKind.Sequential)]
     public unsafe struct Unmanaged
@@ -998,7 +1005,7 @@ public static unsafe class Trampoline
 
     public static long QueryU64(long id)
     {
-        if (id == QUERY_API_GUARD_HASH) return unchecked((long)0x9DC87BE6777F844B);
+        if (id == QUERY_API_GUARD_HASH) return unchecked((long)0x768FC135916F240C);
         return 0;
     }
 

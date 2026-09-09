@@ -45,6 +45,12 @@ impl Pass {
                     continue;
                 };
 
+                if types.tuple_name(f.ty).is_some() {
+                    let key = FieldKey { parent: *type_id, field_name: f.name.clone() };
+                    let value = types.native_value(f.ty, &format!("this.{}", f.name));
+                    self.custom_to_unmanaged.insert(key, format!("_unmanaged.{0} = {value}.ToUnmanaged();", f.name));
+                }
+
                 if let TypeKind::Array(a) = field_kind {
                     let Some(element_type) = types.get(a.ty).map(|t| &t.name) else {
                         continue;

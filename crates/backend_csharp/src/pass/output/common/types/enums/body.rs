@@ -210,7 +210,7 @@ fn result_type_name(type_id: TypeId, types: &model::common::types::all::Pass) ->
     if is_unit_type(type_id, types) {
         "Unit".to_string()
     } else {
-        types.get(type_id).map_or_else(|| "Unit".to_string(), |t| t.name.clone())
+        types.managed_name(type_id).unwrap_or_else(|| "Unit".to_string())
     }
 }
 

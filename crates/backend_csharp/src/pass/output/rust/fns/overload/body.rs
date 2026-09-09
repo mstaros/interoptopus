@@ -120,8 +120,7 @@ fn render(
 
     // Return type: use the overload function's rval directly (Task type for async, original for body)
     let rval = types
-        .get(overload_fn.signature.rval)
-        .map(|t| t.name.clone())
+        .managed_name(overload_fn.signature.rval)
         .ok_or_else(|| crate::Error::from(format!("rval of overload `{name}`")))?;
 
     let is_void = !is_async && matches!(types.get(original_fn.signature.rval).map(|t| &t.kind), Some(TypeKind::Primitive(Primitive::Void)));
@@ -174,7 +173,7 @@ fn resolve_args(
                     .ok_or_else(|| crate::Error::from(format!("arg `{}` of overload `{}`", arg.name, fn_name)))?;
                 let decorated = match &arg_type.decorators.param {
                     Some(d) => format!("{d} {}", arg_type.name),
-                    None => arg_type.name.clone(),
+                    None => types.managed_name(arg.ty).expect("resolved argument type"),
                 };
                 m.insert("ty", Value::normal_string(&decorated));
                 m.insert("is_ref", Value::normal_string("false"));
@@ -200,14 +199,13 @@ fn resolve_args(
                     return Err(crate::Error::from(format!("delegate family for arg `{}` of overload `{}`", arg.name, fn_name)));
                 };
                 let sig_name = types
-                    .get(family.signature)
-                    .map(|t| &t.name)
+                    .managed_name(family.signature)
                     .ok_or_else(|| crate::Error::from(format!("delegate sig for arg `{}` of overload `{}`", arg.name, fn_name)))?;
                 let class_name = types
                     .get(family.class)
                     .map(|t| &t.name)
                     .ok_or_else(|| crate::Error::from(format!("delegate class for arg `{}` of overload `{}`", arg.name, fn_name)))?;
-                m.insert("ty", Value::normal_string(sig_name));
+                m.insert("ty", Value::normal_string(&sig_name));
                 m.insert("is_ref", Value::normal_string("false"));
                 m.insert("is_wrap", Value::normal_string("true"));
                 m.insert("wrapper_type", Value::normal_string(class_name));

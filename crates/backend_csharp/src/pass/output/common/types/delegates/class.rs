@@ -51,7 +51,7 @@ impl Pass {
 
                 // Determine return type info
                 let rval_kind = types.get(signature.rval).map(|t| &t.kind);
-                let rval_managed = types.get(signature.rval).map_or_else(|| "void".to_string(), |t| t.name.clone());
+                let rval_managed = types.managed_name(signature.rval).unwrap_or_else(|| "void".to_string());
                 let is_void = matches!(rval_kind, Some(TypeKind::Primitive(Primitive::Void)));
 
                 let rval_unmanaged = if is_void {
@@ -75,7 +75,7 @@ impl Pass {
                 // Build argument list (excluding callback_data which is always appended in the template)
                 let mut args: Vec<HashMap<String, String>> = Vec::new();
                 for arg in &signature.arguments {
-                    let Some(arg_managed) = types.get(arg.ty).map(|t| &t.name) else {
+                    let Some(arg_managed) = types.managed_name(arg.ty) else {
                         continue;
                     };
 
@@ -86,6 +86,7 @@ impl Pass {
                     let mut m = HashMap::new();
                     m.insert("name".to_string(), arg.name.clone());
                     m.insert("managed_type".to_string(), arg_managed.clone());
+                    m.insert("native_value".to_string(), types.native_value(arg.ty, &arg.name));
                     m.insert("unmanaged_name".to_string(), arg_unmanaged);
                     m.insert("to_managed".to_string(), to_managed);
                     m.insert("to_unmanaged".to_string(), to_unmanaged);
@@ -104,6 +105,10 @@ impl Pass {
                 context.insert("rval_unmanaged_name", &rval_unmanaged);
                 context.insert("rval_to_unmanaged", &rval_to_unmanaged);
                 context.insert("rval_to_managed", &rval_to_managed);
+                let projected = types.tuple_name(signature.rval).is_some();
+                let prefix = if projected { format!("(({})", types.get(signature.rval).expect("resolved return type").name) } else { String::new() };
+                context.insert("rval_native_prefix", &prefix);
+                context.insert("rval_native_suffix", if projected { ")" } else { "" });
                 context.insert("args", &args);
                 let function_pointer = supports_function_pointer(signature.rval, types)
                     && signature.arguments.iter().all(|arg| supports_function_pointer(arg.ty, types));

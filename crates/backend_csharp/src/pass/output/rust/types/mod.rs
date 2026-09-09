@@ -57,7 +57,7 @@ pub mod asynk_naming {
     pub fn task_inner_name(t: &Trampoline, types: &model::common::types::all::Pass) -> String {
         match t.task_inner {
             None => "void".to_string(),
-            Some(id) => types.get(id).map(|ty| ty.name.clone()).unwrap_or_default(),
+            Some(id) => types.managed_name(id).unwrap_or_default(),
         }
     }
 

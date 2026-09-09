@@ -44,7 +44,7 @@ impl Pass {
                 .fields
                 .iter()
                 .filter_map(|f| {
-                    let managed_name = types.get(f.ty).map(|t| t.name.clone())?;
+                    let managed_name = types.managed_name(f.ty)?;
                     let mut m = HashMap::new();
                     m.insert("name", f.name.clone());
                     m.insert("managed_name", managed_name);

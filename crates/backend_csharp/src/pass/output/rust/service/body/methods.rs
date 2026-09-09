@@ -65,7 +65,7 @@ impl Pass {
                     }
                     if has_span {
                         let rval_kind = types.get(method_fn.signature.rval).map(|ty| &ty.kind);
-                        let result = resolve_result_rval(rval_kind, types);
+                        let result = resolve_result_rval(method_fn.signature.rval, types);
                         if let Some(rval) = result.rval_name.as_deref().or_else(|| types.get(method_fn.signature.rval).map(|ty| ty.name.as_str())) {
                             let is_void = result.is_void || matches!(rval_kind, Some(TypeKind::Primitive(Primitive::Void)));
                             rendered_methods.push(render(templates, rval, is_void, result.as_ok, method_name, &method_fn.name, &args,
@@ -83,7 +83,7 @@ impl Pass {
                             continue;
                         }
                         let rval_kind = types.get(method_fn.signature.rval).map(|t| &t.kind);
-                        let result_info = resolve_result_rval(rval_kind, types);
+                        let result_info = resolve_result_rval(method_fn.signature.rval, types);
 
                         let rval = result_info
                             .rval_name
@@ -104,7 +104,7 @@ impl Pass {
                         let self_arg = if has_service_self_arg(method_fn, types) { "this" } else { "_context" };
 
                         if let OverloadKind::Async(_) = &overload.kind {
-                            let task_rval = types.get(method_fn.signature.rval).map_or_else(|| "Task".to_string(), |t| t.name.clone());
+                            let task_rval = types.managed_name(method_fn.signature.rval).unwrap_or_else(|| "Task".to_string());
                             let async_args = build_args(&method_fn.signature.arguments[1..], types);
 
                             let (trampoline_field, is_task_void) = match trampoline.for_function(method_fn_id) {
@@ -126,7 +126,7 @@ impl Pass {
                             )?);
                         } else {
                             let rval_kind = types.get(original_fn.signature.rval).map(|t| &t.kind);
-                            let result_info = resolve_result_rval(rval_kind, types);
+                            let result_info = resolve_result_rval(original_fn.signature.rval, types);
 
                             let rval = result_info
                                 .rval_name
@@ -172,7 +172,7 @@ fn build_args(args: &[crate::lang::functions::Argument], types: &model::common::
             let is_ref = matches!(&arg_type.kind, TypeKind::Pointer(p) if p.kind == PointerKind::ByRef);
             let decorated = match &arg_type.decorators.param {
                 Some(d) => format!("{d} {}", arg_type.name),
-                None => arg_type.name.clone(),
+                None => types.managed_name(arg.ty).expect("resolved argument type"),
             };
             let mut m = make_arg(&arg.name, &decorated, is_ref);
             if arg.ty == crate::lang::types::csharp::CANCELLATION_TOKEN {
@@ -251,24 +251,26 @@ struct ResultRval {
 }
 
 fn collection_rval(item: crate::lang::TypeId, types: &model::common::types::all::Pass, asynchronous: bool) -> Option<String> {
+    let name = types.managed_name(item)?;
     let item = types.get(item)?;
     let element = if matches!(item.kind, TypeKind::Primitive(Primitive::Bool) | TypeKind::TypePattern(TypePattern::Bool)) {
         "bool"
     } else {
-        &item.name
+        &name
     };
     let interface = if asynchronous { "global::System.Collections.Generic.IAsyncEnumerable" } else { "global::Rust.Linq.IRustEnumerable" };
     Some(format!("{interface}<{element}>"))
 }
 
-fn resolve_result_rval(rval_kind: Option<&TypeKind>, types: &model::common::types::all::Pass) -> ResultRval {
+fn resolve_result_rval(rval: crate::lang::TypeId, types: &model::common::types::all::Pass) -> ResultRval {
+    let rval_kind = types.get(rval).map(|ty| &ty.kind);
     match rval_kind {
         Some(TypeKind::TypePattern(TypePattern::Result(ok_ty, _, _))) => {
             let ok_is_void = matches!(types.get(*ok_ty).map(|t| &t.kind), Some(TypeKind::Primitive(Primitive::Void)));
             let ok_name = if ok_is_void {
                 "void".to_string()
             } else {
-                types.get(*ok_ty).map_or_else(|| "void".to_string(), |t| t.name.clone())
+                types.managed_name(*ok_ty).unwrap_or_else(|| "void".to_string())
             };
             let rval_name = types.get(*ok_ty).and_then(|ty| {
                 match ty.kind {
@@ -281,7 +283,7 @@ fn resolve_result_rval(rval_kind: Option<&TypeKind>, types: &model::common::type
         }
         Some(TypeKind::TypePattern(TypePattern::Iterator(item))) => ResultRval { as_ok: false, rval_name: collection_rval(*item, types, false), is_void: false },
         Some(TypeKind::TypePattern(TypePattern::AsyncIterator(item))) => ResultRval { as_ok: false, rval_name: collection_rval(*item, types, true), is_void: false },
-        _ => ResultRval { as_ok: false, rval_name: None, is_void: false },
+        _ => ResultRval { as_ok: false, rval_name: types.tuple_name(rval), is_void: false },
     }
 }
 

@@ -246,10 +246,12 @@ impl TypeModel {
                 });
 
                 let repr = self.generate_repr();
+                let is_positional = struct_data.fields.iter().all(|field| field.name.is_none());
 
                 quote_spanned! { self.name.span() =>
                     ::interoptopus::lang::types::TypeKind::Struct(
                         ::interoptopus::lang::types::Struct {
+                            is_positional: #is_positional,
                             fields: vec![#(#fields),*],
                             repr: #repr,
                         }

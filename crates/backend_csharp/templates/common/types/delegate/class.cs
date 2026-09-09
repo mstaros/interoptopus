@@ -68,7 +68,7 @@ delegate void {{ name }}Destructor(IntPtr data);
         try
         {
             {% if not is_void %}
-            return _managed({% for arg in args %}{{ arg.name }}{{ arg.to_managed }}{% if not loop.last %}, {% endif %}{% endfor %}){{ rval_to_unmanaged }};
+            return {{ rval_native_prefix }}_managed({% for arg in args %}{{ arg.name }}{{ arg.to_managed }}{% if not loop.last %}, {% endif %}{% endfor %}){{ rval_native_suffix }}{{ rval_to_unmanaged }};
             {% else %}
             _managed({% for arg in args %}{{ arg.name }}{{ arg.to_managed }}{% if not loop.last %}, {% endif %}{% endfor %});
             {% endif %}
@@ -94,9 +94,9 @@ delegate void {{ name }}Destructor(IntPtr data);
         var __target = _native ??= Marshal.GetDelegateForFunctionPointer<{{ name }}Native>(_ptr);
 {% endif %}
         {% if not is_void %}
-        return __target({% for arg in args %}{{ arg.name }}{{ arg.to_unmanaged }}, {% endfor %}_data){{ rval_to_managed }};
+        return __target({% for arg in args %}{{ arg.native_value }}{{ arg.to_unmanaged }}, {% endfor %}_data){{ rval_to_managed }};
         {% else %}
-        __target({% for arg in args %}{{ arg.name }}{{ arg.to_unmanaged }}, {% endfor %}_data);
+        __target({% for arg in args %}{{ arg.native_value }}{{ arg.to_unmanaged }}, {% endfor %}_data);
         {% endif %}
     }
 

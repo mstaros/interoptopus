@@ -433,3 +433,71 @@ The iterator ABI now includes a sixth function pointer for enumeration.
 Regenerate bindings and rebuild the native library together; the type identity
 and API hash change detects stale bindings. Initial operators use `std::iter`;
 later operators can use `itertools` as an ordinary dependency, without a fork.
+
+
+### Value tuples, deconstruction, and anonymous projections
+
+Positional Rust FFI structs with at least two plain value fields automatically
+use C# value tuples in the public Rust-library API:
+
+```rust
+#[ffi]
+#[derive(Clone, Copy)]
+pub struct Pair(pub u32, pub f32);
+
+#[ffi]
+pub fn echo(x: Pair) -> Pair { x }
+```
+
+```csharp
+var (id, weight) = Interop.echo((17u, 2.5f));
+Func<(uint, float), (uint, float)> transform = x => (x.Item1, x.Item2 * 2);
+```
+
+The same projection applies to named `callback!` Func/Action signatures,
+service arguments/results, `Task<T>` results, native synchronous/asynchronous
+iterator elements, and tuple payloads inside generated enum/Option/Result
+cases. Nested positional values become nested tuples. Named plain value
+structs keep their names and gain constructors and `Deconstruct` methods:
+
+```csharp
+var point = new Vec3f32(1, 2, 3);
+var (x, y, z) = point;
+
+using var pairs = service.Pairs();
+var rows = pairs.Select(pair => new { Id = pair.Item1, Weight = pair.Item2 }).ToArray();
+```
+
+Anonymous objects in `Select` are inferred by the C# compiler and remain
+managed projections. They do not require generated anonymous return types
+or new Rust exports.
+
+Eligibility is structural: primitives, plain enums with legal C# enum bases,
+and structs recursively composed of these values. Single-field newtypes,
+pointers, borrowed slices, strings, arrays, owning wrappers, and payload enums
+keep their generated identities. Field names such as `field_0` on a named
+Rust struct do not make it positional. A `Deconstruct` member is omitted
+when it would collide with the type or a field name.
+
+Each projected type retains its named native wrapper and unmanaged mirror.
+Explicit field copies and a type-specific `LibraryImport` marshaller convert
+between that representation and `ValueTuple`; no tuple memory is reinterpreted
+as Rust memory. Reference/slice inputs still use their native wrapper types.
+Bare `extern "C" fn` delegates use native mirrors for tuple-containing
+composites, because runtime delegate marshalling cannot use the source-generated
+tuple marshaller. Use `callback!` for the convenient Func/Action API.
+
+Union projection follows the union specification snapshot in
+`D:\repos\Unions\src\Unions\UnionSpecification.md` (source commit
+`f23bdbed3f5a9c5f5d78f7f2a0a9f0bc54ac58b4`): distinct Rust variants retain
+distinct generated case types, even when they carry identical tuple payloads.
+Case constructors, `Value`, `HasValue`, and typed `TryGetValue` remain
+consistent; typed pattern matching uses the non-boxing access pattern.
+Tuple projection changes the payload inside a case, not the union case identity
+or native tag/layout. The generator retains the custom `[Union]` representation.
+
+Regenerate bindings when upgrading: eligible positional signatures now use
+`ValueTuple`, including invariant generic types such as `Task<T>` and
+`Func<T, TResult>`. Manually constructed Rust inventories must set the new
+`Struct::is_positional` flag; older serialized inventories default it to
+`false`.

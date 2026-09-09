@@ -57,26 +57,26 @@ impl Pass {
                     // { *mut u8, u64, u64 }
                     let Some(cs_ptr) = id_map.ty(<*mut u8>::id()) else { continue };
                     let Some(cs_u64) = id_map.ty(u64::id()) else { continue };
-                    TypeKind::Composite(Composite { fields: vec![field("ptr", cs_ptr), field("len", cs_u64), field("capacity", cs_u64)], repr: Repr::c() })
+                    TypeKind::Composite(Composite { is_positional: false, fields: vec![field("ptr", cs_ptr), field("len", cs_u64), field("capacity", cs_u64)], repr: Repr::c() })
                 }
                 lang::types::TypePattern::Version => TypeKind::Primitive(Primitive::ULong),
                 lang::types::TypePattern::Slice(rust_ty) => {
                     // { *const T, u64 }
                     let Some(cs_ptr) = id_map.ty(type_id_ptr(*rust_ty)) else { continue };
                     let Some(cs_u64) = id_map.ty(u64::id()) else { continue };
-                    TypeKind::Composite(Composite { fields: vec![field("ptr", cs_ptr), field("len", cs_u64)], repr: Repr::c() })
+                    TypeKind::Composite(Composite { is_positional: false, fields: vec![field("ptr", cs_ptr), field("len", cs_u64)], repr: Repr::c() })
                 }
                 lang::types::TypePattern::SliceMut(rust_ty) => {
                     // { *mut T, u64 }
                     let Some(cs_ptr) = id_map.ty(type_id_ptr_mut(*rust_ty)) else { continue };
                     let Some(cs_u64) = id_map.ty(u64::id()) else { continue };
-                    TypeKind::Composite(Composite { fields: vec![field("ptr", cs_ptr), field("len", cs_u64)], repr: Repr::c() })
+                    TypeKind::Composite(Composite { is_positional: false, fields: vec![field("ptr", cs_ptr), field("len", cs_u64)], repr: Repr::c() })
                 }
                 lang::types::TypePattern::Vec(rust_ty) => {
                     // { *mut T, u64, u64 }
                     let Some(cs_ptr) = id_map.ty(type_id_ptr_mut(*rust_ty)) else { continue };
                     let Some(cs_u64) = id_map.ty(u64::id()) else { continue };
-                    TypeKind::Composite(Composite { fields: vec![field("ptr", cs_ptr), field("len", cs_u64), field("capacity", cs_u64)], repr: Repr::c() })
+                    TypeKind::Composite(Composite { is_positional: false, fields: vec![field("ptr", cs_ptr), field("len", cs_u64), field("capacity", cs_u64)], repr: Repr::c() })
                 }
                 lang::types::TypePattern::Option(rust_ty) => {
                     let Some(payload) = resolve_payload(*rust_ty, id_map) else { continue };
@@ -102,23 +102,23 @@ impl Pass {
                     // { *mut u8, i32, i32 }
                     let Some(cs_ptr) = id_map.ty(<*mut u8>::id()) else { continue };
                     let Some(cs_i32) = id_map.ty(i32::id()) else { continue };
-                    TypeKind::Composite(Composite { fields: vec![field("data", cs_ptr), field("len", cs_i32), field("capacity", cs_i32)], repr: Repr::c() })
+                    TypeKind::Composite(Composite { is_positional: false, fields: vec![field("data", cs_ptr), field("len", cs_i32), field("capacity", cs_i32)], repr: Repr::c() })
                 }
                 lang::types::TypePattern::NamedCallback(_) | lang::types::TypePattern::AsyncCallback(_) => {
                     // { *mut c_void, *mut c_void }
                     let Some(cs_void_ptr) = id_map.ty(<*mut std::ffi::c_void>::id()) else { continue };
-                    TypeKind::Composite(Composite { fields: vec![field("fnptr", cs_void_ptr), field("data", cs_void_ptr)], repr: Repr::c() })
+                    TypeKind::Composite(Composite { is_positional: false, fields: vec![field("fnptr", cs_void_ptr), field("data", cs_void_ptr)], repr: Repr::c() })
                 }
                 lang::types::TypePattern::AsyncIterator(_) => {
                     let Some(cs_ptr) = id_map.ty(<*mut std::ffi::c_void>::id()) else { continue };
-                    TypeKind::Composite(Composite {
+                    TypeKind::Composite(Composite { is_positional: false,
                         fields: ["data", "next_fn", "drop_fn"].into_iter().map(|name| field(name, cs_ptr)).collect(),
                         repr: Repr::c(),
                     })
                 }
                 lang::types::TypePattern::Iterator(_) => {
                     let Some(cs_ptr) = id_map.ty(<*mut std::ffi::c_void>::id()) else { continue };
-                    TypeKind::Composite(Composite {
+                    TypeKind::Composite(Composite { is_positional: false,
                         fields: ["data", "where_fn", "take_fn", "any_fn", "drop_fn", "next_fn"].into_iter().map(|name| field(name, cs_ptr)).collect(),
                         repr: Repr::c(),
                     })
@@ -126,7 +126,7 @@ impl Pass {
                 lang::types::TypePattern::TaskHandle => {
                     // { *mut c_void, *mut c_void, *mut c_void }
                     let Some(cs_void_ptr) = id_map.ty(<*mut std::ffi::c_void>::id()) else { continue };
-                    TypeKind::Composite(Composite {
+                    TypeKind::Composite(Composite { is_positional: false,
                         fields: vec![field("data", cs_void_ptr), field("abort_fn", cs_void_ptr), field("drop_fn", cs_void_ptr)],
                         repr: Repr::c(),
                     })

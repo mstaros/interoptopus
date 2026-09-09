@@ -1,6 +1,9 @@
 {%- if docs %}
 {{ docs }}
 {%- endif %}
+{%- if rval_decorator %}
+[{{ rval_decorator }}]
+{%- endif %}
 [LibraryImport(NativeLib, EntryPoint = "{{symbol}}")]
 [UnmanagedCallConv(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
 {{ _fns_decorators_all }}

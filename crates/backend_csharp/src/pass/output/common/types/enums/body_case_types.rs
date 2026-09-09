@@ -67,7 +67,7 @@ impl Pass {
                     .enumerate()
                     .filter_map(|(index, payload)| {
                         let variant_ty = super::resolve_service_variant(payload.ty, types, mode);
-                        let ty_name = types.get(variant_ty).map(|t| t.name.clone())?;
+                        let ty_name = types.managed_name(variant_ty)?;
                         Some(HashMap::from([("type", ty_name), ("case_field", variant.case_fields[index].clone())]))
                     })
                     .collect();
