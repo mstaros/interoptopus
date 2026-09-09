@@ -15,6 +15,15 @@ pub struct RustLibraryBuilder {
 }
 
 impl RustLibraryBuilder {
+    /// Generate `ValueTask` / `ValueTask<T>` for Rust async methods and constructors.
+    /// The default remains `Task` / `Task<T>`. Await each `ValueTask` once, or use
+    /// `AsTask()` when a script needs `Task.WhenAll`, storage, or repeated awaits.
+    #[must_use]
+    pub fn value_tasks(mut self) -> Self {
+        self.config.model_fn_overload_body.value_task = true;
+        self
+    }
+
     pub(crate) fn new(inventory: RustInventory) -> Self {
         Self { inventory, ..Self::default() }
     }

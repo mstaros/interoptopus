@@ -46,7 +46,8 @@ pub fn managed_name<'a>(id: TypeId, resolve: &dyn Fn(TypeId) -> Option<&'a Type>
     match &ty.kind {
         TypeKind::Task(task) => {
             if let Some(inner) = task.inner.and_then(|inner| name(inner, resolve)) {
-                return Some(format!("Task<{inner}>"));
+                let prefix = if task.value_task { "ValueTask" } else { "Task" };
+                return Some(format!("{prefix}<{inner}>"));
             }
         }
         TypeKind::Delegate(d) if ty.name.starts_with("global::System.") => {

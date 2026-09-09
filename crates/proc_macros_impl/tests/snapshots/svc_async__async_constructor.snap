@@ -1,5 +1,6 @@
 ---
 source: crates/proc_macros_impl/tests/svc_async.rs
+assertion_line: 43
 expression: expand_ffi!(item)
 ---
 #[allow(clippy::used_underscore_items)]
@@ -46,57 +47,64 @@ unsafe fn service_create(
         let _runtime_inside = ::std::sync::Arc::clone(&_runtime_arc);
         ::std::mem::forget(_runtime_arc);
         let _guard = ::interoptopus::pattern::asynk::AsyncCallbackGuard::new(callback);
-        _runtime_invoke
-            .spawn(move |_ctx| async move {
-                let _guard = _guard;
-                let _async_runtime = ::interoptopus::pattern::asynk::Async::new(
-                    _runtime_inside,
-                    _ctx,
-                );
-                let _result = Service::create(_async_runtime).await;
-                _guard.mark_completed();
-                match _result {
-                    ::interoptopus::ffi::Ok(service_instance) => {
-                        let _cb_result: <::interoptopus::ffi::Result<
-                            (),
-                            Error,
-                        > as ::interoptopus::pattern::result::ResultAs>::AsT<
-                            *const Service,
-                        > = ::interoptopus::ffi::Ok(
-                            ::std::sync::Arc::into_raw(
-                                ::std::sync::Arc::new(service_instance),
-                            ) as *mut _,
-                        );
-                        callback.call_ok(&raw const _cb_result);
-                        ::std::mem::forget(_cb_result);
-                    }
-                    ::interoptopus::ffi::Err(err) => {
-                        let _cb_result = ::interoptopus::ffi::Err(err);
-                        callback.call_ok(&raw const _cb_result);
-                        ::std::mem::forget(_cb_result);
-                    }
-                    ::interoptopus::ffi::Result::Panic => {
-                        let _cb_result: <::interoptopus::ffi::Result<
-                            (),
-                            Error,
-                        > as ::interoptopus::pattern::result::ResultAs>::AsT<
-                            *const Service,
-                        > = ::interoptopus::ffi::Result::Panic;
-                        callback.call_ok(&raw const _cb_result);
-                        ::std::mem::forget(_cb_result);
-                    }
-                    ::interoptopus::ffi::Result::Null => {
-                        let _cb_result: <::interoptopus::ffi::Result<
-                            (),
-                            Error,
-                        > as ::interoptopus::pattern::result::ResultAs>::AsT<
-                            *const Service,
-                        > = ::interoptopus::ffi::Result::Null;
-                        callback.call_ok(&raw const _cb_result);
-                        ::std::mem::forget(_cb_result);
-                    }
-                }
-            })
+        ::std::panic::catch_unwind(
+                ::std::panic::AssertUnwindSafe(|| {
+                    _runtime_invoke
+                        .spawn(move |_ctx| async move {
+                            let _guard = _guard;
+                            let _async_runtime = ::interoptopus::pattern::asynk::Async::new(
+                                _runtime_inside,
+                                _ctx,
+                            );
+                            let Some(_result) = _guard
+                                .catch_unwind(Service::create(_async_runtime))
+                                .await else { return };
+                            _guard.mark_completed();
+                            match _result {
+                                ::interoptopus::ffi::Ok(service_instance) => {
+                                    let _cb_result: <::interoptopus::ffi::Result<
+                                        (),
+                                        Error,
+                                    > as ::interoptopus::pattern::result::ResultAs>::AsT<
+                                        *const Service,
+                                    > = ::interoptopus::ffi::Ok(
+                                        ::std::sync::Arc::into_raw(
+                                            ::std::sync::Arc::new(service_instance),
+                                        ) as *mut _,
+                                    );
+                                    callback.call_ok(&raw const _cb_result);
+                                    ::std::mem::forget(_cb_result);
+                                }
+                                ::interoptopus::ffi::Err(err) => {
+                                    let _cb_result = ::interoptopus::ffi::Err(err);
+                                    callback.call_ok(&raw const _cb_result);
+                                    ::std::mem::forget(_cb_result);
+                                }
+                                ::interoptopus::ffi::Result::Panic => {
+                                    let _cb_result: <::interoptopus::ffi::Result<
+                                        (),
+                                        Error,
+                                    > as ::interoptopus::pattern::result::ResultAs>::AsT<
+                                        *const Service,
+                                    > = ::interoptopus::ffi::Result::Panic;
+                                    callback.call_ok(&raw const _cb_result);
+                                    ::std::mem::forget(_cb_result);
+                                }
+                                ::interoptopus::ffi::Result::Null => {
+                                    let _cb_result: <::interoptopus::ffi::Result<
+                                        (),
+                                        Error,
+                                    > as ::interoptopus::pattern::result::ResultAs>::AsT<
+                                        *const Service,
+                                    > = ::interoptopus::ffi::Result::Null;
+                                    callback.call_ok(&raw const _cb_result);
+                                    ::std::mem::forget(_cb_result);
+                                }
+                            }
+                        })
+                }),
+            )
+            .unwrap_or_else(|_| ::interoptopus::pattern::asynk::TaskHandle::dummy())
     }
 }
 #[allow(clippy::ptr_cast_constness)]

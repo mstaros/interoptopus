@@ -1,3 +1,4 @@
+using System;
 using My.Company;
 using System.Threading.Tasks;
 using Xunit;
@@ -9,13 +10,12 @@ public class TestPatternServicesAsyncPanic
     {
         using var s = ServiceAsyncPanic.Create();
 
-        // A panic inside an async method aborts the future; the cancellation
-        // guard then signals `AsyncOutcome::Cancelled`, which the trampoline
-        // turns into a TaskCanceledException on the .NET side.
-        await Assert.ThrowsAsync<TaskCanceledException>(async () =>
-        {
-            await s.PanickingAsync(TestContext.Current.CancellationToken);
-        });
+        // Rust panics must fault the Task; cancellation has a distinct wire tag.
+        var task = s.PanickingAsync(TestContext.Current.CancellationToken);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(async () => await task);
+        Assert.Contains("panicked", error.Message);
+        Assert.True(task.IsFaulted);
+        Assert.False(task.IsCanceled);
     }
 
     [Fact]
@@ -31,7 +31,7 @@ public class TestPatternServicesAsyncPanic
         using var s = ServiceAsyncPanic.Create();
 
         // First call panics
-        await Assert.ThrowsAsync<TaskCanceledException>(async () =>
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
             await s.PanickingAsync(TestContext.Current.CancellationToken);
         });
@@ -47,7 +47,7 @@ public class TestPatternServicesAsyncPanic
 
         for (int i = 0; i < 10; i++)
         {
-            await Assert.ThrowsAsync<TaskCanceledException>(async () =>
+            await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             {
                 await s.PanickingAsync(TestContext.Current.CancellationToken);
             });

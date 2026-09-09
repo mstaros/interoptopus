@@ -1,9 +1,20 @@
 internal class {{ trampoline_name }}
 {
-    private static ulong Id = 0;
-    private static Dictionary<ulong, TaskCompletionSource<{% if is_task_void %}bool{% else %}{{ task_inner_ty }}{% endif %}>> InFlight = new(1024);
-    private AsyncCallbackCommon _delegate;
-    private IntPtr _callback_ptr;
+    private static long Id;
+    private static readonly Dictionary<IntPtr, PendingCall> InFlight = new(1024);
+    private sealed class PendingCall : global::System.Threading.Tasks.Sources.IValueTaskSource<{% if is_task_void %}bool{% else %}{{ task_inner_ty }}{% endif %}>
+    {
+        internal global::System.Threading.Tasks.Sources.ManualResetValueTaskSourceCore<{% if is_task_void %}bool{% else %}{{ task_inner_ty }}{% endif %}> Completion = new() { RunContinuationsAsynchronously = true };
+        internal readonly CancellationToken Token;
+        internal PendingCall(CancellationToken token) { Token = token; }
+        public {% if is_task_void %}bool{% else %}{{ task_inner_ty }}{% endif %} GetResult(short token) => Completion.GetResult(token);
+        public global::System.Threading.Tasks.Sources.ValueTaskSourceStatus GetStatus(short token) => Completion.GetStatus(token);
+        public void OnCompleted(Action<object?> continuation, object? state, short token, global::System.Threading.Tasks.Sources.ValueTaskSourceOnCompletedFlags flags)
+            => Completion.OnCompleted(continuation, state, token, flags);
+    }
+
+    private readonly AsyncCallbackCommon _delegate;
+    private readonly IntPtr _callback_ptr;
 
     {{ _fns_decorators_all | indent }}
     {{ _fns_decorators_internal | indent }}
@@ -16,57 +27,73 @@ internal class {{ trampoline_name }}
     {{ _fns_decorators_all | indent }}
     private static unsafe void Call(IntPtr data, IntPtr csPtr)
     {
-        TaskCompletionSource<{% if is_task_void %}bool{% else %}{{ task_inner_ty }}{% endif %}> tcs;
-
-        lock (InFlight) { InFlight.Remove((ulong) csPtr, out tcs); }
-
-        // Wire layout matches Rust's `#[repr(C, u8)]` AsyncOutcome<T>:
-        // byte 0 is the discriminant, payload (if any) follows at T's natural alignment.
-        // `Marshal.PtrToStructure<T>` rejects generic types, so we deref via raw
-        // pointer instead (the surrounding method is `unsafe`).
-        var tag = Marshal.ReadByte(data, 0);
-        if (tag == AsyncOutcomeTag.Cancelled)
+        PendingCall pending;
+        lock (InFlight)
         {
-            tcs.SetException(new TaskCanceledException("Async operation was cancelled by the Rust side."));
-            return;
+            if (!InFlight.Remove(csPtr, out pending)) return;
         }
 
+        try
+        {
+            // Only Ok has a payload. Never read one for cancellation, panic or an invalid tag.
+            if (data == IntPtr.Zero) throw new InvalidOperationException("Rust supplied a null async result.");
+            var tag = Marshal.ReadByte(data);
+            if (tag == AsyncOutcomeTag.Cancelled)
+            {
+                pending.Completion.SetException(new OperationCanceledException("Async operation was cancelled by Rust.", pending.Token));
+                return;
+            }
+            if (tag == AsyncOutcomeTag.Panicked)
+                throw new InvalidOperationException("The Rust async operation panicked.");
+            if (tag != AsyncOutcomeTag.Ok)
+                throw new InvalidOperationException("Rust supplied an invalid async outcome tag.");
+
         {% if shape == "BareVoid" -%}
-        tcs.SetResult(true);
+        pending.Completion.SetResult(true);
         {%- elif shape == "BareDirect" -%}
         var outcome = *({{ payload_full }}*)data;
-        tcs.SetResult(outcome.Value);
+        pending.Completion.SetResult(outcome.Value);
         {%- elif shape == "BareUnmanaged" -%}
         var outcome = *({{ payload_full }}*)data;
         var managed = outcome.Value.{{ result_to_managed }}();
-        tcs.SetResult(managed);
+        pending.Completion.SetResult(managed);
         {%- elif shape == "ResultDirect" -%}
         var outcome = *({{ payload_full }}*)data;
         var managed = outcome.Value;
-        if (managed.IsOk) { tcs.SetResult({% if is_task_void %}true{% else %}managed.AsOk(){% endif %}); }
-        else { tcs.SetException(managed.ExceptionForVariant()); }
+        if (managed.IsOk) { pending.Completion.SetResult({% if is_task_void %}true{% else %}managed.AsOk(){% endif %}); }
+        else { pending.Completion.SetException(managed.ExceptionForVariant()); }
         {%- elif shape == "ResultUnmanaged" -%}
         var outcome = *({{ payload_full }}*)data;
         var managed = outcome.Value.{{ result_to_managed }}();
-        if (managed.IsOk) { tcs.SetResult({% if is_task_void %}true{% else %}managed.AsOk(){% endif %}); }
-        else { tcs.SetException(managed.ExceptionForVariant()); }
+        if (managed.IsOk) { pending.Completion.SetResult({% if is_task_void %}true{% else %}managed.AsOk(){% endif %}); }
+        else { pending.Completion.SetException(managed.ExceptionForVariant()); }
         {%- endif %}
+        }
+        catch (Exception error)
+        {
+            // Managed conversion errors must fault the await, never unwind across reverse P/Invoke.
+            pending.Completion.SetException(error);
+        }
     }
 
     {{ _fns_decorators_all | indent }}
     {{ _fns_decorators_internal | indent }}
-    internal (AsyncCallbackCommonNative, Task{% if not is_task_void %}<{{ task_inner_ty }}>{% endif %}) NewCall()
+    internal (AsyncCallbackCommonNative, ValueTask<{% if is_task_void %}bool{% else %}{{ task_inner_ty }}{% endif %}>) NewCall(CancellationToken token = default)
     {
-        var tcs = new TaskCompletionSource<{% if is_task_void %}bool{% else %}{{ task_inner_ty }}{% endif %}>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var id = Interlocked.Increment(ref Id);
+        var pending = new PendingCall(token);
+        IntPtr id;
+        lock (InFlight)
+        {
+            do { id = unchecked((IntPtr)(nint)Interlocked.Increment(ref Id)); }
+            while (id == IntPtr.Zero || !InFlight.TryAdd(id, pending));
+        }
+        var callback = new AsyncCallbackCommonNative { _ptr = _callback_ptr, _ts = id };
+        return (callback, new ValueTask<{% if is_task_void %}bool{% else %}{{ task_inner_ty }}{% endif %}>(pending, pending.Completion.Version));
+    }
 
-        lock (InFlight) { InFlight.TryAdd(id, tcs); }
-
-        var ac = new AsyncCallbackCommonNative {
-            _ptr = _callback_ptr,
-            _ts = (IntPtr) id,
-        };
-
-        return (ac, tcs.Task);
+    // Only used when starting the native call failed before a task handle was returned.
+    internal void Abandon(AsyncCallbackCommonNative callback)
+    {
+        lock (InFlight) { InFlight.Remove(callback._ts); }
     }
 }

@@ -81,12 +81,14 @@ public static partial class Interop {
         return counter_get_count_14679(instance.Context);
     }
 
+
     
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     internal static void counter_destroy_14679(Counter instance)
     {
         counter_destroy_14679(instance.Context);
     }
+
 }
 
 

@@ -91,6 +91,7 @@ impl Pass {
                 context.insert("docs", &docs);
                 context.insert("visibility", "public");
                 context.insert("needs_asok", &needs_asok);
+                context.insert("is_value_task", &matches!(types.get(interop_fn.signature.rval).map(|ty| &ty.kind), Some(crate::lang::types::kind::TypeKind::Task(task)) if task.value_task));
 
                 let rendered = templates.render(template, &context)?;
                 rendered_ctors.push(rendered);

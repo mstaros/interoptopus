@@ -9,6 +9,7 @@ internal static class AsyncOutcomeTag
 {
     public const byte Ok = 0;
     public const byte Cancelled = 1;
+    public const byte Panicked = 2;
 }
 
 /// Mirror of Rust's <c>AsyncOutcome&lt;T&gt;</c>. Used both to read incoming

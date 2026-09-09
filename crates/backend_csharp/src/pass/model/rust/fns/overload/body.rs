@@ -29,17 +29,20 @@ use crate::pass::{ModelResult, PassInfo, model};
 use std::collections::HashSet;
 
 #[derive(Default)]
-pub struct Config {}
+pub struct Config {
+    pub value_task: bool,
+}
 
 pub struct Pass {
     info: PassInfo,
     processed: HashSet<FunctionId>,
+    value_task: bool,
 }
 
 impl Pass {
     #[must_use]
-    pub fn new(_: Config) -> Self {
-        Self { info: PassInfo { name: file!() }, processed: HashSet::default() }
+    pub fn new(config: Config) -> Self {
+        Self { info: PassInfo { name: file!() }, processed: HashSet::default(), value_task: config.value_task }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -132,7 +135,7 @@ impl Pass {
             // Produce Async overload if last arg is AsyncCallback
             if let Some(result_ty_id) = async_result_ty {
                 // Resolve the Task return type from the Result type
-                let task_ty_id = resolve_or_create_task_type(result_ty_id, types, kinds, names);
+                let task_ty_id = resolve_or_create_task_type(result_ty_id, types, kinds, names, self.value_task);
 
                 // Append a synthetic CancellationToken argument
                 let mut async_args = overload_args;
@@ -162,51 +165,30 @@ impl Pass {
     }
 }
 
-/// Resolves or creates a `Task` / `Task<T>` type for the given inner type.
-///
-/// The `inner_ty_id` is the inner type carried by the `AsyncCallback<T>`. It is
-/// either:
-/// - A `Result<OkTy, ErrTy>`: produces `Task` (if `OkTy` is void) or `Task<OkName>`.
-/// - A `*const Service` (bare-Self async ctor): produces `Task<IntPtr>`.
-///
-/// Returns the `TypeId` of the Task type.
 fn resolve_or_create_task_type(
     result_ty_id: TypeId,
     types: &mut model::common::types::all::Pass,
     kinds: &mut model::common::types::kind::Pass,
     names: &mut model::common::types::names::Pass,
+    value_task: bool,
 ) -> TypeId {
-    let result_ty = types.get(result_ty_id);
-
-    let (inner, task_name) = match result_ty.map(|t| &t.kind) {
+    let inner = match types.get(result_ty_id).map(|t| &t.kind) {
         Some(TypeKind::TypePattern(TypePattern::Result(ok_ty, _, _))) => {
-            let ok_is_void = matches!(types.get(*ok_ty).map(|t| &t.kind), Some(TypeKind::Primitive(Primitive::Void)));
-            if ok_is_void {
-                (None, "Task".to_string())
-            } else {
-                let ok_name = types.get(*ok_ty).map_or_else(|| "void".to_string(), |t| t.name.clone());
-                (Some(*ok_ty), format!("Task<{ok_name}>"))
-            }
+            (!matches!(types.get(*ok_ty).map(|t| &t.kind), Some(TypeKind::Primitive(Primitive::Void)))).then_some(*ok_ty)
         }
-        Some(TypeKind::Pointer(_)) => {
-            let inner_name = result_ty.map_or_else(|| "IntPtr".to_string(), |t| t.name.clone());
-            (Some(result_ty_id), format!("Task<{inner_name}>"))
-        }
-        Some(TypeKind::Primitive(Primitive::Void)) => (None, "Task".to_string()),
-        // Bare T (e.g. `u32`, a struct) — wrap in `Task<T>` with T as the inner.
-        Some(_) => {
-            let inner_name = result_ty.map_or_else(|| "void".to_string(), |t| t.name.clone());
-            (Some(result_ty_id), format!("Task<{inner_name}>"))
-        }
-        None => (None, "Task".to_string()),
+        Some(TypeKind::Primitive(Primitive::Void)) | None => None,
+        Some(_) => Some(result_ty_id),
     };
-
-    // Derive a stable TypeId from the result type
-    let task_ty_id = TypeId::from_id(result_ty_id.id().derive(0x_7461_736B_5F74_7970)); // "task_typ"
-
-    // Only register if not already present
+    let prefix = if value_task { "ValueTask" } else { "Task" };
+    let task_name = match inner {
+        Some(id) => format!("{prefix}<{}>", types.get(id).map_or("void", |ty| ty.name.as_str())),
+        None => prefix.to_string(),
+    };
+    // Distinguish both managed return styles even when they wrap the same native result.
+    let salt = if value_task { 0x_7661_6C75_655F_746B } else { 0x_7461_736B_5F74_7970 };
+    let task_ty_id = TypeId::from_id(result_ty_id.id().derive(salt));
     if types.get(task_ty_id).is_none() {
-        let kind = TypeKind::Task(Task { inner });
+        let kind = TypeKind::Task(Task { inner, value_task });
         kinds.set(task_ty_id, kind.clone());
         names.set(task_ty_id, task_name.clone());
         types.set(
@@ -214,7 +196,6 @@ fn resolve_or_create_task_type(
             Type { emission: Emission::Builtin, name: task_name, visibility: Visibility::Public, docs: Vec::new(), kind, decorators: Decorators::default() },
         );
     }
-
     task_ty_id
 }
 

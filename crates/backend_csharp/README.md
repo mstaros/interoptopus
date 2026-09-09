@@ -76,6 +76,49 @@ marshalling remain responsible for callback state and disposal.
 This changes the generated public API: callers naming an old `NameDelegate` type
 should use the corresponding `Func` or `Action`. Inline lambda calls retain their syntax.
 
+## Async return values
+
+Rust service `async fn` methods and constructors generate `Task<T>` or
+`Task` by default. `ffi::Result<T, E>` unwraps the successful value and faults
+the await on an error; `()` produces the non-generic return type. Positional
+value results use tuples inside the task.
+
+To generate `ValueTask<T>` / `ValueTask` for the library's async methods and
+constructors, configure the existing builder once:
+
+```rust
+RustLibrary::builder(inventory)
+    .dll_name("my_lib")
+    .value_tasks()
+    .build()
+    .process()?;
+```
+
+Scripts use the same `await service.MethodAsync(...)` syntax. Await a
+`ValueTask` once, or call `AsTask()` once when it needs to be stored, awaited
+repeatedly, or passed to `Task.WhenAll`:
+
+```csharp
+var (id, weight) = await service.PairLaterAsync((17u, 2.5f));
+Task<(uint, float)> pending = service.PairLaterAsync((18u, 3f)).AsTask();
+```
+
+The native ABI is the same for both return styles. A managed value-task source
+bridges each callback; the ValueTask wrappers use pooled async builders.
+Individual service calls still require completion state and native task
+handles, so selecting ValueTask does not make every call allocation-free.
+
+Cancellation keeps the caller's token and produces a cancelled await. A Rust
+panic while polling or starting a task produces a fault with
+`InvalidOperationException`, distinct from
+cancellation. Result-conversion exceptions are contained inside the native
+callback and fault its await. Startup failures remove the pending completion,
+and task handles and cancellation registrations are released after completion.
+
+The async outcome protocol now has separate success, cancellation and panic
+tags. Regenerate C# and rebuild the native library together; its updated type
+identity makes stale bindings fail API validation.
+
 ## Rust.Linq queries
 
 The Rust library backend emits a shared `Rust.Linq.cs` file alongside the library
@@ -336,7 +379,11 @@ await foreach (var node in tree.NodesAsync()
 }
 ```
 
-Each `MoveNextAsync()` asks Rust for one item. Rust polls the pinned stream on
+Each `MoveNextAsync()` returns `ValueTask<bool>` and asks Rust for one item.
+The enumerator reuses its completion source, bypasses the async state machine
+for synchronous completion, and pools suspended moves instead of allocating a
+Task per item. Enumerator creation and disposal still have their own state.
+Consume each move once before starting another. Rust polls the pinned stream on
 the supplied runtime and completes the pending request when an item, end, or
 failure is available. The binding neither copies the whole collection nor
 prefetches another item. The producer may have its own internal buffering.
@@ -455,7 +502,7 @@ Func<(uint, float), (uint, float)> transform = x => (x.Item1, x.Item2 * 2);
 ```
 
 The same projection applies to named `callback!` Func/Action signatures,
-service arguments/results, `Task<T>` results, native synchronous/asynchronous
+service arguments/results, `Task<T>` / `ValueTask<T>` results, native synchronous/asynchronous
 iterator elements, and tuple payloads inside generated enum/Option/Result
 cases. Nested positional values become nested tuples. Named plain value
 structs keep their names and gain constructors and `Deconstruct` methods:

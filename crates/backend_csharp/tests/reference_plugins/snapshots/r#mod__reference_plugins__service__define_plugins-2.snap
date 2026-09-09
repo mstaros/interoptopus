@@ -76,6 +76,7 @@ internal static class AsyncOutcomeTag
 {
     public const byte Ok = 0;
     public const byte Cancelled = 1;
+    public const byte Panicked = 2;
 }
 
 /// Mirror of Rust's <c>AsyncOutcome&lt;T&gt;</c>. Used both to read incoming
@@ -666,7 +667,7 @@ public static unsafe class Trampoline
 
     public static long QueryU64(long id)
     {
-        if (id == QUERY_API_GUARD_HASH) return unchecked((long)0xD19982FF178DFAB9);
+        if (id == QUERY_API_GUARD_HASH) return unchecked((long)0x1177987BEF702292);
         return 0;
     }
 

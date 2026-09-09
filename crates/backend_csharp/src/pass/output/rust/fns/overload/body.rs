@@ -133,6 +133,7 @@ fn render(
     context.insert("rval", &rval);
     context.insert("is_void", &is_void);
     context.insert("is_async", &is_async);
+    context.insert("is_value_task", &matches!(types.get(overload_fn.signature.rval).map(|ty| &ty.kind), Some(TypeKind::Task(task)) if task.value_task));
     context.insert("is_task_void", &false);
     context.insert("has_wraps", &has_wraps);
     context.insert("args", &args);
@@ -145,7 +146,7 @@ fn render(
         && let Some(t) = trampoline.for_function(overload_id)
     {
         context.insert("trampoline_field", &crate::pass::output::rust::types::asynk_naming::field_name(t, types));
-        let is_task_void = rval == "Task";
+        let is_task_void = t.is_task_void();
         context.insert("is_task_void", &is_task_void);
     }
 

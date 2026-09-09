@@ -90,7 +90,8 @@ use std::task::{Context, Poll, Waker};
 ///   take ownership of `T`.
 /// * `Cancelled` — the future was dropped before completion (e.g. the runtime
 ///   was shut down or the task was aborted). On the C# side this is surfaced
-///   as a `TaskCanceledException`.
+///   as an `OperationCanceledException`.
+/// * `Panicked` — polling the Rust future panicked; C# faults the await.
 ///
 /// Users do not normally construct this directly — call
 /// [`AsyncCallback::call_ok`] or [`AsyncCallback::call_cancelled`] instead.
@@ -99,6 +100,7 @@ use std::task::{Context, Poll, Waker};
 pub enum AsyncOutcome<T> {
     Ok(T) = 0,
     Cancelled = 1,
+    Panicked = 2,
 }
 
 /// Returned by reverse-interop async futures (e.g. plugin services) when the
@@ -149,6 +151,18 @@ unsafe impl<T> Send for AsyncCallback<T> {}
 unsafe impl<T> Sync for AsyncCallback<T> {}
 
 impl<T: TypeInfo> AsyncCallback<T> {
+    /// Signal a panic while running the Rust future.
+    ///
+    /// # Safety
+    ///
+    /// The callback and its context must be valid and not yet invoked.
+    pub unsafe fn call_panicked(&self) {
+        let f = self.0.expect("Assumed function would exist but it didn't.");
+        let outcome: AsyncOutcome<T> = AsyncOutcome::Panicked;
+        f(&raw const outcome, self.1);
+    }
+
+
     ///   Creates a new instance of the callback using  `extern "C" fn`
     pub fn new(func: extern "C" fn(*const AsyncOutcome<T>, *const c_void)) -> Self {
         Self(Some(func), null())
@@ -241,7 +255,7 @@ unsafe impl<T: TypeInfo> TypeInfo for AsyncCallback<T> {
     const SERVICE_CTOR_SAFE: bool = false;
 
     fn id() -> TypeId {
-        T::id().derive(0x3BA866E612BB2BEA769699B3476994B8)
+        T::id().derive(0x3BA866E612BB2BEA769699B3476994B9)
     }
 
     fn kind() -> TypeKind {
@@ -300,7 +314,7 @@ extern "C" fn async_callback_complete<T: Send + 'static>(value: *const AsyncOutc
     let outcome = unsafe { std::ptr::read(value) };
     lock.result = Some(match outcome {
         AsyncOutcome::Ok(t) => Ok(t),
-        AsyncOutcome::Cancelled => Err(AsyncCancelled),
+        AsyncOutcome::Cancelled | AsyncOutcome::Panicked => Err(AsyncCancelled),
     });
     if let Some(on_complete) = lock.on_complete.take() {
         on_complete();
@@ -599,7 +613,9 @@ unsafe impl WireIO for TaskHandle {
 /// [`TaskHandle::abort`]) the guard's [`Drop`] impl fires the callback
 /// with [`AsyncOutcome::Cancelled`] so the foreign side's task-completion
 /// mechanism is never leaked. The C# trampoline turns this into a
-/// `TaskCanceledException` thrown out of the awaiting `Task<T>`.
+/// cancellation exception thrown out of the await. [`Self::catch_unwind`]
+/// distinguishes a panic from cancellation; unwinding through the guard also
+/// reports [`AsyncOutcome::Panicked`].
 ///
 /// # Zero allocation
 ///
@@ -621,6 +637,27 @@ pub struct AsyncCallbackGuard<T: TypeInfo> {
 }
 
 impl<T: TypeInfo> AsyncCallbackGuard<T> {
+    /// Poll a future without allowing a panic to escape into the runtime.
+    /// A panic completes the foreign callback as a fault and returns `None`.
+    pub async fn catch_unwind<F: Future>(&self, future: F) -> Option<F::Output> {
+        let result = {
+            let mut future = std::pin::pin!(future);
+            std::future::poll_fn(|cx| {
+                match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| future.as_mut().poll(cx))) {
+                    Ok(Poll::Ready(value)) => Poll::Ready(Some(value)),
+                    Ok(Poll::Pending) => Poll::Pending,
+                    Err(_) => Poll::Ready(None),
+                }
+            }).await
+        };
+        if result.is_none() && self.mark_completed() {
+            // SAFETY: This guard owns the callback's one completion.
+            unsafe { self.callback.call_panicked(); }
+        }
+        result
+    }
+
+
     /// Creates a guard from the callback to protect.
     #[must_use]
     pub fn new(callback: AsyncCallback<T>) -> Self {
@@ -643,7 +680,11 @@ impl<T: TypeInfo> Drop for AsyncCallbackGuard<T> {
             // until it has been called exactly once. `mark_completed` ensures
             // only one of normal-completion or cancel-on-drop fires.
             unsafe {
-                self.callback.call_cancelled();
+                if std::thread::panicking() {
+                    self.callback.call_panicked();
+                } else {
+                    self.callback.call_cancelled();
+                }
             }
         }
     }

@@ -1,5 +1,6 @@
 ---
 source: crates/proc_macros_impl/tests/svc_async.rs
+assertion_line: 25
 expression: expand_ffi!(item)
 ---
 #[allow(clippy::used_underscore_items)]
@@ -73,18 +74,25 @@ unsafe fn service_compute1(
         let _instance_inside = ::std::sync::Arc::clone(&_instance_arc);
         ::std::mem::forget(_instance_arc);
         let _guard = ::interoptopus::pattern::asynk::AsyncCallbackGuard::new(callback);
-        _instance_invoke
-            .spawn(move |_ctx| async move {
-                let _guard = _guard;
-                let _async_this = ::interoptopus::pattern::asynk::Async::new(
-                    _instance_inside,
-                    _ctx,
-                );
-                let _result = Service::compute1(_async_this).await;
-                _guard.mark_completed();
-                callback.call_ok(&raw const _result);
-                ::std::mem::forget(_result);
-            })
+        ::std::panic::catch_unwind(
+                ::std::panic::AssertUnwindSafe(|| {
+                    _instance_invoke
+                        .spawn(move |_ctx| async move {
+                            let _guard = _guard;
+                            let _async_this = ::interoptopus::pattern::asynk::Async::new(
+                                _instance_inside,
+                                _ctx,
+                            );
+                            let Some(_result) = _guard
+                                .catch_unwind(Service::compute1(_async_this))
+                                .await else { return };
+                            _guard.mark_completed();
+                            callback.call_ok(&raw const _result);
+                            ::std::mem::forget(_result);
+                        })
+                }),
+            )
+            .unwrap_or_else(|_| ::interoptopus::pattern::asynk::TaskHandle::dummy())
     }
 }
 #[allow(clippy::used_underscore_items, clippy::forget_non_drop, forgetting_copy_types)]
@@ -101,18 +109,25 @@ unsafe fn service_compute2(
         let _instance_inside = ::std::sync::Arc::clone(&_instance_arc);
         ::std::mem::forget(_instance_arc);
         let _guard = ::interoptopus::pattern::asynk::AsyncCallbackGuard::new(callback);
-        _instance_invoke
-            .spawn(move |_ctx| async move {
-                let _guard = _guard;
-                let _async_this = ::interoptopus::pattern::asynk::Async::new(
-                    _instance_inside,
-                    _ctx,
-                );
-                let _result = Service::compute2(_async_this).await;
-                _guard.mark_completed();
-                callback.call_ok(&raw const _result);
-                ::std::mem::forget(_result);
-            })
+        ::std::panic::catch_unwind(
+                ::std::panic::AssertUnwindSafe(|| {
+                    _instance_invoke
+                        .spawn(move |_ctx| async move {
+                            let _guard = _guard;
+                            let _async_this = ::interoptopus::pattern::asynk::Async::new(
+                                _instance_inside,
+                                _ctx,
+                            );
+                            let Some(_result) = _guard
+                                .catch_unwind(Service::compute2(_async_this))
+                                .await else { return };
+                            _guard.mark_completed();
+                            callback.call_ok(&raw const _result);
+                            ::std::mem::forget(_result);
+                        })
+                }),
+            )
+            .unwrap_or_else(|_| ::interoptopus::pattern::asynk::TaskHandle::dummy())
     }
 }
 unsafe impl ::interoptopus::lang::service::ServiceInfo for Service {

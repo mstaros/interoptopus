@@ -29,7 +29,10 @@ public class TestPatternServicesAsyncCancel
         cts.CancelAfter(200);
 
         var sw = Stopwatch.StartNew();
-        await Assert.ThrowsAnyAsync<Exception>(async () => await task);
+        var error = await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await task);
+        Assert.Equal(cts.Token, error.CancellationToken);
+        Assert.True(task.IsCanceled);
+        Assert.False(task.IsFaulted);
         sw.Stop();
 
         // Should complete much faster than 5000ms
@@ -43,7 +46,7 @@ public class TestPatternServicesAsyncCancel
         using var cts = new CancellationTokenSource(300);
 
         var sw = Stopwatch.StartNew();
-        await Assert.ThrowsAnyAsync<Exception>(async () => await s.SleepForeverAsync(cts.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await s.SleepForeverAsync(cts.Token));
         sw.Stop();
 
         Assert.True(sw.ElapsedMilliseconds < 3000);
@@ -58,7 +61,7 @@ public class TestPatternServicesAsyncCancel
         cts.Cancel(); // Already cancelled
 
         var sw = Stopwatch.StartNew();
-        await Assert.ThrowsAnyAsync<Exception>(async () => await s.LongRunningAsync(1000, 100, cts.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await s.LongRunningAsync(1000, 100, cts.Token));
         sw.Stop();
 
         Assert.True(sw.ElapsedMilliseconds < 3000);
@@ -92,7 +95,7 @@ public class TestPatternServicesAsyncCancel
         Assert.All(results, r => Assert.Equal(3u, r));
 
         // Cancelled task should throw
-        await Assert.ThrowsAnyAsync<Exception>(async () => await cancelledTask);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await cancelledTask);
     }
 
     /// The counter should stop incrementing after cancellation,
@@ -110,7 +113,7 @@ public class TestPatternServicesAsyncCancel
         await Task.Delay(500, TestContext.Current.CancellationToken);
         cts.Cancel();
 
-        await Assert.ThrowsAnyAsync<Exception>(async () => await task);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await task);
 
         // Read the counter just after cancellation
         var counterAtCancel = s.Counter();
@@ -133,7 +136,7 @@ public class TestPatternServicesAsyncCancel
         for (var i = 0; i < 5; i++)
         {
             using var cts = new CancellationTokenSource(100);
-            await Assert.ThrowsAnyAsync<Exception>(async () => await s.SleepForeverAsync(cts.Token));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await s.SleepForeverAsync(cts.Token));
         }
 
         // Service should still be usable after repeated cancellations

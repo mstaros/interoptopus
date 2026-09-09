@@ -13,6 +13,10 @@ One task, in priority order:
 
 - [x] P2 — Project multi-field plain positional FFI structs to C# ValueTuple across calls, callbacks, tasks, native iterators, and union payloads; add named value constructors/deconstruction and ordinary anonymous LINQ projection examples.
 
+- [x] P0 — Distinguish Rust async panics from cancellation; preserve cancellation tokens and contain managed completion failures.
+- [x] P1 — Support `Task<T>` / `Task` by default and `ValueTask<T>` / `ValueTask` through `RustLibrary::builder(...).value_tasks()`, including constructors and tuples.
+- [x] P1 — Reuse native-stream completion sources, pool suspended moves, and bypass async state machines for synchronous results.
+
 ## Contracts
 
 Factories are registered once by the bridge/host, not written in every script. A factory must return a fresh traversal each time; this is a live view unless the bridge explicitly snapshots the collection. Arbitrary `ffi::Iterator<T>` exports cannot be inferred to be repeatable.
@@ -23,6 +27,8 @@ The generated enumerator stays internal to script usage. Scripts use `foreach`, 
 
 Scripts are authored and executed elsewhere. That application is outside this task. It can use the generated support: keep a script scope alive through consumption of lazy/async results, provide persistent collection objects, and import System.Linq and Rust.Linq. Persistent collections remain application-owned.
 
+Async cancellation produces a cancelled await with the original token; Rust panics fault the await. Native completion contexts remain alive until acknowledgement. Consume a ValueTask once, or convert it with AsTask() once for repeated awaits and Task.WhenAll. Regenerate bindings and rebuild native libraries together after the async outcome protocol update.
+
 ## Validation
 
-The reference bindings and benchmark compile; all 343 C# integration tests pass under the configured patched .NET 11 runtime. The transaction gate additionally validates Rust generation, naming collisions, and the updated snapshot before integration.
+The reference bindings and benchmark compile; 343 default-Task and 15 ValueTask C# integration tests pass under the configured patched .NET 11 runtime. The ValueTask suite exercises constructors, primitive/struct/wire/tuple results, cancellation, panic and conversion faults, failed input marshalling, and stream cleanup. A synchronous 10,000-item stream test checks managed allocations remain below 4 KiB after warmup. Required transaction gates also validate Rust generation, plugin-enabled core tests, naming collisions, and updated snapshots before integration.

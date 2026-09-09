@@ -333,7 +333,7 @@ impl ServiceModel {
 
                         let _guard = ::interoptopus::pattern::asynk::AsyncCallbackGuard::new(callback);
 
-                        _runtime_invoke.spawn(move |_ctx| async move {
+                        ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(|| _runtime_invoke.spawn(move |_ctx| async move {
                             // Move the guard *into the future* (not just the outer closure).
                             // `async move` only captures names it references; without this
                             // shadow the guard would drop when the closure returns (right
@@ -342,14 +342,14 @@ impl ServiceModel {
                             // and only drops on completion or runtime shutdown.
                             let _guard = _guard;
                             let _async_runtime = ::interoptopus::pattern::asynk::Async::new(_runtime_inside, _ctx);
-                            let _service_instance = #service_call(_async_runtime, #param_names).await;
+                            let Some(_service_instance) = _guard.catch_unwind(#service_call(_async_runtime, #param_names)).await else { return };
                             _guard.mark_completed();
                             let _cb_result: *const #service_type = #into_raw_call;
                             // `call_ok` wraps the value in `AsyncOutcome::Ok` on the wire so the
                             // foreign side can distinguish completion from cancellation. The
                             // pointer payload is `Copy`, so no `mem::forget` is required.
                             callback.call_ok(&raw const _cb_result);
-                        })
+                        }))).unwrap_or_else(|_| ::interoptopus::pattern::asynk::TaskHandle::dummy())
                     }
                 }
             };
@@ -404,7 +404,7 @@ impl ServiceModel {
 
                     let _guard = ::interoptopus::pattern::asynk::AsyncCallbackGuard::new(callback);
 
-                    _runtime_invoke.spawn(move |_ctx| async move {
+                    ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(|| _runtime_invoke.spawn(move |_ctx| async move {
                         // Move the guard *into the future* (not just the outer closure).
                         // `async move` only captures names it references; without this
                         // shadow the guard would drop when the closure returns (right
@@ -413,7 +413,7 @@ impl ServiceModel {
                         // and only drops on completion or runtime shutdown.
                         let _guard = _guard;
                         let _async_runtime = ::interoptopus::pattern::asynk::Async::new(_runtime_inside, _ctx);
-                        let _result = #service_call(_async_runtime, #param_names).await;
+                        let Some(_result) = _guard.catch_unwind(#service_call(_async_runtime, #param_names)).await else { return };
                         _guard.mark_completed();
                         match _result {
                             ::interoptopus::ffi::Ok(service_instance) => {
@@ -439,7 +439,7 @@ impl ServiceModel {
                                 ::std::mem::forget(_cb_result);
                             }
                         }
-                    })
+                    }))).unwrap_or_else(|_| ::interoptopus::pattern::asynk::TaskHandle::dummy())
                 }
             }
         }
@@ -621,7 +621,7 @@ impl ServiceModel {
 
                     let _guard = ::interoptopus::pattern::asynk::AsyncCallbackGuard::new(callback);
 
-                    _instance_invoke.spawn(move |_ctx| async move {
+                    ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(|| _instance_invoke.spawn(move |_ctx| async move {
                         // Move the guard *into the future* (not just the outer closure).
                         // `async move` only captures names it references; without this
                         // shadow the guard would drop when the closure returns (right
@@ -630,13 +630,13 @@ impl ServiceModel {
                         // and only drops on completion or runtime shutdown.
                         let _guard = _guard;
                         let _async_this = ::interoptopus::pattern::asynk::Async::new(_instance_inside, _ctx);
-                        let _result = #service_type::#method_name(_async_this, #param_names).await;
+                        let Some(_result) = _guard.catch_unwind(#service_type::#method_name(_async_this, #param_names)).await else { return };
                         _guard.mark_completed();
                         callback.call_ok(&raw const _result);
                         // Prevent Rust from dropping owned data (e.g. ffi::String) after the
                         // callback, since the callee took ownership via ptr::read.
                         ::std::mem::forget(_result);
-                    })
+                    }))).unwrap_or_else(|_| ::interoptopus::pattern::asynk::TaskHandle::dummy())
                 }
 
             }
