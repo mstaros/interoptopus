@@ -5,7 +5,8 @@ use crate::lang::types::kind::{Primitive, TypeKind, TypePattern};
 use std::collections::HashSet;
 
 /// Values with no borrowed pointers, ownership, or managed reference fields.
-pub(crate) fn is_value<'a>(id: TypeId, resolve: &dyn Fn(TypeId) -> Option<&'a Type>) -> bool {
+#[must_use]
+pub fn is_value<'a>(id: TypeId, resolve: &dyn Fn(TypeId) -> Option<&'a Type>) -> bool {
     fn visit<'a>(id: TypeId, resolve: &dyn Fn(TypeId) -> Option<&'a Type>, active: &mut HashSet<TypeId>) -> bool {
         if !active.insert(id) { return false; }
         let valid = match resolve(id).map(|ty| &ty.kind) {
@@ -22,7 +23,8 @@ pub(crate) fn is_value<'a>(id: TypeId, resolve: &dyn Fn(TypeId) -> Option<&'a Ty
 }
 
 /// A positional struct with at least two plain value fields becomes a tuple.
-pub(crate) fn name<'a>(id: TypeId, resolve: &dyn Fn(TypeId) -> Option<&'a Type>) -> Option<String> {
+#[must_use]
+pub fn name<'a>(id: TypeId, resolve: &dyn Fn(TypeId) -> Option<&'a Type>) -> Option<String> {
     let TypeKind::Composite(c) = &resolve(id)?.kind else { return None };
     if !c.is_positional || c.fields.len() < 2 || !is_value(id, resolve) { return None; }
     let fields = c.fields.iter().map(|f| {
@@ -37,7 +39,8 @@ pub(crate) fn name<'a>(id: TypeId, resolve: &dyn Fn(TypeId) -> Option<&'a Type>)
 }
 
 /// Public API spelling. Native identifiers continue to use `Type::name`.
-pub(crate) fn managed_name<'a>(id: TypeId, resolve: &dyn Fn(TypeId) -> Option<&'a Type>) -> Option<String> {
+#[must_use]
+pub fn managed_name<'a>(id: TypeId, resolve: &dyn Fn(TypeId) -> Option<&'a Type>) -> Option<String> {
     if let Some(tuple) = name(id, resolve) { return Some(tuple); }
     let ty = resolve(id)?;
     match &ty.kind {
@@ -55,7 +58,8 @@ pub(crate) fn managed_name<'a>(id: TypeId, resolve: &dyn Fn(TypeId) -> Option<&'
 }
 
 /// Convert a tuple expression back into its ABI-specific managed wrapper.
-pub(crate) fn native_value<'a>(id: TypeId, expression: &str, resolve: &dyn Fn(TypeId) -> Option<&'a Type>) -> String {
+#[must_use]
+pub fn native_value<'a>(id: TypeId, expression: &str, resolve: &dyn Fn(TypeId) -> Option<&'a Type>) -> String {
     if name(id, resolve).is_some() {
         format!("(({}){expression})", resolve(id).expect("resolved tuple").name)
     } else {

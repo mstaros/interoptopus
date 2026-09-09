@@ -484,7 +484,7 @@ Explicit field copies and a type-specific `LibraryImport` marshaller convert
 between that representation and `ValueTuple`; no tuple memory is reinterpreted
 as Rust memory. Reference/slice inputs still use their native wrapper types.
 Bare `extern "C" fn` delegates use native mirrors for tuple-containing
-composites, because runtime delegate marshalling cannot use the source-generated
+structs and unions, because runtime delegate marshalling cannot use the source-generated
 tuple marshaller. Use `callback!` for the convenient Func/Action API.
 
 Union projection follows the union specification snapshot in

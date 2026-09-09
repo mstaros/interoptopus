@@ -4,7 +4,7 @@
 //! for Rust `extern "C" fn(...)` types, as opposed to the full wrapper classes produced by
 //! the `class` pass for named callbacks.
 
-use crate::lang::types::kind::{DelegateKind, TypeKind};
+use crate::lang::types::kind::{DelegateKind, TypeKind, TypePattern, Variant};
 use crate::output::{FileType, Output};
 use crate::pass::{OutputResult, PassInfo, model, output};
 use interoptopus_backends::template::Context;
@@ -19,11 +19,13 @@ fn abi_name(id: crate::lang::TypeId, types: &model::common::types::all::Pass) ->
         match types.get(id).map(|ty| &ty.kind) {
             Some(TypeKind::Composite(c)) => c.fields.iter().any(|f| contains_tuple(f.ty, types)),
             Some(TypeKind::Array(a)) => contains_tuple(a.ty, types),
+            Some(TypeKind::DataEnum(e) | TypeKind::TypePattern(TypePattern::Option(_, e) | TypePattern::Result(_, _, e))) =>
+                e.variants.iter().flat_map(Variant::payloads).any(|p| contains_tuple(p.ty, types)),
             _ => false,
         }
     }
     let ty = types.get(id)?;
-    if matches!(ty.kind, TypeKind::Composite(_)) && contains_tuple(id, types) {
+    if matches!(ty.kind, TypeKind::Composite(_) | TypeKind::DataEnum(_) | TypeKind::TypePattern(TypePattern::Option(_, _) | TypePattern::Result(_, _, _))) && contains_tuple(id, types) {
         Some(format!("{}.Unmanaged", ty.name))
     } else {
         Some(ty.name.clone())
