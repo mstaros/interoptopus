@@ -727,13 +727,15 @@ public partial class ResultNestedAError
 [NativeMarshalling(typeof(MarshallerMeta))]
 public partial class ResultNestedAError : IUnion, IResult<NestedA, Error>, IDisposable
 {
+    public enum Constants : uint
+    {
+        Panic = 2,
+        Null = 3,
+    }
+
     public readonly record struct OkCase(NestedA Value);
 
     public readonly record struct ErrCase(Error Value);
-
-    public readonly record struct PanicCase();
-
-    public readonly record struct NullCase();
 
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct UnmanagedOk
@@ -773,8 +775,8 @@ public partial class ResultNestedAError : IUnion, IResult<NestedA, Error>, IDisp
             {
                 0 => new ResultNestedAError(new OkCase(_Ok._Ok.IntoManaged())),
                 1 => new ResultNestedAError(new ErrCase(_Err._Err)),
-                2 => new ResultNestedAError(new PanicCase()),
-                3 => new ResultNestedAError(new NullCase()),
+                2 => new ResultNestedAError(Constants.Panic),
+                3 => new ResultNestedAError(Constants.Null),
                 _ => throw new InteropException($"Unknown variant {_variant} for ResultNestedAError. The value did not originate from a well-formed Rust enum."),
             };
         }
@@ -825,10 +827,21 @@ public partial class ResultNestedAError : IUnion, IResult<NestedA, Error>, IDisp
     {
         0 => new OkCase(_Ok),
         1 => new ErrCase(_Err),
-        2 => new PanicCase(),
-        3 => new NullCase(),
+        2 => Constants.Panic,
+        3 => Constants.Null,
         _ => null,
     };
+
+    public bool TryGetValue(out Constants value)
+    {
+        if ((_variant is 2 or 3))
+        {
+            value = (Constants)_variant;
+            return true;
+        }
+        value = default;
+        return false;
+    }
 
     public bool TryGetValue(out OkCase value)
     {
@@ -840,20 +853,6 @@ public partial class ResultNestedAError : IUnion, IResult<NestedA, Error>, IDisp
     public bool TryGetValue(out ErrCase value)
     {
         if (_variant == 1) { value = new ErrCase(_Err); return true; }
-        value = default;
-        return false;
-    }
-
-    public bool TryGetValue(out PanicCase value)
-    {
-        if (_variant == 2) { value = new PanicCase(); return true; }
-        value = default;
-        return false;
-    }
-
-    public bool TryGetValue(out NullCase value)
-    {
-        if (_variant == 3) { value = new NullCase(); return true; }
         value = default;
         return false;
     }
@@ -886,10 +885,17 @@ public partial class ResultNestedAError : IUnion, IResult<NestedA, Error>, IDisp
     public void AsNull() { if (_variant != 3) throw ExceptionForVariant(); }
 
     // Case constructors — the union creation members the compiler reads case types from.
+    public ResultNestedAError(Constants value)
+    {
+        _variant = value switch
+        {
+            Constants.Panic => 2,
+            Constants.Null => 3,
+            _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Expected a payload-free ResultNestedAError variant."),
+        };
+    }
     public ResultNestedAError(OkCase value) { _variant = 0; _Ok = value.Value; }
     public ResultNestedAError(ErrCase value) { _variant = 1; _Err = value.Value; }
-    public ResultNestedAError(PanicCase value) { _variant = 2; }
-    public ResultNestedAError(NullCase value) { _variant = 3; }
 
 
     

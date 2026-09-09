@@ -126,10 +126,10 @@ public record class Some<T>(T value);
 public union Option<T>(None, Some<T>);
 ```
 
-So each Rust variant gets one nested `readonly record struct`. This removes two apparent
-problems that do not actually arise: unit variants get an empty case type, and two variants
-sharing a payload type (`E { A(u32), B(u32) }`) get two distinct case types rather than
-colliding.
+Each payload-bearing Rust variant gets one nested `readonly record struct`, so
+two variants sharing a payload type (`E { A(u32), B(u32) }`) retain distinct case
+identities. Unit variants use empty case records or the grouped constants enum,
+according to the rule below.
 
 **Current grouping rule (2026-09-09).** Pure unit-only enums retain the plain-enum
 or discriminant projection above. A mixed enum with at least two genuine unit
