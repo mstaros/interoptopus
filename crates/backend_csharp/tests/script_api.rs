@@ -12,7 +12,7 @@ pub struct NamingCollision {
     runtime: Tokio,
 }
 
-#[ffi(export = unique)]
+#[ffi]
 impl NamingCollision {
     pub fn create() -> Self {
         Self { runtime: Tokio::new() }
@@ -30,7 +30,7 @@ impl NamingCollision {
 #[test]
 fn rejects_collision_between_async_suffix_and_existing_method() {
     let mut inventory = RustInventory::new();
-    inventory.register(service!(NamingCollision));
+    let _ = inventory.register(service!(NamingCollision));
     let error = match RustLibrary::builder(inventory).build().process() {
         Ok(_) => panic!("colliding managed method names must be rejected"),
         Err(error) => error,

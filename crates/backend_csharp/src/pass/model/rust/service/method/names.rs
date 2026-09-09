@@ -52,10 +52,10 @@ impl Pass {
             for fn_id in service.sources.ctors.iter().chain(service.sources.methods.iter()) {
                 let Some(func) = fns.get(*fn_id) else { continue };
                 let name = managed_method_name(type_name, func, types);
-                if let Some(previous) = declared_names.insert(name.clone(), *fn_id) {
-                    if previous != *fn_id {
-                        return Err(format!("Service {type_name} has conflicting generated member {name}; rename one Rust method.").into());
-                    }
+                if let Some(previous) = declared_names.insert(name.clone(), *fn_id)
+                    && previous != *fn_id
+                {
+                    return Err(format!("Service {type_name} has conflicting generated member {name}; rename one Rust method.").into());
                 }
             }
 
