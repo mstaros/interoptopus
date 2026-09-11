@@ -82,6 +82,8 @@ A mixed Rust enum with at least two genuinely payload-free variants groups those
 variants into one nested C# enum case automatically:
 
 ```rust
+use interoptopus::ffi;
+
 #[ffi]
 pub enum Event {
     Started,
@@ -146,11 +148,14 @@ To generate `ValueTask<T>` / `ValueTask` for the library's async methods and
 constructors, configure the existing builder once:
 
 ```rust
+use interoptopus_csharp::RustLibrary;
+# let inventory = interoptopus::inventory::RustInventory::new().validate();
 RustLibrary::builder(inventory)
     .dll_name("my_lib")
     .value_tasks()
     .build()
     .process()?;
+# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 Scripts use the same `await service.MethodAsync(...)` syntax. Await a
@@ -394,6 +399,14 @@ For example, a bridge service can wrap its own asynchronous traversal:
 ```rust
 use interoptopus::ffi;
 use interoptopus::rt::Tokio;
+# struct NodeStream;
+# impl futures_core::Stream for NodeStream {
+#     type Item = u32;
+#     fn poll_next(self: std::pin::Pin<&mut Self>, _: &mut std::task::Context<'_>) -> std::task::Poll<Option<u32>> {
+#         std::task::Poll::Ready(None)
+#     }
+# }
+# fn open_node_stream() -> NodeStream { NodeStream }
 
 #[ffi(service)]
 pub struct Tree {
@@ -547,6 +560,8 @@ Positional Rust FFI structs with at least two plain value fields automatically
 use C# value tuples in the public Rust-library API:
 
 ```rust
+use interoptopus::ffi;
+
 #[ffi]
 #[derive(Clone, Copy)]
 pub struct Pair(pub u32, pub f32);

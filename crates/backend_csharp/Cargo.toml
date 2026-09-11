@@ -31,6 +31,7 @@ tempfile = { workspace = true, optional = true }
 interoptopus_backends.workspace = true
 
 [dev-dependencies]
+futures-core.workspace = true
 interoptopus = { workspace = true, features = ["macros", "serde"] }
 interoptopus_csharp = { path = ".", package = "interoptopus_csharp_mps", features = ["unstable-plugins", "unstable-rt-dotnet-download", "unstable-extensions"] }
 reference_project = { workspace = true, features = ["allocation-tracking"] }

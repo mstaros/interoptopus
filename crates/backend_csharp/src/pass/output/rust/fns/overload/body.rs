@@ -164,7 +164,12 @@ fn render(
     for (index, (arg, transform)) in overload_fn.signature.arguments.iter().zip(&transforms.args).enumerate().rev() {
         if !is_destructor && matches!(transform, ArgTransform::Service) {
             let context_name = service_context_name(index, &overload_fn.signature.arguments);
-            let indented = call_body.lines().map(|line| format!("    {line}\n")).collect::<String>();
+            let mut indented = String::new();
+            for line in call_body.lines() {
+                indented.push_str("    ");
+                indented.push_str(line);
+                indented.push('\n');
+            }
             call_body = format!(
                 "var {context_name} = {name}.__AcquireCall();\ntry\n{{\n{indented}}}\nfinally\n{{\n    {name}.__ReleaseCall();\n}}\n",
                 name = arg.name,

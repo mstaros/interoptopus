@@ -773,6 +773,7 @@ dependencies = [
 name = "interoptopus_csharp_mps"
 version = "0.18.0"
 dependencies = [
+ "futures-core",
  "insta",
  "interoptopus_backends_mps",
  "interoptopus_csharp_mps",
