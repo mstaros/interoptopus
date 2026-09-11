@@ -1,4 +1,5 @@
 use crate::patterns::result::Error;
+use crate::patterns::callback::MyCallback;
 use interoptopus::pattern::asynk::Async;
 use interoptopus::pattern::result::result_to_ffi;
 use interoptopus::rt::Tokio;
@@ -11,12 +12,34 @@ use std::sync::atomic::{AtomicU64, Ordering};
 pub struct ServiceAsyncCancel {
     runtime: Tokio,
     counter: Arc<AtomicU64>,
+    drop_callback: Option<MyCallback>,
+}
+
+impl Drop for ServiceAsyncCancel {
+    fn drop(&mut self) {
+        if let Some(callback) = &self.drop_callback {
+            callback.call(0);
+        }
+    }
 }
 
 #[ffi]
 impl ServiceAsyncCancel {
     pub fn create() -> ffi::Result<Self, Error> {
-        result_to_ffi(|| Ok(Self { runtime: Tokio::new(), counter: Arc::new(AtomicU64::new(0)) }))
+        result_to_ffi(|| Ok(Self { runtime: Tokio::new(), counter: Arc::new(AtomicU64::new(0)), drop_callback: None }))
+    }
+
+    pub fn create_with_drop_callback(callback: MyCallback) -> ffi::Result<Self, Error> {
+        result_to_ffi(|| Ok(Self { runtime: Tokio::new(), counter: Arc::new(AtomicU64::new(0)), drop_callback: Some(callback) }))
+    }
+
+    /// The callback is a deterministic gate; cancellation must acknowledge dropping this future.
+    pub async fn callback_work(this: Async<Self>, gate: MyCallback, wait_for_cancel: bool) -> ffi::Result<u64, Error> {
+        gate.call(0);
+        if wait_for_cancel {
+            std::future::pending::<()>().await;
+        }
+        ffi::Ok(this.counter.load(Ordering::Relaxed))
     }
 
     /// Runs for `iterations` steps, sleeping `step_ms` each. Returns

@@ -487,7 +487,7 @@ impl RustLibrary {
         o.fns_rust.process(&mut pass_meta, &self.output_master, &m.fns_all, &m.type_all, &m.type_managed_conversion)?;
         o.fns_guard.process(&mut pass_meta, &self.output_master, &m.fns_all, &m.type_all, &self.meta_info)?;
         o.fns_overload_simple.process(&mut pass_meta, &self.output_master, &m.fns_all, &m.type_all)?;
-        o.fns_overload_body.process(&mut pass_meta, &self.output_master, &m.fns_all, &m.type_all, &m.type_overload_all, &m.type_trampoline)?;
+        o.fns_overload_body.process(&mut pass_meta, &self.output_master, &m.fns_all, &m.type_all, &m.type_overload_all, &m.type_trampoline, &m.service_all)?;
         o.asynk.process(&mut pass_meta, &self.output_master, &m.type_all, &m.type_trampoline)?;
         o.service_body_ctors.process(&mut pass_meta, &self.output_master, &m.service_all, &m.service_ctor_shape, &m.fns_all, &m.type_all, &m.service_method_names)?;
         o.service_body_methods.process(&mut pass_meta, &self.output_master, &m.service_all, &m.fns_all, &m.type_all, &m.service_method_names, &m.type_trampoline, &m.type_managed_conversion)?;

@@ -21,17 +21,31 @@ pub struct CallbackTable {
 pub struct ServiceCallbacks {
     delegate_table: Option<CallbackTable>,
     stored_callback: Option<MyCallback>,
+    drop_callback: Option<MyCallback>,
+}
+
+impl Drop for ServiceCallbacks {
+    fn drop(&mut self) {
+        if let Some(callback) = &self.drop_callback {
+            callback.call(0);
+        }
+    }
 }
 
 // Regular implementation of methods.
 #[ffi]
 impl ServiceCallbacks {
     pub fn create() -> ffi::Result<Self, Error> {
-        ffi::Ok(Self { delegate_table: None, stored_callback: None })
+        ffi::Ok(Self { delegate_table: None, stored_callback: None, drop_callback: None })
     }
 
     pub fn create_with_callback(callback: MyCallback) -> ffi::Result<Self, Error> {
-        ffi::Ok(Self { delegate_table: None, stored_callback: Some(callback) })
+        ffi::Ok(Self { delegate_table: None, stored_callback: Some(callback), drop_callback: None })
+    }
+
+    /// Reports native destruction for managed lifetime regression tests.
+    pub fn create_with_drop_callback(callback: MyCallback) -> ffi::Result<Self, Error> {
+        ffi::Ok(Self { delegate_table: None, stored_callback: None, drop_callback: Some(callback) })
     }
 
     /// Invoke the callback stored at construction time.

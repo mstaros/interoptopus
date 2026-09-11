@@ -58,6 +58,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🐛 Bug Fixes
 
+- Generated managed service calls now retain native ownership while a call is active,
+  including service arguments and direct span methods. Async overloads retain it through
+  completion or cancellation acknowledgement. `Dispose()` rejects new calls immediately
+  and destroys the native service exactly once after acquired calls release it, without
+  waiting inside callbacks. Raw `IntPtr` imports still require caller-managed lifetimes;
+  this does not make concurrent mutable Rust methods safe.
+
 - **Generated custom-marshalled types now work in consumer-owned `LibraryImport` declarations.**
   Their nested `Unmanaged`, default `Marshaller`, and read-only `InMarshallerMeta` /
   `InMarshaller` helpers are public so the .NET source generator can reference them across

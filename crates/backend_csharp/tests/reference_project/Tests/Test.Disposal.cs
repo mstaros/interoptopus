@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using My.Company;
 using My.Company.Common;
@@ -10,6 +11,201 @@ using Interop = My.Company.Interop;
 
 public partial class TestDisposal
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task active_call_defers_native_destruction(bool span)
+    {
+        int drops = 0;
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        using var service = ServiceCallbacks.CreateWithDropCallback(_ => (uint)Interlocked.Increment(ref drops));
+        bool released = false;
+        var call = Task.Run(() =>
+        {
+            if (span)
+            {
+                using var callback = new SumDelegateReturn((_, _) =>
+                {
+                    entered.Set();
+                    released = release.Wait(TimeSpan.FromSeconds(10));
+                    return ResultVoidError.Ok;
+                });
+                service.CallbackWithSlice(callback, new[] { 1, 2 }.AsSpan());
+            }
+            else
+            {
+                service.CallbackSimple(_ =>
+                {
+                    entered.Set();
+                    released = release.Wait(TimeSpan.FromSeconds(10));
+                    return 0;
+                });
+            }
+        });
+        try
+        {
+            Assert.True(entered.Wait(TimeSpan.FromSeconds(10)));
+            await Task.Run(() => Parallel.For(0, 32, _ => service.Dispose())).WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(0, Volatile.Read(ref drops));
+            Assert.Throws<ObjectDisposedException>(() => service.InvokeStoredCallback(0));
+        }
+        finally
+        {
+            release.Set();
+            await call.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        Assert.True(released);
+        Assert.Equal(1, Volatile.Read(ref drops));
+        Assert.Throws<ObjectDisposedException>(() => service.CallbackWithSlice(null!, new[] { 1, 2 }.AsSpan()));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void callback_can_dispose_its_service_without_waiting(bool viaInterop)
+    {
+        int drops = 0;
+        int dropsInsideCallback = -1;
+        using var service = ServiceCallbacks.CreateWithDropCallback(_ => (uint)++drops);
+        // Service imports are internal; exercise the generated typed destructor directly.
+        Action<ServiceCallbacks> dispose = viaInterop
+            ? typeof(Interop).GetMethod("service_callbacks_destroy", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic,
+                null, new[] { typeof(ServiceCallbacks) }, null)!.CreateDelegate<Action<ServiceCallbacks>>()
+            : value => value.Dispose();
+        service.CallbackSimple(_ =>
+        {
+            dispose(service);
+            dispose(service);
+            dropsInsideCallback = drops;
+            return 0;
+        });
+        Assert.Equal(0, dropsInsideCallback);
+        Assert.Equal(1, drops);
+    }
+
+    [Fact]
+    public void every_service_argument_is_retained_and_failed_acquisition_rolls_back()
+    {
+        int firstDrops = 0;
+        int secondDrops = 0;
+        using var first = ServiceCallbacks.CreateWithDropCallback(_ => (uint)++firstDrops);
+        using var second = ServiceCallbacks.CreateWithDropCallback(_ => (uint)++secondDrops);
+        int dropsInsideCallback = -1;
+        Assert.Equal(42u, Interop.disposal_call_services(first, second, _ =>
+        {
+            first.Dispose();
+            second.Dispose();
+            dropsInsideCallback = firstDrops + secondDrops;
+            return 42;
+        }));
+        Assert.Equal(0, dropsInsideCallback);
+        Assert.Equal(1, firstDrops);
+        Assert.Equal(1, secondDrops);
+
+        int rollbackDrops = 0;
+        using var live = ServiceCallbacks.CreateWithDropCallback(_ => (uint)++rollbackDrops);
+        Assert.Throws<ObjectDisposedException>(() => Interop.disposal_call_services(live, second, _ => 0));
+        live.Dispose();
+        Assert.Equal(1, rollbackDrops);
+
+        int aliasDrops = 0;
+        using var aliased = ServiceCallbacks.CreateWithDropCallback(_ => (uint)++aliasDrops);
+        Interop.disposal_call_services(aliased, aliased, _ =>
+        {
+            aliased.Dispose();
+            dropsInsideCallback = aliasDrops;
+            return 0;
+        });
+        Assert.Equal(0, dropsInsideCallback);
+        Assert.Equal(1, aliasDrops);
+    }
+
+    [Fact]
+    public async Task async_start_racing_dispose_either_completes_or_rejects_before_native_entry()
+    {
+        for (int i = 0; i < 64; ++i)
+        {
+            int drops = 0;
+            using var service = ServiceAsyncCancel.CreateWithDropCallback(_ => (uint)Interlocked.Increment(ref drops));
+            var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var call = Task.Run(async () =>
+            {
+                await start.Task;
+                try { Assert.Equal(1ul, await service.LongRunningAsync(1, 1, TestContext.Current.CancellationToken)); }
+                catch (ObjectDisposedException) { }
+            }, TestContext.Current.CancellationToken);
+            var dispose = Task.Run(async () =>
+            {
+                await start.Task;
+                service.Dispose();
+            }, TestContext.Current.CancellationToken);
+            start.SetResult();
+            await Task.WhenAll(call, dispose).WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+            Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref drops) == 1, TimeSpan.FromSeconds(5)));
+            Assert.Throws<ObjectDisposedException>(() => service.Counter());
+        }
+    }
+
+    [Fact]
+    public async Task precancelled_call_does_not_enter_native_code_or_retain_the_service()
+    {
+        int drops = 0;
+        int entered = 0;
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        using var service = ServiceAsyncCancel.CreateWithDropCallback(_ => (uint)Interlocked.Increment(ref drops));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.CallbackWorkAsync(_ =>
+        {
+            Interlocked.Increment(ref entered);
+            return 0;
+        }, false, cancellation.Token));
+        service.Dispose();
+        Assert.Equal(0, Volatile.Read(ref entered));
+        Assert.Equal(1, Volatile.Read(ref drops));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task async_call_survives_disposal_until_completion_or_cancellation(bool cancel)
+    {
+        int drops = 0;
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        using var cancellation = new CancellationTokenSource();
+        using var service = ServiceAsyncCancel.CreateWithDropCallback(_ => (uint)Interlocked.Increment(ref drops));
+        bool released = false;
+        var call = service.CallbackWorkAsync(_ =>
+        {
+            entered.Set();
+            released = release.Wait(TimeSpan.FromSeconds(10));
+            return 0;
+        }, cancel, cancellation.Token);
+        try
+        {
+            Assert.True(entered.Wait(TimeSpan.FromSeconds(10)));
+            service.Dispose();
+            service.Dispose();
+            Assert.Equal(0, Volatile.Read(ref drops));
+            Assert.Throws<ObjectDisposedException>(() => service.Counter());
+            if (cancel) cancellation.Cancel();
+        }
+        finally
+        {
+            release.Set();
+            // Always stop an unfinished future, including on assertion failure.
+            if (cancel) cancellation.Cancel();
+        }
+        if (cancel)
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => call.WaitAsync(TimeSpan.FromSeconds(10)));
+        else
+            Assert.Equal(0ul, await call.WaitAsync(TimeSpan.FromSeconds(10)));
+        Assert.True(released);
+        Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref drops) == 1, TimeSpan.FromSeconds(5)));
+        Assert.Equal(1, Volatile.Read(ref drops));
+    }
+
     [Fact]
     public void disposed_service_rejects_native_calls_and_repeated_disposal()
     {

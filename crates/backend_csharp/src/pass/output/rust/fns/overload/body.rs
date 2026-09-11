@@ -40,6 +40,7 @@ impl Pass {
         types: &model::common::types::all::Pass,
         type_overloads: &model::rust::types::overload::all::Pass,
         trampoline: &model::rust::types::info::trampoline::Pass,
+        services: &model::common::service::all::Pass,
     ) -> OutputResult {
         let templates = output_master.templates();
 
@@ -56,13 +57,14 @@ impl Pass {
 
                 // Look up the original function for context (native args, rval)
                 let Some(original_fn) = fns_all.get(overload.base) else { continue };
+                let is_destructor = services.iter().any(|(_, service)| service.destructor == overload.base);
 
                 match &overload.kind {
                     OverloadKind::Body(transforms) => {
-                        body.push(render(original_fn, function, transforms, types, type_overloads, trampoline, overload_id, templates)?);
+                        body.push(render(original_fn, function, transforms, types, type_overloads, trampoline, overload_id, templates, is_destructor)?);
                     }
                     OverloadKind::Async(transforms) => {
-                        asynk.push(render(original_fn, function, transforms, types, type_overloads, trampoline, overload_id, templates)?);
+                        asynk.push(render(original_fn, function, transforms, types, type_overloads, trampoline, overload_id, templates, is_destructor)?);
                     }
                     OverloadKind::Simple => {}
                 }
@@ -97,6 +99,7 @@ fn render(
     trampoline: &model::rust::types::info::trampoline::Pass,
     overload_id: FunctionId,
     templates: &TemplateEngine,
+    is_destructor: bool,
 ) -> Result<String, crate::Error> {
     let name = &original_fn.name;
     let is_async = matches!(transforms.rval, RvalTransform::AsyncTask(_));
@@ -150,7 +153,34 @@ fn render(
         context.insert("is_task_void", &is_task_void);
     }
 
+    // A typed destructor must close the managed owner, never destroy a borrowed pointer.
+    let mut call_body = if is_destructor {
+        format!("{}.Dispose();", overload_fn.signature.arguments[0].name)
+    } else {
+        templates.render("rust/fns/overload/body_call.cs", &context)?
+    };
+    // Nest acquisitions so a later argument failure releases every earlier service.
+    // For async calls the scope includes native acknowledgement (also on cancellation).
+    for (index, (arg, transform)) in overload_fn.signature.arguments.iter().zip(&transforms.args).enumerate().rev() {
+        if !is_destructor && matches!(transform, ArgTransform::Service) {
+            let context_name = service_context_name(index, &overload_fn.signature.arguments);
+            let indented = call_body.lines().map(|line| format!("    {line}\n")).collect::<String>();
+            call_body = format!(
+                "var {context_name} = {name}.__AcquireCall();\ntry\n{{\n{indented}}}\nfinally\n{{\n    {name}.__ReleaseCall();\n}}\n",
+                name = arg.name,
+            );
+        }
+    }
+    context.insert("call_body", call_body.trim_end());
     templates.render("rust/fns/overload/body.cs", &context).map_err(Into::into)
+}
+
+fn service_context_name(index: usize, args: &[Argument]) -> String {
+    let mut name = format!("__service_context_{index}");
+    while args.iter().any(|arg| arg.name.trim_start_matches('@') == name) {
+        name.push('_');
+    }
+    name
 }
 
 fn resolve_args(
@@ -247,7 +277,8 @@ fn build_native_args(
     args.iter()
         .zip(overload_args)
         .zip(transforms)
-        .map(|((arg, overload_arg), transform)| {
+        .enumerate()
+        .map(|(index, ((arg, overload_arg), transform))| {
             let forwarded = match transform {
                 ArgTransform::WrapDelegate => format!("{}_wrapped", arg.name),
                 ArgTransform::Ref => {
@@ -262,7 +293,7 @@ fn build_native_args(
                     };
                     format!("{modifier} {}", arg.name)
                 }
-                ArgTransform::Service => format!("{}.Context", arg.name),
+                ArgTransform::Service => service_context_name(index, overload_args),
                 ArgTransform::PassThrough => arg.name.clone(),
                 ArgTransform::CancellationToken => unreachable!("CancellationToken has no native counterpart"),
             };

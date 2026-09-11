@@ -60,6 +60,7 @@ pub fn inventory() -> RustInventory {
     let _ = inventory
         // Functions
         .register(function!(functions::disposal::disposal_take_strings))
+        .register(function!(functions::disposal::disposal_call_services))
         .register(function!(functions::disposal::disposal_take_callback))
         .register(function!(functions::disposal::disposal_fields_invoke))
         .register(function!(functions::disposal::disposal_callbacks_invoke))

@@ -4,6 +4,12 @@ use crate::types::enums::EnumMultiOwned;
 use interoptopus::ffi;
 use interoptopus::wire::Wire;
 use std::collections::HashMap;
+use crate::services::callback::ServiceCallbacks;
+
+#[ffi]
+pub fn disposal_call_services(_first: &ServiceCallbacks, _second: &ServiceCallbacks, callback: MyCallback) -> u32 {
+    callback.call(0)
+}
 
 #[ffi]
 pub fn disposal_take_strings(_first: ffi::String, _second: ffi::String) {}
