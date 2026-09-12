@@ -178,11 +178,8 @@ pub fn inventory() -> RustInventory {
         .register(function!(functions::primitive::primitive_u8))
         .register(function!(functions::primitive::primitive_void))
         .register(function!(functions::primitive::primitive_void2))
-        .register(function!(functions::ptrs::ptr1))
-        .register(function!(functions::ptrs::ptr2))
-        .register(function!(functions::ptrs::ptr3))
-        .register(function!(functions::refs::ref1))
-        .register(function!(functions::refs::ref2))
+        // Raw-pointer result fixtures remain available for generator rejection tests,
+        // but are excluded from the typed inventory and its native API guard hash.
         .register(function!(functions::refs::ref3))
         .register(function!(functions::refs::ref4))
         .register(function!(functions::refs::ref5))
@@ -234,8 +231,6 @@ pub fn inventory() -> RustInventory {
         .register(function!(patterns::option::pattern_option_string_borrow))
         .register(function!(patterns::primitive::pattern_ffi_bool))
         .register(function!(patterns::primitive::pattern_ffi_cchar))
-        .register(function!(patterns::primitive::pattern_ffi_cchar_const_pointer))
-        .register(function!(patterns::primitive::pattern_ffi_cchar_mut_pointer))
         .register(function!(patterns::result::pattern_result_1))
         .register(function!(patterns::result::pattern_result_2))
         .register(function!(patterns::result::pattern_result_3))

@@ -16,14 +16,13 @@ pub fn enums_2(x: EnumPayload) -> EnumPayload {
 }
 
 #[ffi]
-pub fn enums_3(x: &mut EnumPayload) -> &EnumPayload {
+pub fn enums_3(x: &mut EnumPayload) {
     match x {
         EnumPayload::A => (),
         EnumPayload::B(v) => *x = EnumPayload::B(Vec3f32 { x: v.x * 2.0, y: v.y * 2.0, z: v.z * 2.0 }),
         EnumPayload::C(v) => *x = EnumPayload::C(*v * 2),
     }
-
-    x
+    // The mutation is returned through the input; no borrowed pointer escapes the call.
 }
 
 #[ffi]

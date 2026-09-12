@@ -47,10 +47,17 @@ fn span_overloads_do_not_return_borrowed_memory() {
     let _ = inventory.register(function!(sum_slice));
     let _ = inventory.register(function!(borrow_slice));
     let _ = inventory.register(function!(borrow_attribute));
-    let _ = inventory.register(function!(borrow_pointer));
     let output = interoptopus_csharp::RustLibrary::builder(inventory.validate()).build().process().unwrap().to_string();
     assert!(output.contains("__span_sum_slice"));
     assert!(!output.contains("__span_borrow_slice"));
     assert!(!output.contains("__span_borrow_attribute"));
-    assert!(!output.contains("__span_borrow_pointer"));
+
+}
+
+#[test]
+fn raw_pointer_result_is_rejected_before_span_emission() {
+    let inventory = interoptopus::inventory::RustInventory::new().register(function!(borrow_pointer)).validate();
+    let error = interoptopus_csharp::RustLibrary::builder(inventory).build().process().err().expect("raw pointer result must be rejected");
+    assert!(error.to_string().contains("raw pointer result"), "{error}");
+    assert!(error.to_string().contains("borrow_pointer"), "{error}");
 }

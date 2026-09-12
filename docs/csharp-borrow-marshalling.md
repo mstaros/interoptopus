@@ -126,7 +126,7 @@ Required C# execution checks:
 - borrowing a default struct-backed union reaches the `AsUnmanaged` guard and throws the
   expected `InvalidOperationException`; a constructed value does not;
 - exercise a class-backed custom-marshalled shared borrow separately;
-- preserve the `ref1` returned-pointer test on the direct path.
+- reject returned Rust references such as `ref1` before emitting a raw-pointer result.
 
 Validation runs `cargo test -p interoptopus_csharp`; the guarded result must include the Rust
 test step and the C# suite step.
@@ -194,5 +194,18 @@ after a caught panic, preventing managed rollback from freeing an already consum
 
 Regression coverage includes blocked native calls, callback reentry, competing transfers,
 borrowed nested fields, service disposal/finalization, and panics after an owned string is freed.
-Raw imports, external native allocation validity, and arbitrary pointer aliasing remain outside
+Raw-pointer input imports, external native allocation validity, and arbitrary pointer aliasing remain outside
 the generated ownership contract.
+
+## Typed result requirement
+
+C# generation rejects raw-pointer results before emitting bindings. This includes Rust
+references whose ABI return is a pointer, pointers nested in typed containers or fields,
+async completion values, and callback return values. The error names the API and the path
+to the pointer and recommends an owned typed result. A typed pointer target alone does
+not establish ownership: SafeHandle cannot infer an arbitrary pointer's lifetime or destructor.
+
+Only a registered service constructor's own handle is exempt, including its successful
+Result payload. Its error payload and ordinary service methods are still checked. The
+internal wire allocator is also retained because WireBuffer supplies its ownership contract.
+Typed string/slice/vector patterns retain their existing marshalling rules.

@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ⚠️ Breaking
 
+- C# generation now fails for raw-pointer results, including returned Rust references,
+  pointers nested in records, enums, containers, async results, and callback results.
+  Diagnostics identify the API and result path and explain why SafeHandle cannot infer
+  ownership. Return owned typed data or a registered service constructor result instead.
+  Constructor handles and internal wire allocation remain supported by their typed owners.
+
 - Typed service calls copy read-only primitive slice results while their call guards are held,
   including successful Result payloads. Top-level C strings already become managed strings.
   Mutable slices, raw pointers, and nested borrowed service results that cannot be copied are

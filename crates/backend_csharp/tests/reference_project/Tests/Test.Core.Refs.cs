@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using My.Company;
 using My.Company.Common;
 using Xunit;
@@ -9,18 +8,15 @@ public class TestRefs
     [Fact]
     public void ref1()
     {
-        var x = 123L;
-        var rval = Interop.ref1(ref x);
-        Assert.Equal(123L, Marshal.ReadInt64(rval));
+        // A returned Rust reference has no owner in C# and must not become an IntPtr result.
+        Assert.Null(typeof(Interop).GetMethod("ref1"));
     }
 
     [Fact]
     public void ref2()
     {
-        var x = 123L;
-        var rval = Interop.ref2(ref x);
-        Assert.Equal(-123L, Marshal.ReadInt64(rval));
-        Assert.Equal(-123L, x);
+        // Mutable returned references are rejected for the same lifetime reason.
+        Assert.Null(typeof(Interop).GetMethod("ref2"));
     }
 
     [Fact]

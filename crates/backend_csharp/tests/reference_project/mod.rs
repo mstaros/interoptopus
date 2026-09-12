@@ -84,7 +84,9 @@ fn interop() -> Result<(), Box<dyn std::error::Error>> {
         "public static partial ResultVoidError pattern_string_6a([MarshalUsing(typeof(UseString.InMarshallerMeta))] in UseString _0);"
     ));
     assert!(interop.contains("public static partial ResultVoidError pattern_string_6b(ref UseString y);"));
-    assert!(interop.contains("public static partial IntPtr ref1(ref long x);"));
+    // Borrowed Rust references would escape as raw pointers and are excluded from the typed fixture.
+    assert!(!interop.contains(" IntPtr ref1("));
+    assert!(!interop.contains(" IntPtr ref2("));
     assert!(interop.contains("[MarshalUsing(typeof(ResultUintError.InMarshallerMeta))] in ResultUintError _0"));
     assert!(interop.contains("[MarshalUsing(typeof(OptionUtf8String.InMarshallerMeta))] in OptionUtf8String _0"));
     assert!(interop.contains("[CustomMarshaller(typeof(UseString), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]"));

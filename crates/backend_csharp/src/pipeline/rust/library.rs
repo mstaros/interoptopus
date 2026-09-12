@@ -456,6 +456,7 @@ impl RustLibrary {
 
         // Output passes
         self.output_master.process(&mut pass_meta, &m.type_all, &m.fns_all)?;
+        output::rust::fns::results::validate(&self.output_master, &m.fns_all, &m.type_all, &m.service_all, &m.wire_helpers, &m.id_maps)?;
         o.unmanaged_conversion.process(&mut pass_meta, &m.type_managed_conversion, &m.type_all)?;
         o.unmanaged_names.process(&mut pass_meta, &m.type_all, &m.type_managed_conversion)?;
         o.enum_ty.process(&mut pass_meta, &self.output_master, &m.type_all, &m.type_struct_class, &m.type_disposable, &m.type_projection, OperationMode::Rust)?;
