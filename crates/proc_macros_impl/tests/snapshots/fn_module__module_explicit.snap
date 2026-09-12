@@ -1,9 +1,21 @@
 ---
 source: crates/proc_macros_impl/tests/fn_module.rs
+assertion_line: 13
 expression: expand_ffi!(item)
 ---
 #[unsafe(export_name = "foo")]
-extern "C-unwind" fn foo() {}
+extern "C" fn foo() {
+    match ::std::panic::catch_unwind(
+        ::std::panic::AssertUnwindSafe(move || -> () {
+            let () = ();
+        }),
+    ) {
+        ::std::result::Result::Ok(value) => value,
+        ::std::result::Result::Err(_) => {
+            <() as ::interoptopus::lang::types::TypeInfo>::on_ffi_panic()
+        }
+    }
+}
 #[allow(non_camel_case_types)]
 struct foo {}
 unsafe impl ::interoptopus::lang::function::FunctionInfo for foo {

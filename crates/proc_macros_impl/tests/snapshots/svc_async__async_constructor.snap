@@ -140,6 +140,7 @@ unsafe impl ::interoptopus::lang::service::ServiceInfo for Service {
         )
     }
     fn register(inventory: &mut impl ::interoptopus::inventory::Inventory) {
+        ::interoptopus::lang::types::assert_send_sync::<Service>();
         <Service as ::interoptopus::lang::types::TypeInfo>::register(inventory);
         <service_create as ::interoptopus::lang::function::FunctionInfo>::register(
             inventory,

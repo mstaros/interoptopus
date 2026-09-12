@@ -1,9 +1,21 @@
 ---
 source: crates/proc_macros_impl/tests/fn_async.rs
+assertion_line: 14
 expression: expand_ffi!(item)
 ---
 #[unsafe(export_name = "async_foo")]
-extern "C-unwind" fn async_foo() {}
+extern "C" fn async_foo() {
+    match ::std::panic::catch_unwind(
+        ::std::panic::AssertUnwindSafe(move || -> () {
+            let () = ();
+        }),
+    ) {
+        ::std::result::Result::Ok(value) => value,
+        ::std::result::Result::Err(_) => {
+            <() as ::interoptopus::lang::types::TypeInfo>::on_ffi_panic()
+        }
+    }
+}
 #[allow(non_camel_case_types)]
 struct async_foo {}
 unsafe impl ::interoptopus::lang::function::FunctionInfo for async_foo {
