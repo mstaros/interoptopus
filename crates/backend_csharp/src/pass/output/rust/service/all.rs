@@ -64,6 +64,11 @@ impl Pass {
                     );
                 }
 
+                eprintln!(
+                    "warning: Interoptopus C# service `{name}` uses SafeHandle finalization. Native destructor `{}` must be safe on the finalizer thread or the thread releasing the last call, and must not panic or throw. These requirements are not checked by the generator.",
+                    dtor_fn.name
+                );
+
                 let mut context = Context::new();
                 context.insert("name", name);
                 context.insert("dtor", &dtor_fn.name);

@@ -11,6 +11,33 @@ using Interop = My.Company.Interop;
 
 public partial class TestDisposal
 {
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static WeakReference CreateCollectibleService(bool asyncService, bool dispose, Func<uint, uint> onDrop)
+    {
+        IDisposable service = asyncService
+            ? ServiceAsyncCancel.CreateWithDropCallback(onDrop)
+            : ServiceCallbacks.CreateWithDropCallback(onDrop);
+        if (dispose) service.Dispose();
+        return new WeakReference(service);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void service_ownership_is_released_once_with_or_without_dispose(bool asyncService, bool dispose)
+    {
+        int drops = 0;
+        var service = CreateCollectibleService(asyncService, dispose, _ => (uint)Interlocked.Increment(ref drops));
+        if (dispose) Assert.Equal(1, Volatile.Read(ref drops));
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        Assert.False(service.IsAlive);
+        Assert.Equal(1, Volatile.Read(ref drops));
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

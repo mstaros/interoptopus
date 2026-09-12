@@ -1,18 +1,42 @@
-{% if has_mutable_calls -%}
 /// <remarks>
+/// Native ownership is released by SafeHandle if disposal is omitted. Native destruction must be
+/// safe on the finalizer thread or the thread releasing the last call, and must not panic or throw.
+{% if has_mutable_calls -%}
 /// Interlocked guards reject overlapping calls involving mutable access with InvalidOperationException,
 /// including callback reentry. Shared calls may overlap subject to the Rust threading contract.
 /// Guards cover call duration only. Raw pointer calls and returned borrows require caller coordination.
-/// </remarks>
 {% endif -%}
+/// </remarks>
 public partial class {{ name }} : IDisposable
 {
-    private IntPtr _context;
+    // Allocate the owner before a native constructor can return a resource.
+    private readonly __ServiceHandle __handle = new();
     private readonly object __lifetimeGate = new();
-    private int __activeCalls;
     private bool __disposeRequested;{% if has_mutable_calls %}
     // -1 is an exclusive borrow; nonnegative values count shared borrows.
     private int __borrowState;{% endif %}
+
+    private sealed class __ServiceHandle : SafeHandle
+    {
+        internal __ServiceHandle() : base(IntPtr.Zero, true) {}
+        public override bool IsInvalid => handle == IntPtr.Zero;
+        internal void Initialize(IntPtr context) => SetHandle(context);
+
+        protected override bool ReleaseHandle()
+        {
+            try
+            {
+                Interop.{{ dtor }}(handle);
+                return true;
+            }
+            catch
+            {
+                // Cleanup must not let managed interop errors escape the finalizer.
+                // A native panic cannot be contained here; the destructor must not panic.
+                return false;
+            }
+        }
+    }
 
     private {{ name }}() {}
 
@@ -29,35 +53,28 @@ public partial class {{ name }} : IDisposable
     {{ _fns_decorators_all | indent }}
     public void Dispose()
     {
-        IntPtr context = IntPtr.Zero;
         lock (__lifetimeGate)
         {
             if (__disposeRequested) return;
             __disposeRequested = true;
-            if (__activeCalls == 0)
-            {
-                context = _context;
-                _context = IntPtr.Zero;
-            }
         }
         // Never wait for calls or run native destruction while holding the gate:
         // a native callback can dispose this service from inside an active call.
-        if (context != IntPtr.Zero) Interop.{{ dtor }}(context);
+        __handle.Dispose();
     }
 
     internal IntPtr __AcquireCall({% if has_mutable_calls %}bool exclusive = false{% endif %})
     {
-{% if has_mutable_calls %}        IntPtr context;
-{% endif %}        lock (__lifetimeGate)
+        bool acquired = false;
+        try
         {
-            ObjectDisposedException.ThrowIf(__disposeRequested || _context == IntPtr.Zero, this);
-            __activeCalls = checked(__activeCalls + 1);
-{% if has_mutable_calls %}            context = _context;
-{% else %}            return _context;
-{% endif %}        }
-{% if has_mutable_calls %}        try
-        {
-            if (exclusive)
+            lock (__lifetimeGate)
+            {
+                // SafeHandle may accept more references after Dispose while calls still hold it.
+                ObjectDisposedException.ThrowIf(__disposeRequested || __handle.IsInvalid, this);
+                __handle.DangerousAddRef(ref acquired);
+            }
+{% if has_mutable_calls %}            if (exclusive)
             {
                 if (Interlocked.CompareExchange(ref __borrowState, -1, 0) != 0)
                     throw new InvalidOperationException("Cannot borrow {{ name }} exclusively while another call is active.");
@@ -74,36 +91,20 @@ public partial class {{ name }} : IDisposable
                 // Retry only a racing state change; never wait for a borrow to finish.
                 while (Interlocked.CompareExchange(ref __borrowState, checked(readers + 1), readers) != readers);
             }
-            return context;
+{% endif %}            return __handle.DangerousGetHandle();
         }
         catch
         {
             // Failed access never owns a borrow, but must release its lifetime reservation.
-            __ReleaseLifetime();
+            if (acquired) __handle.DangerousRelease();
             throw;
         }
-{% endif %}    }
-
-{% if has_mutable_calls %}    internal void __ReleaseCall(bool exclusive = false)
-    {
-        if (exclusive) Interlocked.Exchange(ref __borrowState, 0);
-        else Interlocked.Decrement(ref __borrowState);
-        __ReleaseLifetime();
     }
 
-    private void __ReleaseLifetime()
-{% else %}    internal void __ReleaseCall()
-{% endif %}    {
-        IntPtr context = IntPtr.Zero;
-        lock (__lifetimeGate)
-        {
-            --__activeCalls;
-            if (__disposeRequested && __activeCalls == 0)
-            {
-                context = _context;
-                _context = IntPtr.Zero;
-            }
-        }
-        if (context != IntPtr.Zero) Interop.{{ dtor }}(context);
+    internal void __ReleaseCall({% if has_mutable_calls %}bool exclusive = false{% endif %})
+    {
+{% if has_mutable_calls %}        if (exclusive) Interlocked.Exchange(ref __borrowState, 0);
+        else Interlocked.Decrement(ref __borrowState);
+{% endif %}        __handle.DangerousRelease();
     }
 }

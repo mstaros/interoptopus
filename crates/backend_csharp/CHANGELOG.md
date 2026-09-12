@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ⚠️ Breaking
 
+- Generated service wrappers now own native resources through a private, service-specific
+  `SafeHandle`, including cleanup when `Dispose()` is omitted. Native destruction must be safe
+  on the finalizer thread or the thread releasing the last call, and must not panic or throw;
+  generation warns about this requirement without claiming to verify it. `ReleaseHandle`
+  contains managed interop exceptions; cleanup failures no longer propagate from `Dispose()`.
+  Call scopes retain the handle through native completion or cancellation acknowledgement.
+  Interlocked borrow guards and immediate rejection of calls after disposal are preserved.
+  Arbitrary raw pointers and returned borrows do not gain ownership or lifetime guarantees.
+
 - Generated C# service wrappers use Interlocked borrow guards when exported signatures
   contain mutable service access. Overlapping mutable/mutable or mutable/shared calls
   now throw `InvalidOperationException` before native entry, including callback reentry,

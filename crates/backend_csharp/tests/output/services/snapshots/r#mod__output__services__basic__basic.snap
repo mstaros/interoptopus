@@ -402,12 +402,38 @@ public enum Error : byte
 
 
 
+/// <remarks>
+/// Native ownership is released by SafeHandle if disposal is omitted. Native destruction must be
+/// safe on the finalizer thread or the thread releasing the last call, and must not panic or throw.
+/// </remarks>
 public partial class Counter : IDisposable
 {
-    private IntPtr _context;
+    // Allocate the owner before a native constructor can return a resource.
+    private readonly __ServiceHandle __handle = new();
     private readonly object __lifetimeGate = new();
-    private int __activeCalls;
     private bool __disposeRequested;
+
+    private sealed class __ServiceHandle : SafeHandle
+    {
+        internal __ServiceHandle() : base(IntPtr.Zero, true) {}
+        public override bool IsInvalid => handle == IntPtr.Zero;
+        internal void Initialize(IntPtr context) => SetHandle(context);
+
+        protected override bool ReleaseHandle()
+        {
+            try
+            {
+                Interop.counter_destroy_14679(handle);
+                return true;
+            }
+            catch
+            {
+                // Cleanup must not let managed interop errors escape the finalizer.
+                // A native panic cannot be contained here; the destructor must not panic.
+                return false;
+            }
+        }
+    }
 
     private Counter() {}
 
@@ -417,7 +443,7 @@ public partial class Counter : IDisposable
     public static Counter Create14679()
     {
         var self = new Counter();
-        self._context = Interop.counter_create_14679().AsOk();
+        self.__handle.Initialize(Interop.counter_create_14679().AsOk());
         return self;
     }
 
@@ -437,44 +463,39 @@ public partial class Counter : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        IntPtr context = IntPtr.Zero;
         lock (__lifetimeGate)
         {
             if (__disposeRequested) return;
             __disposeRequested = true;
-            if (__activeCalls == 0)
-            {
-                context = _context;
-                _context = IntPtr.Zero;
-            }
         }
         // Never wait for calls or run native destruction while holding the gate:
         // a native callback can dispose this service from inside an active call.
-        if (context != IntPtr.Zero) Interop.counter_destroy_14679(context);
+        __handle.Dispose();
     }
 
     internal IntPtr __AcquireCall()
     {
-        lock (__lifetimeGate)
+        bool acquired = false;
+        try
         {
-            ObjectDisposedException.ThrowIf(__disposeRequested || _context == IntPtr.Zero, this);
-            __activeCalls = checked(__activeCalls + 1);
-            return _context;
+            lock (__lifetimeGate)
+            {
+                // SafeHandle may accept more references after Dispose while calls still hold it.
+                ObjectDisposedException.ThrowIf(__disposeRequested || __handle.IsInvalid, this);
+                __handle.DangerousAddRef(ref acquired);
+            }
+            return __handle.DangerousGetHandle();
+        }
+        catch
+        {
+            // Failed access never owns a borrow, but must release its lifetime reservation.
+            if (acquired) __handle.DangerousRelease();
+            throw;
         }
     }
 
     internal void __ReleaseCall()
     {
-        IntPtr context = IntPtr.Zero;
-        lock (__lifetimeGate)
-        {
-            --__activeCalls;
-            if (__disposeRequested && __activeCalls == 0)
-            {
-                context = _context;
-                _context = IntPtr.Zero;
-            }
-        }
-        if (context != IntPtr.Zero) Interop.counter_destroy_14679(context);
+        __handle.DangerousRelease();
     }
 }
