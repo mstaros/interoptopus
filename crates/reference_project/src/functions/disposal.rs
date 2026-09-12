@@ -116,3 +116,6 @@ pub fn disposal_borrow_owned_fields(input: crate::types::vec::UseSliceAndVec, ca
     callback.call(input.s1.len() as u32);
     input.s1.len() as u32
 }
+
+#[ffi]
+pub fn disposal_empty_callback() -> MyCallback { MyCallback::default() }

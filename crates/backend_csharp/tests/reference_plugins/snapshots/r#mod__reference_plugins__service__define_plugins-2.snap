@@ -339,7 +339,7 @@ internal partial struct WireBuffer
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal unsafe Unmanaged IntoUnmanaged()
+    internal unsafe Unmanaged IntoUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
         var _unmanaged = new Unmanaged();
         _unmanaged.data = data;
@@ -351,7 +351,7 @@ internal partial struct WireBuffer
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal unsafe Unmanaged AsUnmanaged()
+    internal unsafe Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
         var _unmanaged = new Unmanaged();
         _unmanaged.data = data;
@@ -468,6 +468,38 @@ public partial class WireOfHashMapStringString : IDisposable
 {
     internal WireBuffer Buffer;
 
+    // Positive values are active borrows; -1 means disposed or transferred.
+    private int __borrowState;
+
+    private void __AcquireBorrow()
+    {
+        while (true)
+        {
+            var state = global::System.Threading.Volatile.Read(ref __borrowState);
+            ObjectDisposedException.ThrowIf(state < 0, this);
+            if (global::System.Threading.Interlocked.CompareExchange(ref __borrowState, checked(state + 1), state) == state) return;
+        }
+    }
+
+    private void __ReleaseBorrow() => global::System.Threading.Interlocked.Decrement(ref __borrowState);
+
+    private void __Borrow(global::System.Collections.Generic.List<Action> releases)
+    {
+        ArgumentNullException.ThrowIfNull(releases);
+        __AcquireBorrow();
+        try { releases.Add(__ReleaseBorrow); }
+        catch { __ReleaseBorrow(); throw; }
+    }
+
+    private bool __Close(bool disposing)
+    {
+        var state = global::System.Threading.Interlocked.CompareExchange(ref __borrowState, -1, 0);
+        if (state > 0) throw new InvalidOperationException("Cannot dispose or transfer this value while it is borrowed by a call or slice.");
+        if (state < 0 && !disposing) throw new ObjectDisposedException(GetType().Name);
+        return state == 0;
+    }
+
+
     /// Serializes <paramref name="value"/> into a new wire buffer.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static WireOfHashMapStringString From(Dictionary<string, string> value)
@@ -500,21 +532,26 @@ public partial class WireOfHashMapStringString : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public Dictionary<string, string> Unwire()
     {
-        using var reader = Buffer.Reader();
-        Dictionary<string, string> result = default;
+        __AcquireBorrow();
+        try
         {
-            var _count0 = reader.ReadUInt32();
-            result = new Dictionary<string, string>((int)_count0);
-            for (uint _i0 = 0; _i0 < _count0; _i0++)
+            using var reader = Buffer.Reader();
+            Dictionary<string, string> result = default;
             {
-                string _key0 = default;
-                { var _len = reader.ReadUInt32(); _key0 = _len > 0 ? System.Text.Encoding.UTF8.GetString(reader.ReadBytes((int)_len)) : ""; }
-                string _val0 = default;
-                { var _len = reader.ReadUInt32(); _val0 = _len > 0 ? System.Text.Encoding.UTF8.GetString(reader.ReadBytes((int)_len)) : ""; }
-                result[_key0] = _val0;
+                var _count0 = reader.ReadUInt32();
+                result = new Dictionary<string, string>((int)_count0);
+                for (uint _i0 = 0; _i0 < _count0; _i0++)
+                {
+                    string _key0 = default;
+                    { var _len = reader.ReadUInt32(); _key0 = _len > 0 ? System.Text.Encoding.UTF8.GetString(reader.ReadBytes((int)_len)) : ""; }
+                    string _val0 = default;
+                    { var _len = reader.ReadUInt32(); _val0 = _len > 0 ? System.Text.Encoding.UTF8.GetString(reader.ReadBytes((int)_len)) : ""; }
+                    result[_key0] = _val0;
+                }
             }
+            return result;
         }
-        return result;
+        finally { __ReleaseBorrow(); }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -536,14 +573,15 @@ public partial class WireOfHashMapStringString : IDisposable
     /// Frees the underlying wire buffer.
     public void Dispose()
     {
-        Buffer.Dispose();
+        if (__Close(disposing: true)) Buffer.Dispose();
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged IntoUnmanaged()
+    internal Unmanaged IntoUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
+        __Close(disposing: false);
         var rval = new Unmanaged { Buffer = Buffer };
         Buffer = default;
         return rval;
@@ -552,8 +590,9 @@ public partial class WireOfHashMapStringString : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged AsUnmanaged()
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
     {
+        __Borrow(releases);
         var rval = new Unmanaged { Buffer = Buffer };
         return rval;
     }
@@ -583,15 +622,21 @@ public partial class WireOfHashMapStringString : IDisposable
     public ref struct InMarshaller
     {
         private WireOfHashMapStringString _managed;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void FromManaged(WireOfHashMapStringString managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
     public ref struct Marshaller
@@ -962,7 +1007,7 @@ public partial class AsyncBasic : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged IntoUnmanaged()
+    internal Unmanaged IntoUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
         var h = GCHandle.Alloc(this);
         return new Unmanaged { _handle = GCHandle.ToIntPtr(h) };
@@ -971,6 +1016,14 @@ public partial class AsyncBasic : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
+    {
+        var h = GCHandle.Alloc(this);
+        try { releases.Add(() => h.Free()); }
+        catch { h.Free(); throw; }
+        return new Unmanaged { _handle = GCHandle.ToIntPtr(h) };
+    }
+
     internal Unmanaged AsUnmanaged()
     {
         var h = GCHandle.Alloc(this);
@@ -1067,13 +1120,13 @@ public partial class ResultWireOfHashMapStringStringError : IUnion, IResult<Wire
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged IntoUnmanaged()
+    internal Unmanaged IntoUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
         var _unmanaged = new Unmanaged();
         try
         {
             _unmanaged._variant = _variant;
-            if (_variant == 0) _unmanaged._Ok._Ok = _Ok.IntoUnmanaged();
+            if (_variant == 0) _unmanaged._Ok._Ok = _Ok.IntoUnmanaged(releases);
             if (_variant == 1) _unmanaged._Err._Err = _Err;
             return _unmanaged;
         }
@@ -1088,11 +1141,11 @@ public partial class ResultWireOfHashMapStringStringError : IUnion, IResult<Wire
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged AsUnmanaged()
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
     {
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
-        if (_variant == 0) _unmanaged._Ok._Ok = _Ok.AsUnmanaged();
+        if (_variant == 0) _unmanaged._Ok._Ok = _Ok.AsUnmanaged(releases);
         if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
@@ -1249,21 +1302,28 @@ public partial class ResultWireOfHashMapStringStringError : IUnion, IResult<Wire
     public ref struct InMarshaller
     {
         private ResultWireOfHashMapStringStringError _managed;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void FromManaged(ResultWireOfHashMapStringStringError managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultWireOfHashMapStringStringError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultWireOfHashMapStringStringError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
     public ref struct Marshaller
     {
         private ResultWireOfHashMapStringStringError _managed;
         private Unmanaged _unmanaged;
+        private global::System.Collections.Generic.List<Action> _releases;
         private bool _ownsUnmanaged;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -1279,7 +1339,7 @@ public partial class ResultWireOfHashMapStringStringError : IUnion, IResult<Wire
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultWireOfHashMapStringStringError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); _unmanaged = _managed.IntoUnmanaged(); _ownsUnmanaged = true; return _unmanaged; }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultWireOfHashMapStringStringError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); _unmanaged = _managed.IntoUnmanaged(_releases ??= new()); _ownsUnmanaged = true; return _unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultWireOfHashMapStringStringError ToManaged() { return _unmanaged.IntoManaged(); }
@@ -1289,9 +1349,18 @@ public partial class ResultWireOfHashMapStringStringError : IUnion, IResult<Wire
 
         public void Free()
         {
-            if (!_ownsUnmanaged) return;
-            _ownsUnmanaged = false;
-            _unmanaged.Free();
+            try
+            {
+                if (_ownsUnmanaged) { _ownsUnmanaged = false; _unmanaged.Free(); }
+            }
+            finally
+            {
+                if (_releases != null)
+                {
+                    for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+                    _releases.Clear();
+                }
+            }
         }
     }
 

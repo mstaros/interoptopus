@@ -8,6 +8,20 @@ using Interop = My.Company.Interop;
 
 public class TestResourceConcurrency
 {
+    [Fact]
+    public void empty_native_callback_rejects_call_and_transfer_without_entering_native_code()
+    {
+        using var empty = Interop.disposal_empty_callback();
+        using var text = "live".Utf8();
+        using var vector = Interop.pattern_vec_1();
+        Assert.Throws<ObjectDisposedException>(() => empty.Call(0));
+        Assert.Throws<ObjectDisposedException>(() => Interop.disposal_borrow_resources(in text, in vector, in empty));
+        Assert.Throws<ObjectDisposedException>(() => Interop.pattern_callback_1(empty, 0));
+        text.Dispose();
+        vector.Dispose();
+        Parallel.For(0, 16, _ => empty.Dispose());
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

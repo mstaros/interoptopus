@@ -24,7 +24,10 @@ public partial class Utf8String : IDisposable
         {
             var state = global::System.Threading.Volatile.Read(ref __borrowState);
             ObjectDisposedException.ThrowIf(state < 0, this);
-            if (global::System.Threading.Interlocked.CompareExchange(ref __borrowState, checked(state + 1), state) == state) return;
+            if (global::System.Threading.Interlocked.CompareExchange(ref __borrowState, checked(state + 1), state) != state) continue;
+            if (_ptr != IntPtr.Zero) return;
+            __ReleaseBorrow();
+            throw new ObjectDisposedException(GetType().Name);
         }
     }
 
@@ -42,7 +45,7 @@ public partial class Utf8String : IDisposable
     {
         var state = global::System.Threading.Interlocked.CompareExchange(ref __borrowState, -1, 0);
         if (state > 0) throw new InvalidOperationException("Cannot dispose or transfer this value while it is borrowed by a call or slice.");
-        if (state < 0 && !disposing) throw new ObjectDisposedException(GetType().Name);
+        if (!disposing && (state < 0 || _ptr == IntPtr.Zero)) throw new ObjectDisposedException(GetType().Name);
         return state == 0;
     }
 
