@@ -65,10 +65,9 @@ impl Pass {
                         }
                     }
                     if has_span {
-                        let rval_kind = types.get(method_fn.signature.rval).map(|ty| &ty.kind);
                         let result = resolve_result_rval(method_fn.signature.rval, types);
                         if let Some(rval) = result.rval_name.as_deref().or_else(|| types.get(method_fn.signature.rval).map(|ty| ty.name.as_str())) {
-                            let is_void = result.is_void || matches!(rval_kind, Some(TypeKind::Primitive(Primitive::Void)));
+                            let is_void = result.is_void;
                             rendered_methods.push(render(templates, rval, is_void, result.as_ok, method_name, &method_fn.name, &args,
                                 "/// Borrows span memory for this call.", "public", "_context", is_mutable_service_pointer(method_fn.signature.arguments[0].ty, types))?);
                         }
@@ -83,7 +82,6 @@ impl Pass {
                         if has_overload {
                             continue;
                         }
-                        let rval_kind = types.get(method_fn.signature.rval).map(|t| &t.kind);
                         let result_info = resolve_result_rval(method_fn.signature.rval, types);
 
                         let rval = result_info
@@ -91,7 +89,7 @@ impl Pass {
                             .as_deref()
                             .or_else(|| types.get(method_fn.signature.rval).map(|t| t.name.as_str()));
                         let Some(rval) = rval else { continue };
-                        let is_void = result_info.is_void || matches!(rval_kind, Some(TypeKind::Primitive(Primitive::Void)));
+                        let is_void = result_info.is_void;
 
                         let docs = format_docs(&method_fn.docs);
                         let args = build_args(&method_fn.signature.arguments[1..], types);
@@ -126,7 +124,6 @@ impl Pass {
                                 is_task_void,
                             )?);
                         } else {
-                            let rval_kind = types.get(original_fn.signature.rval).map(|t| &t.kind);
                             let result_info = resolve_result_rval(original_fn.signature.rval, types);
 
                             let rval = result_info
@@ -134,7 +131,7 @@ impl Pass {
                                 .as_deref()
                                 .or_else(|| types.get(original_fn.signature.rval).map(|t| t.name.as_str()));
                             let Some(rval) = rval else { continue };
-                            let is_void = result_info.is_void || matches!(rval_kind, Some(TypeKind::Primitive(Primitive::Void)));
+                            let is_void = result_info.is_void;
 
                             let overload_args = build_args(&method_fn.signature.arguments[1..], types);
                             rendered_methods.push(render(
@@ -287,7 +284,7 @@ fn resolve_result_rval(rval: crate::lang::TypeId, types: &model::common::types::
         }
         Some(TypeKind::TypePattern(TypePattern::Iterator(item))) => ResultRval { as_ok: false, rval_name: collection_rval(*item, types, false), is_void: false },
         Some(TypeKind::TypePattern(TypePattern::AsyncIterator(item))) => ResultRval { as_ok: false, rval_name: collection_rval(*item, types, true), is_void: false },
-        _ => ResultRval { as_ok: false, rval_name: types.tuple_name(rval), is_void: false },
+        _ => ResultRval { as_ok: false, rval_name: types.tuple_name(rval), is_void: matches!(rval_kind, Some(TypeKind::Primitive(Primitive::Void))) },
     }
 }
 
