@@ -39,6 +39,38 @@ delegate void {{ name }}Destructor(IntPtr data);
     {{ _fns_decorators_internal | indent }}
     internal {{ name }}() { }
 
+    // Positive values are active borrows; -1 means disposed or transferred.
+    private int __borrowState;
+
+    private void __AcquireBorrow()
+    {
+        while (true)
+        {
+            var state = global::System.Threading.Volatile.Read(ref __borrowState);
+            ObjectDisposedException.ThrowIf(state < 0, this);
+            if (global::System.Threading.Interlocked.CompareExchange(ref __borrowState, checked(state + 1), state) == state) return;
+        }
+    }
+
+    private void __ReleaseBorrow() => global::System.Threading.Interlocked.Decrement(ref __borrowState);
+
+    private void __Borrow(global::System.Collections.Generic.List<Action> releases)
+    {
+        ArgumentNullException.ThrowIfNull(releases);
+        __AcquireBorrow();
+        try { releases.Add(__ReleaseBorrow); }
+        catch { __ReleaseBorrow(); throw; }
+    }
+
+    private bool __Close(bool disposing)
+    {
+        var state = global::System.Threading.Interlocked.CompareExchange(ref __borrowState, -1, 0);
+        if (state > 0) throw new InvalidOperationException("Cannot dispose or transfer this value while it is borrowed by a call or slice.");
+        if (state < 0 && !disposing) throw new ObjectDisposedException(GetType().Name);
+        return state == 0;
+    }
+
+
     /// Wraps a managed delegate so it can be passed to Rust as a callback.
     {{ _fns_decorators_all | indent }}
     public unsafe {{ name }}({{ managed_delegate }} managed)
@@ -75,7 +107,7 @@ delegate void {{ name }}Destructor(IntPtr data);
         }
         catch (Exception e)
         {
-            _exception = e;
+            global::System.Threading.Interlocked.Exchange(ref _exception, e);
             {% if not is_void %}
             return default;
             {% else %}
@@ -88,16 +120,32 @@ delegate void {{ name }}Destructor(IntPtr data);
     {{ _fns_decorators_internal | indent }}
     internal unsafe {{ rval_managed }} CallRaw({% for arg in args %}{{ arg.managed_type }} {{ arg.name }}{% if not loop.last %}, {% endif %}{% endfor %})
     {
+        global::System.Collections.Generic.List<Action> releases = null;
+        __AcquireBorrow();
+        try
+        {
 {% if function_pointer %}
         var __target = (delegate* unmanaged[Cdecl]<{% for arg in args %}{{ arg.unmanaged_name }}, {% endfor %}IntPtr, {{ rval_unmanaged_name }}>)_ptr;
 {% else %}
-        var __target = _native ??= Marshal.GetDelegateForFunctionPointer<{{ name }}Native>(_ptr);
+        var __target = _native;
+        if (__target == null)
+        {
+            __target = Marshal.GetDelegateForFunctionPointer<{{ name }}Native>(_ptr);
+            __target = global::System.Threading.Interlocked.CompareExchange(ref _native, __target, null) ?? __target;
+        }
 {% endif %}
         {% if not is_void %}
-        return __target({% for arg in args %}{{ arg.native_value }}{{ arg.to_unmanaged }}, {% endfor %}_data){{ rval_to_managed }};
+        return __target({% for arg in args %}{{ arg.native_value }}{{ arg.to_unmanaged | replace(from=".ToUnmanaged()", to=".AsUnmanaged(releases ??= new())") | replace(from=".IntoUnmanaged()", to=".IntoUnmanaged(releases ??= new())") }}, {% endfor %}_data){{ rval_to_managed }};
         {% else %}
-        __target({% for arg in args %}{{ arg.native_value }}{{ arg.to_unmanaged }}, {% endfor %}_data);
+        __target({% for arg in args %}{{ arg.native_value }}{{ arg.to_unmanaged | replace(from=".ToUnmanaged()", to=".AsUnmanaged(releases)") | replace(from=".IntoUnmanaged()", to=".IntoUnmanaged(releases)") }}, {% endfor %}_data);
         {% endif %}
+        }
+        finally
+        {
+            if (releases != null)
+                for (var i = releases.Count - 1; i >= 0; --i) releases[i]();
+            __ReleaseBorrow();
+        }
     }
 
     /// Invokes the callback. When created from a managed delegate, calls it directly.
@@ -105,13 +153,17 @@ delegate void {{ name }}Destructor(IntPtr data);
     {{ _fns_decorators_all | indent }}
     public {{ rval_managed }} Call({% for arg in args %}{{ arg.managed_type }} {{ arg.name }}{% if not loop.last %}, {% endif %}{% endfor %})
     {
-        if (_ptr == IntPtr.Zero) throw new ObjectDisposedException(nameof({{ name }}));
+        __AcquireBorrow();
+        try
+        {
         if (_managed != null)
         {
             {% if not is_void %}return {% endif %}_managed({% for arg in args %}{{ arg.name }}{% if not loop.last %}, {% endif %}{% endfor %});
             {% if is_void %}return;{% endif %}
         }
         {% if not is_void %}return {% endif %}CallRaw({% for arg in args %}{{ arg.name }}{% if not loop.last %}, {% endif %}{% endfor %});
+        }
+        finally { __ReleaseBorrow(); }
     }
 
     /// Disposes the callback. If the managed delegate threw an exception during a
@@ -120,8 +172,13 @@ delegate void {{ name }}Destructor(IntPtr data);
     {{ _fns_decorators_all | indent }}
     public unsafe void Dispose()
     {
-        var exception = _exception;
-        _exception = null;
+        var closed = __Close(disposing: true);
+        var exception = global::System.Threading.Interlocked.Exchange(ref _exception, null);
+        if (!closed)
+        {
+            if (exception != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
+            return;
+        }
         var destructor = _destructor;
         var data = _data;
         _destructor = IntPtr.Zero;
@@ -141,33 +198,31 @@ delegate void {{ name }}Destructor(IntPtr data);
     /// callback and invokes the destructor.
     {{ _fns_decorators_all | indent }}
     {{ _fns_decorators_internal | indent }}
-    internal Unmanaged IntoUnmanaged()
+    internal Unmanaged IntoUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
-        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
-        var rval = new Unmanaged();
-        rval._callback = _ptr;
         if (_managed != null)
         {
-            var handle = GCHandle.Alloc(this);
-            rval._data = GCHandle.ToIntPtr(handle);
-            rval._destructor = ReleaseHandlePtr;
+            __AcquireBorrow();
+            try
+            {
+                var handle = GCHandle.Alloc(this);
+                return new Unmanaged { _callback = _ptr, _data = GCHandle.ToIntPtr(handle), _destructor = ReleaseHandlePtr };
+            }
+            finally { __ReleaseBorrow(); }
         }
-        else
-        {
-            rval._data = _data;
-            rval._destructor = _destructor;
-            _ptr = IntPtr.Zero;
-            _data = IntPtr.Zero;
-            _destructor = IntPtr.Zero;
-        }
-        return rval;
+        __Close(disposing: false);
+        var native = new Unmanaged { _callback = _ptr, _data = _data, _destructor = _destructor };
+        _ptr = IntPtr.Zero;
+        _data = IntPtr.Zero;
+        _destructor = IntPtr.Zero;
+        return native;
     }
 
     {{ _fns_decorators_all | indent }}
     {{ _fns_decorators_internal | indent }}
-    internal Unmanaged AsUnmanaged()
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
     {
-        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
+        __Borrow(releases);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         rval._data = _data;
@@ -175,9 +230,8 @@ delegate void {{ name }}Destructor(IntPtr data);
 {% if function_pointer %}
         if (_managed != null)
         {
-            // Borrowed composite fields have no scoped marshaller to free a handle.
-            // Lazily retain an instance thunk for that path only.
-            _native ??= CallTrampoline;
+            // The release list roots this wrapper and its thunk until the call ends.
+            global::System.Threading.Interlocked.CompareExchange(ref _native, CallTrampoline, null);
             rval._callback = Marshal.GetFunctionPointerForDelegate(_native);
             rval._data = IntPtr.Zero;
             rval._destructor = IntPtr.Zero;
@@ -223,15 +277,21 @@ delegate void {{ name }}Destructor(IntPtr data);
     public ref struct InMarshaller
     {
         private {{ name }} _managed;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         {{ _fns_decorators_all | indent(width = 8) }}
         public void FromManaged({{ name }} managed) { _managed = managed; }
 
         {{ _fns_decorators_all | indent(width = 8) }}
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         {{ _fns_decorators_all | indent(width = 8) }}
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
     public ref struct Marshaller

@@ -77,21 +77,28 @@
     public ref struct InMarshaller
     {
         private {{ name }} _managed;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         {{ _fns_decorators_all | indent(width = 8) }}
         public void FromManaged({{ name }} managed) { _managed = managed; }
 
         {{ _fns_decorators_all | indent(width = 8) }}
-        public Unmanaged ToUnmanaged() { {% if rejects_null %}if (_managed is null) throw new InvalidOperationException("Cannot marshal a null {{ name }}: it corresponds to no Rust variant. Construct it through a case constructor or factory."); {% endif %}return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { {% if rejects_null %}if (_managed is null) throw new InvalidOperationException("Cannot marshal a null {{ name }}: it corresponds to no Rust variant. Construct it through a case constructor or factory."); {% endif %}return _managed.AsUnmanaged(_releases ??= new()); }
 
         {{ _fns_decorators_all | indent(width = 8) }}
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
     public ref struct Marshaller
     {
         private {{ name }} _managed;
         private Unmanaged _unmanaged;
+        private global::System.Collections.Generic.List<Action> _releases;
         {%- if marshaller_to_unmanaged == "IntoUnmanaged" %}
         private bool _ownsUnmanaged;
         {%- endif %}
@@ -109,7 +116,7 @@
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         {{ _fns_decorators_all | indent(width = 8) }}
-        public Unmanaged ToUnmanaged() { {% if rejects_null %}if (_managed is null) throw new InvalidOperationException("Cannot marshal a null {{ name }}: it corresponds to no Rust variant. Construct it through a case constructor or factory."); {% endif %}{% if marshaller_to_unmanaged == "IntoUnmanaged" %}_unmanaged = _managed.IntoUnmanaged(); _ownsUnmanaged = true; return _unmanaged;{% else %}return _managed.{{ marshaller_to_unmanaged }}();{% endif %} }
+        public Unmanaged ToUnmanaged() { {% if rejects_null %}if (_managed is null) throw new InvalidOperationException("Cannot marshal a null {{ name }}: it corresponds to no Rust variant. Construct it through a case constructor or factory."); {% endif %}{% if marshaller_to_unmanaged == "IntoUnmanaged" %}_unmanaged = _managed.IntoUnmanaged(_releases ??= new()); _ownsUnmanaged = true; return _unmanaged;{% else %}return _managed.AsUnmanaged(_releases ??= new());{% endif %} }
 
         {{ _fns_decorators_all | indent(width = 8) }}
         public {{ name }} ToManaged() { return _unmanaged.{{ marshaller_to_managed }}(); }
@@ -119,11 +126,25 @@
 
         public void Free()
         {
-            if (!_ownsUnmanaged) return;
-            _ownsUnmanaged = false;
-            _unmanaged.Free();
+            try
+            {
+                if (_ownsUnmanaged) { _ownsUnmanaged = false; _unmanaged.Free(); }
+            }
+            finally
+            {
+                if (_releases != null)
+                {
+                    for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+                    _releases.Clear();
+                }
+            }
         }
-{% else %}        public void Free() {}
+{% else %}        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
 {% endif %}    }
 
 {% endif -%}

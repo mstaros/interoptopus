@@ -30,25 +30,15 @@ public partial class {{ name }} : IDisposable
         return rval;
     }
 
-    /// A view over the Rust-owned memory, without copying.
-    ///
-    /// The span is only valid until <see cref="Dispose"/> is called, and must
-    /// not outlive this instance. Use <see cref="ToArray"/> if the data needs
-    /// to survive the vector.
-    public unsafe ReadOnlySpan<{{ element_type }}> AsSpan()
-    {
-        if (_ptr == IntPtr.Zero) throw new NullReferenceException();
-        return new ReadOnlySpan<{{ element_type }}>((void*)_ptr, (int)_len);
-    }
+    /// Returns a span over an independent managed copy that survives disposal.
+    public ReadOnlySpan<{{ element_type }}> AsSpan() => ToArray();
 
-    /// Copies all elements into a new managed array.
-    ///
-    /// Uses one bulk copy from the Rust-owned buffer.
+    /// Copies all elements into a new managed array while holding a native borrow.
     public unsafe {{ element_type }}[] ToArray()
     {
-        if (_ptr == IntPtr.Zero) throw new NullReferenceException();
-        if (_len == 0) return [];
-        return AsSpan().ToArray();
+        __AcquireBorrow();
+        try { return new ReadOnlySpan<{{ element_type }}>((void*)_ptr, checked((int)_len)).ToArray(); }
+        finally { __ReleaseBorrow(); }
     }
 
     /// Gets the element at the given index.
@@ -57,9 +47,13 @@ public partial class {{ name }} : IDisposable
         {{ _fns_decorators_all | indent(width = 8) }}
         get
         {
-            if (_ptr == IntPtr.Zero) throw new NullReferenceException();
-            if (i < 0 || (ulong)i >= _len) throw new IndexOutOfRangeException();
-            return (({{ element_type }}*)_ptr)[i];
+            __AcquireBorrow();
+            try
+            {
+                if (i < 0 || (ulong)i >= _len) throw new IndexOutOfRangeException();
+                return (({{ element_type }}*)_ptr)[i];
+            }
+            finally { __ReleaseBorrow(); }
         }
     }
 }

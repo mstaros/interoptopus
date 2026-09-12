@@ -92,10 +92,10 @@ public partial struct Attribute
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged ToUnmanaged()
+    internal Unmanaged ToUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
         var _unmanaged = new Unmanaged();
-        _unmanaged.bytes = bytes.ToUnmanaged();
+        _unmanaged.bytes = bytes.AsUnmanaged(releases);
         return _unmanaged;
     }
 
@@ -103,10 +103,10 @@ public partial struct Attribute
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged AsUnmanaged()
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
     {
         var _unmanaged = new Unmanaged();
-        _unmanaged.bytes = bytes.AsUnmanaged();
+        _unmanaged.bytes = bytes.AsUnmanaged(releases);
         return _unmanaged;
     }
 
@@ -125,21 +125,28 @@ public partial struct Attribute
     public ref struct InMarshaller
     {
         private Attribute _managed;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void FromManaged(Attribute managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
     public ref struct Marshaller
     {
         private Attribute _managed;
         private Unmanaged _unmanaged;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public Marshaller(Attribute managed) { _managed = managed; }
@@ -154,13 +161,18 @@ public partial struct Attribute
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.ToUnmanaged(); }
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public Attribute ToManaged() { return _unmanaged.ToManaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
 }
@@ -171,7 +183,7 @@ public partial class SliceAttribute
     IntPtr _data;
     ulong _len;
     bool _ownsData;
-    bool _disposed;
+    global::System.Collections.Generic.List<Action> _owners;
 }
 
 /// A read-only view into a contiguous region of <c>Attribute</c> elements,
@@ -190,7 +202,39 @@ public partial class SliceAttribute
 public partial class SliceAttribute : IDisposable
 {
     /// The number of elements in this slice.
-    public int Count => (int) _len;
+    public int Count { get { __AcquireBorrow(); try { return checked((int)_len); } finally { __ReleaseBorrow(); } } }
+
+    // Positive values are active borrows; -1 means disposed or transferred.
+    private int __borrowState;
+
+    private void __AcquireBorrow()
+    {
+        while (true)
+        {
+            var state = global::System.Threading.Volatile.Read(ref __borrowState);
+            ObjectDisposedException.ThrowIf(state < 0, this);
+            if (global::System.Threading.Interlocked.CompareExchange(ref __borrowState, checked(state + 1), state) == state) return;
+        }
+    }
+
+    private void __ReleaseBorrow() => global::System.Threading.Interlocked.Decrement(ref __borrowState);
+
+    private void __Borrow(global::System.Collections.Generic.List<Action> releases)
+    {
+        ArgumentNullException.ThrowIfNull(releases);
+        __AcquireBorrow();
+        try { releases.Add(__ReleaseBorrow); }
+        catch { __ReleaseBorrow(); throw; }
+    }
+
+    private bool __Close(bool disposing)
+    {
+        var state = global::System.Threading.Interlocked.CompareExchange(ref __borrowState, -1, 0);
+        if (state > 0) throw new InvalidOperationException("Cannot dispose or transfer this value while it is borrowed by a call or slice.");
+        if (state < 0 && !disposing) throw new ObjectDisposedException(GetType().Name);
+        return state == 0;
+    }
+
 
 
     /// Gets the element at the given index, marshalling from its unmanaged form.
@@ -199,18 +243,25 @@ public partial class SliceAttribute : IDisposable
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         get
         {
+            __AcquireBorrow();
+            try
+            {
             if (i < 0 || (ulong)i >= _len) throw new IndexOutOfRangeException();
             if (_data == IntPtr.Zero) { throw new NullReferenceException(); }
             var size = Marshal.SizeOf<Attribute.Unmanaged>();
             var ptr = IntPtr.Add(_data, i * size);
             var unmanaged = Marshal.PtrToStructure<Attribute.Unmanaged>(ptr);
-            return unmanaged.ToManaged();
+                return unmanaged.ToManaged();
+            }
+            finally { __ReleaseBorrow(); }
         }
     }
 
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     SliceAttribute() { }
+
+    ~SliceAttribute() { Dispose(); }
 
     /// Creates a slice by marshalling each element from a managed array into a native copy.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -221,12 +272,13 @@ public partial class SliceAttribute : IDisposable
         var size = Marshal.SizeOf<Attribute.Unmanaged>();
         rval._data = Marshal.AllocHGlobal(checked(size * managed.Length));
         rval._ownsData = true;
+        rval._owners = new();
         rval._len = (ulong) managed.Length;
         try
         {
             for (var i = 0; i < managed.Length; ++i)
             {
-                var unmanaged = managed[i].AsUnmanaged();
+                var unmanaged = managed[i].AsUnmanaged(rval._owners);
                 var dst = IntPtr.Add(rval._data, i * size);
                 Marshal.StructureToPtr(unmanaged, dst, false);
             }
@@ -243,11 +295,16 @@ public partial class SliceAttribute : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
+        if (!__Close(disposing: true)) return;
         if (_ownsData && _data != IntPtr.Zero) Marshal.FreeHGlobal(_data);
         _data = IntPtr.Zero;
         _len = 0;
+        if (_owners != null)
+        {
+            for (var i = _owners.Count - 1; i >= 0; --i) _owners[i]();
+            _owners.Clear();
+        }
+        GC.SuppressFinalize(this);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -255,7 +312,7 @@ public partial class SliceAttribute : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal Unmanaged ToUnmanaged()
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(global::System.Threading.Volatile.Read(ref __borrowState) < 0, this);
         var unmanaged = new Unmanaged();
         unmanaged._data = _data;
         unmanaged._len = _len;
@@ -265,7 +322,11 @@ public partial class SliceAttribute : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged AsUnmanaged() => ToUnmanaged();
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
+    {
+        __Borrow(releases);
+        return new Unmanaged { _data = _data, _len = _len };
+    }
 
     [CustomMarshaller(typeof(SliceAttribute), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }
@@ -295,21 +356,28 @@ public partial class SliceAttribute : IDisposable
     public ref struct InMarshaller
     {
         private SliceAttribute _managed;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void FromManaged(SliceAttribute managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
     public ref struct Marshaller
     {
         private SliceAttribute _managed;
         private Unmanaged _unmanaged;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public Marshaller(SliceAttribute managed) { _managed = managed; }
@@ -324,13 +392,18 @@ public partial class SliceAttribute : IDisposable
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.ToUnmanaged(); }
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public SliceAttribute ToManaged() { return _unmanaged.ToManaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 }
 

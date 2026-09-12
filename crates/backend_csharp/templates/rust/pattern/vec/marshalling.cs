@@ -18,15 +18,21 @@ public partial class {{ name }} : IDisposable
     {{ _fns_decorators_all | indent }}
     public static unsafe {{ name }} From(ReadOnlySpan<{{ element_type }}> _data)
     {
-        var _temp = new {{ unmanaged_element_type }}[_data.Length];
-        for (var i = 0; i < _data.Length; ++i)
+        var releases = new global::System.Collections.Generic.List<Action>();
+        try
         {
-            _temp[i] = _data[i].AsUnmanaged();
+            var _temp = new {{ unmanaged_element_type }}[_data.Length];
+            for (var i = 0; i < _data.Length; ++i)
+                _temp[i] = _data[i].AsUnmanaged(releases);
+            fixed (void* _data_ptr = _temp)
+            {
+                InteropHelper.interoptopus_vec_create((IntPtr)_data_ptr, (ulong)_data.Length, out var native);
+                return native.IntoManaged();
+            }
         }
-        fixed (void* _data_ptr = _temp)
+        finally
         {
-            InteropHelper.interoptopus_vec_create((IntPtr) _data_ptr, (ulong)_data.Length, out var _out);
-            return _out.IntoManaged();
+            for (var i = releases.Count - 1; i >= 0; --i) releases[i]();
         }
     }
 
@@ -43,14 +49,18 @@ public partial class {{ name }} : IDisposable
         {{ _fns_decorators_all | indent(width = 8) }}
         get
         {
-            if (_ptr == IntPtr.Zero) throw new NullReferenceException();
+            __AcquireBorrow();
+            try
+            {
             if (i < 0 || (ulong)i >= _len) throw new IndexOutOfRangeException();
 {% if clone_elements %}            var _source = (IntPtr)(({{ unmanaged_element_type }}*)_ptr + i);
             if (InteropHelper.interoptopus_vec_clone_element(_source, out var _element) != 0)
                 throw new InvalidOperationException("Could not clone the vector element.");
 {% else %}            var _element = *(({{ unmanaged_element_type }}*)_ptr + i);
 {% endif %}
-            return _element.{{ element_to_managed }}();
+                return _element.{{ element_to_managed }}();
+            }
+            finally { __ReleaseBorrow(); }
         }
     }
 }

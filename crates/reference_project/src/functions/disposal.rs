@@ -98,3 +98,21 @@ pub fn disposal_mixed_echo(mut input: Wire<DisposalMixed>) -> Wire<DisposalMixed
 pub fn disposal_mixed_fields_echo(mut input: Wire<DisposalMixedFields>) -> Wire<DisposalMixedFields> {
     Wire::from(input.unwire())
 }
+
+#[ffi]
+pub fn disposal_borrow_resources(input: &ffi::String, vector: &ffi::Vec<u8>, callback: &MyCallback) -> u32 {
+    let result = callback.call(input.as_str().len() as u32 + vector.len() as u32);
+    // Read again after callback reentry to exercise the full borrow lifetime.
+    result + input.as_str().len() as u32 + vector.len() as u32
+}
+
+#[ffi]
+pub fn disposal_native_callback(callback: MyCallback) -> MyCallback {
+    MyCallback::from_fn(move |input| callback.call(input))
+}
+
+#[ffi]
+pub fn disposal_borrow_owned_fields(input: crate::types::vec::UseSliceAndVec, callback: MyCallback) -> u32 {
+    callback.call(input.s1.len() as u32);
+    input.s1.len() as u32
+}

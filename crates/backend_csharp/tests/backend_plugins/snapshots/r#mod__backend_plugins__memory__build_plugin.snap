@@ -94,7 +94,7 @@ public partial struct DotnetException
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged ToUnmanaged()
+    internal Unmanaged ToUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
         var _unmanaged = new Unmanaged();
         _unmanaged.exception_id = exception_id;
@@ -105,7 +105,7 @@ public partial struct DotnetException
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged AsUnmanaged()
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
     {
         var _unmanaged = new Unmanaged();
         _unmanaged.exception_id = exception_id;
@@ -127,21 +127,28 @@ public partial struct DotnetException
     public ref struct InMarshaller
     {
         private DotnetException _managed;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void FromManaged(DotnetException managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
     public ref struct Marshaller
     {
         private DotnetException _managed;
         private Unmanaged _unmanaged;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public Marshaller(DotnetException managed) { _managed = managed; }
@@ -156,13 +163,18 @@ public partial struct DotnetException
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.ToUnmanaged(); }
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public DotnetException ToManaged() { return _unmanaged.ToManaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
 }
@@ -254,14 +266,14 @@ public partial class ResultFliparooDotnetException : IUnion, IResult<Fliparoo, D
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged IntoUnmanaged()
+    internal Unmanaged IntoUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
         var _unmanaged = new Unmanaged();
         try
         {
             _unmanaged._variant = _variant;
-            if (_variant == 0) _unmanaged._Ok._Ok = _Ok.IntoUnmanaged();
-            if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
+            if (_variant == 0) _unmanaged._Ok._Ok = _Ok.IntoUnmanaged(releases);
+            if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged(releases!);
             return _unmanaged;
         }
         catch
@@ -275,12 +287,12 @@ public partial class ResultFliparooDotnetException : IUnion, IResult<Fliparoo, D
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged AsUnmanaged()
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
     {
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
-        if (_variant == 0) _unmanaged._Ok._Ok = _Ok.AsUnmanaged();
-        if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged();
+        if (_variant == 0) _unmanaged._Ok._Ok = _Ok.AsUnmanaged(releases);
+        if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged(releases);
         return _unmanaged;
     }
 
@@ -434,21 +446,28 @@ public partial class ResultFliparooDotnetException : IUnion, IResult<Fliparoo, D
     public ref struct InMarshaller
     {
         private ResultFliparooDotnetException _managed;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void FromManaged(ResultFliparooDotnetException managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultFliparooDotnetException: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultFliparooDotnetException: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
     public ref struct Marshaller
     {
         private ResultFliparooDotnetException _managed;
         private Unmanaged _unmanaged;
+        private global::System.Collections.Generic.List<Action> _releases;
         private bool _ownsUnmanaged;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -464,7 +483,7 @@ public partial class ResultFliparooDotnetException : IUnion, IResult<Fliparoo, D
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultFliparooDotnetException: it corresponds to no Rust variant. Construct it through a case constructor or factory."); _unmanaged = _managed.IntoUnmanaged(); _ownsUnmanaged = true; return _unmanaged; }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultFliparooDotnetException: it corresponds to no Rust variant. Construct it through a case constructor or factory."); _unmanaged = _managed.IntoUnmanaged(_releases ??= new()); _ownsUnmanaged = true; return _unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultFliparooDotnetException ToManaged() { return _unmanaged.IntoManaged(); }
@@ -474,9 +493,18 @@ public partial class ResultFliparooDotnetException : IUnion, IResult<Fliparoo, D
 
         public void Free()
         {
-            if (!_ownsUnmanaged) return;
-            _ownsUnmanaged = false;
-            _unmanaged.Free();
+            try
+            {
+                if (_ownsUnmanaged) { _ownsUnmanaged = false; _unmanaged.Free(); }
+            }
+            finally
+            {
+                if (_releases != null)
+                {
+                    for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+                    _releases.Clear();
+                }
+            }
         }
     }
 
@@ -569,14 +597,14 @@ public partial class ResultHeavyDotnetException : IUnion, IResult<Heavy, DotnetE
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged IntoUnmanaged()
+    internal Unmanaged IntoUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
         var _unmanaged = new Unmanaged();
         try
         {
             _unmanaged._variant = _variant;
-            if (_variant == 0) _unmanaged._Ok._Ok = _Ok.IntoUnmanaged();
-            if (_variant == 1) _unmanaged._Err._Err = _Err.ToUnmanaged();
+            if (_variant == 0) _unmanaged._Ok._Ok = _Ok.IntoUnmanaged(releases);
+            if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged(releases!);
             return _unmanaged;
         }
         catch
@@ -590,12 +618,12 @@ public partial class ResultHeavyDotnetException : IUnion, IResult<Heavy, DotnetE
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged AsUnmanaged()
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
     {
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
-        if (_variant == 0) _unmanaged._Ok._Ok = _Ok.AsUnmanaged();
-        if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged();
+        if (_variant == 0) _unmanaged._Ok._Ok = _Ok.AsUnmanaged(releases);
+        if (_variant == 1) _unmanaged._Err._Err = _Err.AsUnmanaged(releases);
         return _unmanaged;
     }
 
@@ -749,21 +777,28 @@ public partial class ResultHeavyDotnetException : IUnion, IResult<Heavy, DotnetE
     public ref struct InMarshaller
     {
         private ResultHeavyDotnetException _managed;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void FromManaged(ResultHeavyDotnetException managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultHeavyDotnetException: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultHeavyDotnetException: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
     public ref struct Marshaller
     {
         private ResultHeavyDotnetException _managed;
         private Unmanaged _unmanaged;
+        private global::System.Collections.Generic.List<Action> _releases;
         private bool _ownsUnmanaged;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -779,7 +814,7 @@ public partial class ResultHeavyDotnetException : IUnion, IResult<Heavy, DotnetE
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultHeavyDotnetException: it corresponds to no Rust variant. Construct it through a case constructor or factory."); _unmanaged = _managed.IntoUnmanaged(); _ownsUnmanaged = true; return _unmanaged; }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultHeavyDotnetException: it corresponds to no Rust variant. Construct it through a case constructor or factory."); _unmanaged = _managed.IntoUnmanaged(_releases ??= new()); _ownsUnmanaged = true; return _unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultHeavyDotnetException ToManaged() { return _unmanaged.IntoManaged(); }
@@ -789,9 +824,18 @@ public partial class ResultHeavyDotnetException : IUnion, IResult<Heavy, DotnetE
 
         public void Free()
         {
-            if (!_ownsUnmanaged) return;
-            _ownsUnmanaged = false;
-            _unmanaged.Free();
+            try
+            {
+                if (_ownsUnmanaged) { _ownsUnmanaged = false; _unmanaged.Free(); }
+            }
+            finally
+            {
+                if (_releases != null)
+                {
+                    for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+                    _releases.Clear();
+                }
+            }
         }
     }
 
@@ -1469,7 +1513,7 @@ public partial class Fliparoo : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged IntoUnmanaged()
+    internal Unmanaged IntoUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
         var h = GCHandle.Alloc(this);
         return new Unmanaged { _handle = GCHandle.ToIntPtr(h) };
@@ -1478,6 +1522,14 @@ public partial class Fliparoo : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
+    {
+        var h = GCHandle.Alloc(this);
+        try { releases.Add(() => h.Free()); }
+        catch { h.Free(); throw; }
+        return new Unmanaged { _handle = GCHandle.ToIntPtr(h) };
+    }
+
     internal Unmanaged AsUnmanaged()
     {
         var h = GCHandle.Alloc(this);
@@ -1525,7 +1577,7 @@ public partial class Heavy : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged IntoUnmanaged()
+    internal Unmanaged IntoUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
         var h = GCHandle.Alloc(this);
         return new Unmanaged { _handle = GCHandle.ToIntPtr(h) };
@@ -1534,6 +1586,14 @@ public partial class Heavy : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
+    {
+        var h = GCHandle.Alloc(this);
+        try { releases.Add(() => h.Free()); }
+        catch { h.Free(); throw; }
+        return new Unmanaged { _handle = GCHandle.ToIntPtr(h) };
+    }
+
     internal Unmanaged AsUnmanaged()
     {
         var h = GCHandle.Alloc(this);

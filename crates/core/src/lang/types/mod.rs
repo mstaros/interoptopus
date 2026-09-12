@@ -56,6 +56,19 @@ pub unsafe trait TypeInfo {
     /// (e.g., references, `NonNull`, function pointers).
     const OPTION_PTR_SAFE: bool = false;
 
+    /// Produces this return type's FFI panic outcome.
+    ///
+    /// Bare return types cannot represent a failure and abort the process. Patterns such
+    /// as `ffi::Result` override this to return an explicit error without unwinding into
+    /// foreign code. Implementations must never resume unwinding or return invalid data.
+    #[doc(hidden)]
+    fn on_ffi_panic() -> Self
+    where
+        Self: Sized,
+    {
+        ::std::process::abort()
+    }
+
     /// The unique identifier for this type.
     fn id() -> TypeId;
     /// The structural kind of this type.

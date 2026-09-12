@@ -1,3 +1,5 @@
+using System;
+using System.Runtime.CompilerServices;
 using My.Company;
 using Interop = My.Company.Interop;
 using My.Company.Common;
@@ -21,7 +23,7 @@ public class TestPatternServicesSlices
             Assert.True(ownedBytes > baselineBytes);
             Assert.True(ownedAllocations > baselineAllocations);
 
-            var slice = service.ReturnSlice();
+            using var slice = service.ReturnSlice();
             Assert.Equal(64, slice.Count);
             Assert.Equal(123, (int)slice[0]);
             Assert.Equal(ownedBytes, Interop.__test_live_bytes());
@@ -32,19 +34,32 @@ public class TestPatternServicesSlices
         Assert.Equal(baselineAllocations, Interop.__test_live_allocations());
     }
 
-    [Fact]
-    public void ReturnSliceMut()
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static SliceUint CopyFromCollectibleService()
     {
-        using var s = ServiceVariousSlices.Create();
-        var slice = s.ReturnSliceMut();
-        slice[0] = 44;
+        return ServiceVariousSlices.Create().ReturnSlice();
+    }
+
+    [Fact]
+    public void returned_slice_survives_disposal_and_finalization()
+    {
+        var service = ServiceVariousSlices.Create();
+        using var disposedOwnerCopy = service.ReturnSlice();
+        service.Dispose();
+        Assert.Equal(123u, disposedOwnerCopy[0]);
+
+        using var collectedOwnerCopy = CopyFromCollectibleService();
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        Assert.Equal(123u, collectedOwnerCopy[0]);
     }
 
     [Fact]
     public void ReturnSlice()
     {
         using var s = ServiceVariousSlices.Create();
-        var slice = s.ReturnSlice();
+        using var slice = s.ReturnSlice();
         Assert.Equal(64, slice.Count);
         Assert.Equal(123, (int)slice[0]);
         Assert.Equal(123, (int)slice[1]);

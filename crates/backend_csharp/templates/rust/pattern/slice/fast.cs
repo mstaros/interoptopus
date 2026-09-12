@@ -3,7 +3,7 @@ public partial class {{ name }}
     GCHandle _handle;
     IntPtr _data;
     ulong _len;
-    bool _disposed;
+    {{ element_type }}[] _managed;
 }
 
 
@@ -20,13 +20,50 @@ public partial class {{ name }}
 public partial class {{ name }} : IEnumerable<{{ element_type }}>, IDisposable
 {
     /// The number of elements in this slice.
-    public int Count => (int) _len;
+    public int Count { get { __AcquireBorrow(); try { return checked((int)_len); } finally { __ReleaseBorrow(); } } }
+
+    // Positive values are active borrows; -1 means disposed or transferred.
+    private int __borrowState;
+
+    private void __AcquireBorrow()
+    {
+        while (true)
+        {
+            var state = global::System.Threading.Volatile.Read(ref __borrowState);
+            ObjectDisposedException.ThrowIf(state < 0, this);
+            if (global::System.Threading.Interlocked.CompareExchange(ref __borrowState, checked(state + 1), state) == state) return;
+        }
+    }
+
+    private void __ReleaseBorrow() => global::System.Threading.Interlocked.Decrement(ref __borrowState);
+
+    private void __Borrow(global::System.Collections.Generic.List<Action> releases)
+    {
+        ArgumentNullException.ThrowIfNull(releases);
+        __AcquireBorrow();
+        try { releases.Add(__ReleaseBorrow); }
+        catch { __ReleaseBorrow(); throw; }
+    }
+
+    private bool __Close(bool disposing)
+    {
+        var state = global::System.Threading.Interlocked.CompareExchange(ref __borrowState, -1, 0);
+        if (state > 0) throw new InvalidOperationException("Cannot dispose or transfer this value while it is borrowed by a call or slice.");
+        if (state < 0 && !disposing) throw new ObjectDisposedException(GetType().Name);
+        return state == 0;
+    }
+
 
     /// Returns a <see cref="ReadOnlySpan{T}"/> over the underlying data without copying.
     public unsafe ReadOnlySpan<{{ element_type }}> ReadOnlySpan
     {
         {{ _fns_decorators_all | indent(width = 8) }}
-        get => new(_data.ToPointer(), (int)_len);
+        get
+        {
+            __AcquireBorrow();
+            try { return _managed != null ? _managed.AsSpan() : new ReadOnlySpan<{{ element_type }}>(_data.ToPointer(), checked((int)_len)); }
+            finally { __ReleaseBorrow(); }
+        }
     }
 
 {% if is_mut %}
@@ -35,11 +72,15 @@ public partial class {{ name }} : IEnumerable<{{ element_type }}>, IDisposable
     {
         get
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
-            return new(_data.ToPointer(), checked((int)_len));
+            __AcquireBorrow();
+            try { return _managed != null ? _managed.AsSpan() : new Span<{{ element_type }}>(_data.ToPointer(), checked((int)_len)); }
+            finally { __ReleaseBorrow(); }
         }
     }
 {% endif %}
+
+    // Called before a service call releases its native lifetime and borrow guards.
+    internal {{ name }} __Copy() => From(ReadOnlySpan.ToArray());
 
     /// Gets {% if is_mut %}or sets {% endif %}the element at the given index.
     public unsafe {{ element_type }} this[int i]
@@ -47,21 +88,21 @@ public partial class {{ name }} : IEnumerable<{{ element_type }}>, IDisposable
         {{ _fns_decorators_all | indent(width = 8) }}
         get
         {
-            if (i < 0 || (ulong)i >= _len) throw new IndexOutOfRangeException();
-            return (({{ element_type }}*)_data)[i];
+            return ReadOnlySpan[i];
         }
 {% if is_mut %}
         {{ _fns_decorators_all | indent(width = 8) }}
         set
         {
-            if (i < 0 || (ulong)i >= _len) throw new IndexOutOfRangeException();
-            (({{ element_type }}*)_data)[i] = value;
+            Span[i] = value;
         }
 {% endif %}
     }
 
     {{ _fns_decorators_all | indent }}
     {{ name }}() { }
+
+    ~{{ name }}() { Dispose(); }
 
     /// Creates a slice from a raw pointer and length. The caller must ensure the
     /// memory remains valid for the lifetime of this slice.
@@ -81,6 +122,7 @@ public partial class {{ name }} : IEnumerable<{{ element_type }}>, IDisposable
     {
         ArgumentNullException.ThrowIfNull(managed);
         var rval = new {{ name }}();
+        rval._managed = managed;
         rval._handle = GCHandle.Alloc(managed, GCHandleType.Pinned);
         rval._data = rval._handle.AddrOfPinnedObject();
         rval._len = (ulong) managed.Length;
@@ -100,18 +142,18 @@ public partial class {{ name }} : IEnumerable<{{ element_type }}>, IDisposable
     {{ _fns_decorators_all | indent }}
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
-        if (_handle is { IsAllocated: true }) { _handle.Free(); }
+        if (!__Close(disposing: true)) return;
+        if (_handle.IsAllocated) _handle.Free();
         _data = IntPtr.Zero;
         _len = 0;
+        GC.SuppressFinalize(this);
     }
 
     {{ _fns_decorators_all | indent }}
     {{ _fns_decorators_internal | indent }}
     internal Unmanaged ToUnmanaged()
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(global::System.Threading.Volatile.Read(ref __borrowState) < 0, this);
         var unmanaged = new Unmanaged();
         unmanaged._data = _data;
         unmanaged._len = _len;
@@ -120,7 +162,11 @@ public partial class {{ name }} : IEnumerable<{{ element_type }}>, IDisposable
 
     {{ _fns_decorators_all | indent }}
     {{ _fns_decorators_internal | indent }}
-    internal Unmanaged AsUnmanaged() => ToUnmanaged();
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
+    {
+        __Borrow(releases);
+        return new Unmanaged { _data = _data, _len = _len };
+    }
 
     [CustomMarshaller(typeof({{ name }}), MarshalMode.Default, typeof(Marshaller))]
     private struct MarshallerMeta { }

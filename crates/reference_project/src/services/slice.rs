@@ -60,6 +60,7 @@ impl ServiceVariousSlices {
     /// Warning, you _must_ discard the returned slice object before calling into this service
     /// again, as otherwise undefined behavior might happen.
     // #[ffi_service_method(on_panic = "return_default")]
+    #[ffi::skip]
     pub fn return_slice_mut(&mut self) -> ffi::SliceMut<'_, u32> {
         ffi::SliceMut::from_slice(&mut self.data)
     }

@@ -192,3 +192,52 @@ pub(crate) fn span_return_is_independent(id: crate::lang::TypeId, types: &model:
     }
     independent(id, types, &mut HashSet::new())
 }
+
+/// Service call guards end when the managed call returns. Escaping borrows must
+/// be copied while those guards are held, or rejected before emitting a wrapper.
+pub(crate) fn service_result_copy(
+    id: crate::lang::TypeId,
+    types: &model::common::types::all::Pass,
+    function: &str,
+    result: &str,
+) -> Result<Option<String>, crate::Error> {
+    if !contains_borrow(id, types, &mut HashSet::new()) {
+        return Ok(None);
+    }
+    let ty = types.get(id).ok_or_else(|| crate::Error::from(format!("Unresolved return type for {function}")))?;
+    match &ty.kind {
+        // The runtime marshals a top-level C string to an owned System.String before returning.
+        TypeKind::TypePattern(TypePattern::CStrPointer) => Ok(None),
+        TypeKind::TypePattern(TypePattern::Slice(element))
+            if matches!(types.get(*element).map(|t| &t.kind), Some(TypeKind::Primitive(p)) if !matches!(p, Primitive::Bool | Primitive::Void)) =>
+        {
+            Ok(Some(format!("{result}.__Copy()")))
+        }
+        TypeKind::TypePattern(TypePattern::Result(ok, error, _)) if !contains_borrow(*error, types, &mut HashSet::new()) => {
+            let copied = service_result_copy(*ok, types, function, &format!("{result}.AsOk()"))?;
+            Ok(copied.map(|copied| format!("{result}.IsOk ? {}.Ok({copied}) : {result}", ty.name)))
+        }
+        _ => Err(crate::Error::from(format!(
+            "Cannot emit service call `{function}`: return type `{}` contains an escaping borrow. Only read-only slices of primitive data can be copied by this wrapper. Return owned data or perform mutable access inside a method; a call guard cannot protect a returned borrow.",
+            ty.name
+        ))),
+    }
+}
+
+fn contains_borrow(id: crate::lang::TypeId, types: &model::common::types::all::Pass, visiting: &mut HashSet<crate::lang::TypeId>) -> bool {
+    if !visiting.insert(id) {
+        return false;
+    }
+    let borrowed = match types.get(id).map(|t| &t.kind) {
+        None | Some(TypeKind::Pointer(_) | TypeKind::TypePattern(TypePattern::Slice(_) | TypePattern::SliceMut(_) | TypePattern::CStrPointer)) => true,
+        Some(TypeKind::Composite(c)) => c.fields.iter().any(|f| contains_borrow(f.ty, types, visiting)),
+        Some(TypeKind::Array(a)) => contains_borrow(a.ty, types, visiting),
+        Some(TypeKind::DataEnum(e) | TypeKind::TypePattern(TypePattern::Option(_, e) | TypePattern::Result(_, _, e))) => {
+            e.variants.iter().flat_map(crate::lang::types::kind::Variant::payloads).any(|f| contains_borrow(f.ty, types, visiting))
+        }
+        Some(TypeKind::TypePattern(TypePattern::Vec(element) | TypePattern::AsyncCallback(element))) => contains_borrow(*element, types, visiting),
+        _ => false,
+    };
+    visiting.remove(&id);
+    borrowed
+}

@@ -4,6 +4,9 @@
 public sealed partial class {{ name }} : global::Rust.Linq.IRustEnumerable<{{ managed_element_type }}>
 {
     private readonly object _gate = new();
+    private int __borrows;
+
+    private void __ReleaseBorrow() { lock (_gate) { --__borrows; } }
     private Unmanaged _native;
     private global::Rust.Linq.ScriptScope? _scope;
 
@@ -17,11 +20,12 @@ public sealed partial class {{ name }} : global::Rust.Linq.IRustEnumerable<{{ ma
 
     ~{{ name }}() { Dispose(); }
 
-    internal Unmanaged IntoUnmanaged()
+    internal Unmanaged IntoUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(_native._data == IntPtr.Zero, this);
+            if (__borrows != 0) throw new InvalidOperationException("Cannot use or transfer an iterator while it is borrowed.");
             var native = _native;
             _native = default;
             _scope?.Unregister(this);
@@ -30,11 +34,14 @@ public sealed partial class {{ name }} : global::Rust.Linq.IRustEnumerable<{{ ma
         }
     }
 
-    internal Unmanaged AsUnmanaged()
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
     {
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(_native._data == IntPtr.Zero, this);
+            __borrows = checked(__borrows + 1);
+            try { releases.Add(__ReleaseBorrow); }
+            catch { --__borrows; throw; }
             return _native;
         }
     }
@@ -45,6 +52,7 @@ public sealed partial class {{ name }} : global::Rust.Linq.IRustEnumerable<{{ ma
         Unmanaged native;
         lock (_gate)
         {
+            if (__borrows != 0) throw new InvalidOperationException("Cannot dispose an iterator while it is borrowed.");
             native = _native;
             _native = default;
         }
@@ -60,6 +68,7 @@ public sealed partial class {{ name }} : global::Rust.Linq.IRustEnumerable<{{ ma
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(_native._data == IntPtr.Zero, this);
+            if (__borrows != 0) throw new InvalidOperationException("Cannot use or transfer an iterator while it is borrowed.");
             var next = new {{ name }}();
             var state = new PredicateState(predicate);
             var root = GCHandle.Alloc(state);
@@ -83,6 +92,7 @@ public sealed partial class {{ name }} : global::Rust.Linq.IRustEnumerable<{{ ma
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(_native._data == IntPtr.Zero, this);
+            if (__borrows != 0) throw new InvalidOperationException("Cannot use or transfer an iterator while it is borrowed.");
             var next = new {{ name }}();
             ((delegate* unmanaged[Cdecl]<IntPtr, ulong, void>)_native._take)(_native._data, (ulong)Math.Max(count, 0));
             next._native = _native;
@@ -318,13 +328,18 @@ public sealed partial class {{ name }} : global::Rust.Linq.IRustEnumerable<{{ ma
     public ref struct InMarshaller
     {
         private {{ name }} _managed;
+        private global::System.Collections.Generic.List<Action> _releases;
         public void FromManaged({{ name }} managed)
         {
             _managed = managed;
-            global::System.Threading.Monitor.Enter(_managed._gate);
         }
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
-        public void Free() { global::System.Threading.Monitor.Exit(_managed._gate); }
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 }
 

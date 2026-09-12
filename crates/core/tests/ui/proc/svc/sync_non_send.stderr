@@ -1,0 +1,35 @@
+error[E0277]: `Rc<u32>` cannot be sent between threads safely
+ --> tests/ui/proc/svc/sync_non_send.rs:9:6
+  |
+9 | impl Service {
+  |      ^^^^^^^ `Rc<u32>` cannot be sent between threads safely
+  |
+  = help: within `Service`, the trait `Send` is not implemented for `Rc<u32>`
+note: required because it appears within the type `Service`
+ --> tests/ui/proc/svc/sync_non_send.rs:4:8
+  |
+4 | struct Service {
+  |        ^^^^^^^
+note: required by a bound in `assert_send_sync`
+ --> src/lang/types/mod.rs
+  |
+  | pub const fn assert_send_sync<T: Send + Sync>() {}
+  |                                  ^^^^ required by this bound in `assert_send_sync`
+
+error[E0277]: `Rc<u32>` cannot be shared between threads safely
+ --> tests/ui/proc/svc/sync_non_send.rs:9:6
+  |
+9 | impl Service {
+  |      ^^^^^^^ `Rc<u32>` cannot be shared between threads safely
+  |
+  = help: within `Service`, the trait `Sync` is not implemented for `Rc<u32>`
+note: required because it appears within the type `Service`
+ --> tests/ui/proc/svc/sync_non_send.rs:4:8
+  |
+4 | struct Service {
+  |        ^^^^^^^
+note: required by a bound in `assert_send_sync`
+ --> src/lang/types/mod.rs
+  |
+  | pub const fn assert_send_sync<T: Send + Sync>() {}
+  |                                         ^^^^ required by this bound in `assert_send_sync`

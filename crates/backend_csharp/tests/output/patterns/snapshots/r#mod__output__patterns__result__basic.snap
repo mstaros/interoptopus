@@ -149,7 +149,7 @@ public partial struct ResultUintError : IUnion, IResult<uint, Error>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged ToUnmanaged()
+    internal Unmanaged ToUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
         if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default ResultUintError: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
@@ -163,7 +163,7 @@ public partial struct ResultUintError : IUnion, IResult<uint, Error>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged AsUnmanaged()
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
     {
         if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default ResultUintError: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
@@ -294,21 +294,28 @@ public partial struct ResultUintError : IUnion, IResult<uint, Error>
     public ref struct InMarshaller
     {
         private ResultUintError _managed;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void FromManaged(ResultUintError managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
     public ref struct Marshaller
     {
         private ResultUintError _managed;
         private Unmanaged _unmanaged;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public Marshaller(ResultUintError managed) { _managed = managed; }
@@ -323,13 +330,18 @@ public partial struct ResultUintError : IUnion, IResult<uint, Error>
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.ToUnmanaged(); }
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultUintError ToManaged() { return _unmanaged.ToManaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
 }
@@ -397,7 +409,7 @@ public partial struct ResultVoidError : IUnion, IResult<Unit, Error>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged ToUnmanaged()
+    internal Unmanaged ToUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
         if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default ResultVoidError: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
@@ -410,7 +422,7 @@ public partial struct ResultVoidError : IUnion, IResult<Unit, Error>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged AsUnmanaged()
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
     {
         if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default ResultVoidError: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
@@ -546,21 +558,28 @@ public partial struct ResultVoidError : IUnion, IResult<Unit, Error>
     public ref struct InMarshaller
     {
         private ResultVoidError _managed;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void FromManaged(ResultVoidError managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
     public ref struct Marshaller
     {
         private ResultVoidError _managed;
         private Unmanaged _unmanaged;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public Marshaller(ResultVoidError managed) { _managed = managed; }
@@ -575,13 +594,18 @@ public partial struct ResultVoidError : IUnion, IResult<Unit, Error>
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.ToUnmanaged(); }
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultVoidError ToManaged() { return _unmanaged.ToManaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
 }

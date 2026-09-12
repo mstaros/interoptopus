@@ -32,7 +32,7 @@ public partial class {{ name }} : IDisposable
 
     {{ _fns_decorators_all | indent }}
     {{ _fns_decorators_internal | indent }}
-    internal Unmanaged IntoUnmanaged()
+    internal Unmanaged IntoUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
         var h = GCHandle.Alloc(this);
         return new Unmanaged { _handle = GCHandle.ToIntPtr(h) };
@@ -40,6 +40,14 @@ public partial class {{ name }} : IDisposable
 
     {{ _fns_decorators_all | indent }}
     {{ _fns_decorators_internal | indent }}
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
+    {
+        var h = GCHandle.Alloc(this);
+        try { releases.Add(() => h.Free()); }
+        catch { h.Free(); throw; }
+        return new Unmanaged { _handle = GCHandle.ToIntPtr(h) };
+    }
+
     internal Unmanaged AsUnmanaged()
     {
         var h = GCHandle.Alloc(this);

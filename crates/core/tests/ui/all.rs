@@ -29,6 +29,8 @@ fn all_ui_tests() {
     t.compile_fail("tests/ui/proc/svc/async_mutable_runtime.rs");
     t.compile_fail("tests/ui/proc/svc/async_ref_self.rs");
     t.pass("tests/ui/proc/svc/basic.rs");
+    t.compile_fail("tests/ui/proc/svc/sync_non_send.rs");
+    t.compile_fail("tests/ui/proc/svc/sync_non_sync.rs");
     t.pass("tests/ui/proc/svc/ctor.rs");
     t.compile_fail("tests/ui/proc/svc/ctor_forbidden_name.rs");
     t.compile_fail("tests/ui/proc/svc/ctor_rval_bad_self.rs");

@@ -5,7 +5,7 @@ use std::time::Duration;
 
 #[ffi]
 #[allow(unreachable_code)]
-pub fn behavior_panics() {
+pub fn behavior_panics() -> ffi::Result<(), Error> {
     panic!("Oh no");
 }
 
@@ -21,4 +21,10 @@ pub fn behavior_panics_via_result() -> ffi::Result<(), Error> {
 #[ffi]
 pub fn behavior_sleep(millis: u64) {
     std::thread::sleep(Duration::from_millis(millis));
+}
+
+#[ffi]
+pub fn behavior_panics_with_owned_string(input: ffi::String) -> ffi::Result<(), Error> {
+    drop(input);
+    panic!("Owned argument was already released");
 }

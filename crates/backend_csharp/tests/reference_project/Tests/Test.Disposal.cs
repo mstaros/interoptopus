@@ -377,7 +377,6 @@ public partial class TestDisposal
         service.Dispose();
         service.Dispose();
         Assert.Throws<ObjectDisposedException>(() => service.ReturnSlice());
-        Assert.Throws<ObjectDisposedException>(() => service.ReturnSliceMut());
     }
 
     [Fact]

@@ -148,11 +148,11 @@ public class TestPatternSlices
     [Fact]
     public void slice_of_class_backed_unions_marshals_valid_elements()
     {
-        var some = OptionUtf8String.Some("hello".Utf8());
+        using var some = OptionUtf8String.Some("hello".Utf8());
         using var slice = new[] { some, OptionUtf8String.None }.Slice();
 
         Assert.Equal(1u, Interop.pattern_ffi_slice_of_option_string(slice));
-        some.Dispose();
+        Assert.Throws<InvalidOperationException>(() => some.Dispose());
     }
 
     [Fact]
@@ -195,7 +195,7 @@ public class TestPatternSlices
                 Assert.Equal((byte)2, slice[0].bytes[1]);
                 slice.Dispose();
                 slice.Dispose();
-                Assert.Equal(0, slice.Count);
+                Assert.Throws<ObjectDisposedException>(() => _ = slice.Count);
             });
         }
     }
@@ -214,7 +214,7 @@ public class TestPatternSlices
             var marshalled = SliceOptionUtf8String.From(new[] { value });
             marshalled.Dispose();
             marshalled.Dispose();
-            Assert.Equal(0, marshalled.Count);
+            Assert.Throws<ObjectDisposedException>(() => _ = marshalled.Count);
             Assert.Throws<ObjectDisposedException>(() => Interop.pattern_ffi_slice_of_option_string(marshalled));
         }
         finally

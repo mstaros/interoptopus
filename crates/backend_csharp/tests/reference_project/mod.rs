@@ -89,7 +89,7 @@ fn interop() -> Result<(), Box<dyn std::error::Error>> {
     assert!(interop.contains("[MarshalUsing(typeof(OptionUtf8String.InMarshallerMeta))] in OptionUtf8String _0"));
     assert!(interop.contains("[CustomMarshaller(typeof(UseString), MarshalMode.ManagedToUnmanagedIn, typeof(InMarshaller))]"));
     assert!(interop.contains("public struct InMarshallerMeta { }"));
-    assert!(interop.contains("public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }"));
+    assert!(interop.contains("public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }"));
     assert!(interop.contains("public static unsafe uint pattern_string_13("));
     assert!(interop.contains("return pattern_string_13(in _0, callback_wrapped);"));
     assert!(interop.contains("public static partial ulong __test_live_bytes();"));
@@ -104,7 +104,7 @@ fn interop() -> Result<(), Box<dyn std::error::Error>> {
         "if (managed[i] is null)",
         "rval._data = Marshal.AllocHGlobal(checked(size * managed.Length));",
         "\n        try\n        {",
-        "var unmanaged = managed[i].AsUnmanaged();",
+        "var unmanaged = managed[i].AsUnmanaged(rval._owners);",
         "\n        catch\n        {",
         "rval.Dispose();",
         "throw;",

@@ -1,6 +1,6 @@
 {{ _fns_decorators_all }}
 {{ _fns_decorators_internal }}
-internal Unmanaged {{ to_unmanaged }}()
+internal Unmanaged {{ to_unmanaged }}(global::System.Collections.Generic.List<Action> releases = null)
 {
     var _unmanaged = new Unmanaged();
     {%- if to_unmanaged == "IntoUnmanaged" %}
@@ -10,7 +10,7 @@ internal Unmanaged {{ to_unmanaged }}()
         {%- if field.custom_to_unmanaged %}
         {{ field.custom_to_unmanaged | indent(width = 8) }}
         {%- else %}
-        _unmanaged.{{ field.name }} = {{ field.name }}{{ field.to_unmanaged }};
+        _unmanaged.{{ field.name }} = {{ field.name }}{{ field.to_unmanaged | replace(from=".ToUnmanaged()", to=".AsUnmanaged(releases!)") | replace(from=".IntoUnmanaged()", to=".IntoUnmanaged(releases)") }};
         {%- endif %}
         {%- endfor %}
         return _unmanaged;
@@ -25,7 +25,7 @@ internal Unmanaged {{ to_unmanaged }}()
     {%- if field.custom_to_unmanaged %}
     {{ field.custom_to_unmanaged | indent }}
     {%- else %}
-    _unmanaged.{{ field.name }} = {{ field.name }}{{ field.to_unmanaged }};
+    _unmanaged.{{ field.name }} = {{ field.name }}{{ field.to_unmanaged | replace(from=".ToUnmanaged()", to=".AsUnmanaged(releases)") | replace(from=".IntoUnmanaged()", to=".IntoUnmanaged(releases)") }};
     {%- endif %}
     {%- endfor %}
     return _unmanaged;

@@ -38,6 +38,38 @@ public partial class {{ wire_name }} : IDisposable
 {
     internal WireBuffer Buffer;
 
+    // Positive values are active borrows; -1 means disposed or transferred.
+    private int __borrowState;
+
+    private void __AcquireBorrow()
+    {
+        while (true)
+        {
+            var state = global::System.Threading.Volatile.Read(ref __borrowState);
+            ObjectDisposedException.ThrowIf(state < 0, this);
+            if (global::System.Threading.Interlocked.CompareExchange(ref __borrowState, checked(state + 1), state) == state) return;
+        }
+    }
+
+    private void __ReleaseBorrow() => global::System.Threading.Interlocked.Decrement(ref __borrowState);
+
+    private void __Borrow(global::System.Collections.Generic.List<Action> releases)
+    {
+        ArgumentNullException.ThrowIfNull(releases);
+        __AcquireBorrow();
+        try { releases.Add(__ReleaseBorrow); }
+        catch { __ReleaseBorrow(); throw; }
+    }
+
+    private bool __Close(bool disposing)
+    {
+        var state = global::System.Threading.Interlocked.CompareExchange(ref __borrowState, -1, 0);
+        if (state > 0) throw new InvalidOperationException("Cannot dispose or transfer this value while it is borrowed by a call or slice.");
+        if (state < 0 && !disposing) throw new ObjectDisposedException(GetType().Name);
+        return state == 0;
+    }
+
+
     /// Serializes <paramref name="value"/> into a new wire buffer.
     {{ _fns_decorators_all | indent }}
     public static {{ wire_name }} From({{ inner_type }} value)
@@ -62,8 +94,13 @@ public partial class {{ wire_name }} : IDisposable
     {{ _fns_decorators_all | indent }}
     public {{ inner_type }} Unwire()
     {
-        using var reader = Buffer.Reader();
-        {{ deserialize_body | indent(width = 8) }}
+        __AcquireBorrow();
+        try
+        {
+            using var reader = Buffer.Reader();
+            {{ deserialize_body | indent(width = 12) }}
+        }
+        finally { __ReleaseBorrow(); }
     }
 
     {{ _fns_decorators_all | indent }}
@@ -75,13 +112,14 @@ public partial class {{ wire_name }} : IDisposable
     /// Frees the underlying wire buffer.
     public void Dispose()
     {
-        Buffer.Dispose();
+        if (__Close(disposing: true)) Buffer.Dispose();
     }
 
     {{ _fns_decorators_all | indent }}
     {{ _fns_decorators_internal | indent }}
-    internal Unmanaged IntoUnmanaged()
+    internal Unmanaged IntoUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
+        __Close(disposing: false);
         var rval = new Unmanaged { Buffer = Buffer };
         Buffer = default;
         return rval;
@@ -89,8 +127,9 @@ public partial class {{ wire_name }} : IDisposable
 
     {{ _fns_decorators_all | indent }}
     {{ _fns_decorators_internal | indent }}
-    internal Unmanaged AsUnmanaged()
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
     {
+        __Borrow(releases);
         var rval = new Unmanaged { Buffer = Buffer };
         return rval;
     }
@@ -119,15 +158,21 @@ public partial class {{ wire_name }} : IDisposable
     public ref struct InMarshaller
     {
         private {{ wire_name }} _managed;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         {{ _fns_decorators_all | indent(width = 8) }}
         public void FromManaged({{ wire_name }} managed) { _managed = managed; }
 
         {{ _fns_decorators_all | indent(width = 8) }}
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         {{ _fns_decorators_all | indent(width = 8) }}
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
     public ref struct Marshaller

@@ -763,6 +763,9 @@ impl ServiceModel {
                 }
 
                 fn register(inventory: &mut impl ::interoptopus::inventory::Inventory) {
+                    // Foreign callers may share services across threads, and generated owners
+                    // may destroy them on a finalizer thread. Rust must prove that contract.
+                    ::interoptopus::lang::types::assert_send_sync::<#service_type>();
                     // Register the service type itself
                     <#service_type as ::interoptopus::lang::types::TypeInfo>::register(inventory);
 

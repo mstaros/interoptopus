@@ -11,9 +11,23 @@ impl FunctionModel {
         let name = &self.name;
         let export_name = self.generate_export_name();
         let generics = &self.signature.generics;
-        let inputs = &original_fn.sig.inputs;
+        let mut inputs = original_fn.sig.inputs.clone();
+        let mut patterns = Vec::new();
+        let mut arguments = Vec::new();
+        for (index, input) in inputs.iter_mut().enumerate() {
+            if let syn::FnArg::Typed(argument) = input {
+                let ident = syn::Ident::new(&format!("__interoptopus_arg_{index}"), argument.span());
+                patterns.push(argument.pat.clone());
+                arguments.push(ident.clone());
+                argument.pat = Box::new(syn::parse_quote!(#ident));
+            }
+        }
         let output = &self.signature.output;
-        let block = &original_fn.block;
+        let block = &original_fn.block.stmts;
+        let return_type = match output {
+            ReturnType::Default => quote_spanned! { self.name.span() => () },
+            ReturnType::Type(_, ty) => quote_spanned! { ty.span() => #ty },
+        };
         let unsafety = if self.is_unsafe {
             quote_spanned! { self.name.span() => unsafe }
         } else {
@@ -34,7 +48,15 @@ impl FunctionModel {
         quote_spanned! { self.name.span() =>
             #(#preserved_attrs)*
             #[unsafe(export_name = #export_name)]
-            #vis #unsafety extern "C-unwind" fn #name #generics(#inputs) #output #where_clause #block
+            #vis #unsafety extern "C" fn #name #generics(#inputs) #output #where_clause {
+                match ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(move || -> #return_type {
+                    let (#(#patterns,)*) = (#(#arguments,)*);
+                    #(#block)*
+                })) {
+                    ::std::result::Result::Ok(value) => value,
+                    ::std::result::Result::Err(_) => <#return_type as ::interoptopus::lang::types::TypeInfo>::on_ffi_panic(),
+                }
+            }
         }
     }
 

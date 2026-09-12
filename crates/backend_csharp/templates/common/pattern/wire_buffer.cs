@@ -64,7 +64,7 @@ internal partial struct WireBuffer
 
     {{ _fns_decorators_all | indent }}
     {{ _fns_decorators_internal | indent }}
-    internal unsafe Unmanaged IntoUnmanaged()
+    internal unsafe Unmanaged IntoUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
         var _unmanaged = new Unmanaged();
         _unmanaged.data = data;
@@ -75,7 +75,7 @@ internal partial struct WireBuffer
 
     {{ _fns_decorators_all | indent }}
     {{ _fns_decorators_internal | indent }}
-    internal unsafe Unmanaged AsUnmanaged()
+    internal unsafe Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
         var _unmanaged = new Unmanaged();
         _unmanaged.data = data;

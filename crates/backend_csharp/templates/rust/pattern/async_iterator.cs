@@ -4,6 +4,9 @@
 public sealed partial class {{ name }} : global::System.Collections.Generic.IAsyncEnumerable<{{ managed_element_type }}>, IDisposable, IAsyncDisposable
 {
     private readonly object _gate = new();
+    private int __borrows;
+
+    private void __ReleaseBorrow() { lock (_gate) { --__borrows; } }
     private Unmanaged _native;
     private global::Rust.Linq.ScriptScope? _scope;
 
@@ -16,11 +19,12 @@ public sealed partial class {{ name }} : global::System.Collections.Generic.IAsy
         scope?.Register(this);
     }
 
-    internal Unmanaged IntoUnmanaged()
+    internal Unmanaged IntoUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(_native._data == IntPtr.Zero, this);
+            if (__borrows != 0) throw new InvalidOperationException("Cannot use or transfer an iterator while it is borrowed.");
             var native = _native;
             _native = default;
             _scope?.Unregister(this);
@@ -29,11 +33,14 @@ public sealed partial class {{ name }} : global::System.Collections.Generic.IAsy
         }
     }
 
-    internal Unmanaged AsUnmanaged()
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
     {
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(_native._data == IntPtr.Zero, this);
+            __borrows = checked(__borrows + 1);
+            try { releases.Add(__ReleaseBorrow); }
+            catch { --__borrows; throw; }
             return _native;
         }
     }
@@ -41,7 +48,12 @@ public sealed partial class {{ name }} : global::System.Collections.Generic.IAsy
     public unsafe void Dispose()
     {
         Unmanaged native;
-        lock (_gate) { native = _native; _native = default; }
+        lock (_gate)
+        {
+            if (__borrows != 0) throw new InvalidOperationException("Cannot dispose an iterator while it is borrowed.");
+            native = _native;
+            _native = default;
+        }
         _scope?.Unregister(this);
         Drop(native);
         GC.SuppressFinalize(this);
@@ -369,12 +381,17 @@ public sealed partial class {{ name }} : global::System.Collections.Generic.IAsy
     public ref struct InMarshaller
     {
         private {{ name }} _managed;
+        private global::System.Collections.Generic.List<Action> _releases;
         public void FromManaged({{ name }} managed)
         {
             _managed = managed;
-            Monitor.Enter(_managed._gate);
         }
-        public Unmanaged ToUnmanaged() => _managed.AsUnmanaged();
-        public void Free() { Monitor.Exit(_managed._gate); }
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 }

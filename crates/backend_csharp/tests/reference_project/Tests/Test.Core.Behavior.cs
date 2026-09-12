@@ -1,22 +1,26 @@
+using My.Company.Common;
 using System;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using My.Company;
 using Xunit;
 using Interop = My.Company.Interop;
 
 public class TestBehavior
 {
-    public static bool SupportsSehPanicBoundary =>
-        OperatingSystem.IsWindows() && RuntimeFeature.IsDynamicCodeSupported;
-
-    [Fact(
-        Skip = "Requires a runtime that exposes Rust panics as catchable SEH exceptions (only managed windows).",
-        SkipUnless = nameof(SupportsSehPanicBoundary)
-    )]
+    [Fact]
     public void behavior_panics()
     {
-        Assert.Throws<SEHException>(Interop.behavior_panics);
+        Assert.Equal(ResultVoidError.Panic, Interop.behavior_panics());
+    }
+
+    [Fact]
+    public void panic_after_ownership_transfer_does_not_run_managed_rollback()
+    {
+        AllocationProbe.Settle();
+        var baseline = Interop.__test_live_allocations();
+        using var value = "panic-owned".Utf8();
+        Assert.Equal(ResultVoidError.Panic, Interop.behavior_panics_with_owned_string(value));
+        Assert.Throws<ObjectDisposedException>(() => _ = value.String);
+        Assert.Equal(baseline, Interop.__test_live_allocations());
     }
 
     [Fact]

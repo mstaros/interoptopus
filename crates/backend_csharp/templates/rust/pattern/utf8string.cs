@@ -15,6 +15,38 @@ public partial class Utf8String : IDisposable
 {
     private Utf8String() { }
 
+    // Positive values are active borrows; -1 means disposed or transferred.
+    private int __borrowState;
+
+    private void __AcquireBorrow()
+    {
+        while (true)
+        {
+            var state = global::System.Threading.Volatile.Read(ref __borrowState);
+            ObjectDisposedException.ThrowIf(state < 0, this);
+            if (global::System.Threading.Interlocked.CompareExchange(ref __borrowState, checked(state + 1), state) == state) return;
+        }
+    }
+
+    private void __ReleaseBorrow() => global::System.Threading.Interlocked.Decrement(ref __borrowState);
+
+    private void __Borrow(global::System.Collections.Generic.List<Action> releases)
+    {
+        ArgumentNullException.ThrowIfNull(releases);
+        __AcquireBorrow();
+        try { releases.Add(__ReleaseBorrow); }
+        catch { __ReleaseBorrow(); throw; }
+    }
+
+    private bool __Close(bool disposing)
+    {
+        var state = global::System.Threading.Interlocked.CompareExchange(ref __borrowState, -1, 0);
+        if (state > 0) throw new InvalidOperationException("Cannot dispose or transfer this value while it is borrowed by a call or slice.");
+        if (state < 0 && !disposing) throw new ObjectDisposedException(GetType().Name);
+        return state == 0;
+    }
+
+
     /// Creates a new Rust-owned <see cref="Utf8String"/> from a managed string.
     {{ _fns_decorators_all | indent }}
     public static unsafe Utf8String From(string s)
@@ -61,53 +93,57 @@ public partial class Utf8String : IDisposable
     {
         get
         {
-            ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
-            var span = new ReadOnlySpan<byte>((byte*)_ptr, checked((int)_len));
-            var s = Encoding.UTF8.GetString(span);
-            return s;
+            __AcquireBorrow();
+            try { return Encoding.UTF8.GetString(new ReadOnlySpan<byte>((byte*)_ptr, checked((int)_len))); }
+            finally { __ReleaseBorrow(); }
         }
     }
 
     /// Converts the native UTF-8 buffer to a managed string and disposes the native buffer.
     /// After this call the <see cref="Utf8String"/> instance is consumed and must not be used again.
     {{ _fns_decorators_all | indent }}
-    public string IntoString()
+    public unsafe string IntoString()
     {
-        var rval = String;
-        Dispose();
-        return rval;
+        var native = IntoUnmanaged();
+        try { return Encoding.UTF8.GetString(new ReadOnlySpan<byte>((byte*)native._ptr, checked((int)native._len))); }
+        finally { native.Free(); }
     }
 
     /// Frees the native Rust memory. Safe to call multiple times.
     {{ _fns_decorators_all | indent }}
     public void Dispose()
     {
-        if (_ptr == IntPtr.Zero) return;
+        if (!__Close(disposing: true)) return;
         var _unmanaged = new Unmanaged();
         _unmanaged._ptr = _ptr;
         _unmanaged._len = _len;
         _unmanaged._capacity = _capacity;
-        InteropHelper.interoptopus_string_destroy(_unmanaged);
         _ptr = IntPtr.Zero;
         _len = 0;
         _capacity = 0;
+        _unmanaged.Free();
     }
 
     /// Creates an independent copy of this string, backed by a new Rust allocation.
     {{ _fns_decorators_all | indent }}
     public Utf8String Clone()
     {
-        var _new = new Unmanaged();
-        var _this = AsUnmanaged();
-        InteropHelper.interoptopus_string_clone(ref _this, ref _new);
-        return _new.IntoManaged();
+        __AcquireBorrow();
+        try
+        {
+            var source = new Unmanaged { _ptr = _ptr, _len = _len, _capacity = _capacity };
+            var copy = new Unmanaged();
+            InteropHelper.interoptopus_string_clone(ref source, ref copy);
+            return copy.IntoManaged();
+        }
+        finally { __ReleaseBorrow(); }
     }
 
     {{ _fns_decorators_all | indent }}
     {{ _fns_decorators_internal | indent }}
-    internal Unmanaged IntoUnmanaged()
+    internal Unmanaged IntoUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
-        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
+        __Close(disposing: false);
         var _unmanaged = new Unmanaged();
         _unmanaged._ptr = _ptr;
         _unmanaged._len = _len;
@@ -120,9 +156,9 @@ public partial class Utf8String : IDisposable
 
     {{ _fns_decorators_all | indent }}
     {{ _fns_decorators_internal | indent }}
-    internal Unmanaged AsUnmanaged()
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
     {
-        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
+        __Borrow(releases);
         var _unmanaged = new Unmanaged();
         _unmanaged._ptr = _ptr;
         _unmanaged._len = _len;
@@ -189,15 +225,21 @@ public partial class Utf8String : IDisposable
     public ref struct InMarshaller
     {
         private Utf8String _managed;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         {{ _fns_decorators_all | indent(width = 8) }}
         public void FromManaged(Utf8String managed) { _managed = managed; }
 
         {{ _fns_decorators_all | indent(width = 8) }}
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         {{ _fns_decorators_all | indent(width = 8) }}
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
     public ref struct Marshaller

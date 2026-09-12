@@ -60,6 +60,9 @@ pub fn inventory() -> RustInventory {
     let _ = inventory
         // Functions
         .register(function!(functions::disposal::disposal_take_strings))
+        .register(function!(functions::disposal::disposal_borrow_resources))
+        .register(function!(functions::disposal::disposal_native_callback))
+        .register(function!(functions::disposal::disposal_borrow_owned_fields))
         .register(function!(functions::disposal::disposal_call_services))
         .register(function!(functions::disposal::disposal_call_services_mut_shared))
         .register(function!(functions::disposal::disposal_call_services_shared_mut))
@@ -121,6 +124,7 @@ pub fn inventory() -> RustInventory {
         .register(function!(functions::array::nested_array_3))
         .register(function!(functions::behavior::behavior_sleep))
         .register(function!(functions::behavior::behavior_panics))
+        .register(function!(functions::behavior::behavior_panics_with_owned_string))
         .register(function!(functions::behavior::behavior_panics_via_result))
         .register(function!(functions::enum_constants::enum_constants_echo))
         .register(function!(functions::enum_constants::enum_constants_wire_echo))

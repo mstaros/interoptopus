@@ -59,13 +59,14 @@ impl Pass {
                 // Look up the original function for context (native args, rval)
                 let Some(original_fn) = fns_all.get(overload.base) else { continue };
                 let is_destructor = services.iter().any(|(_, service)| service.destructor == overload.base);
+                let is_constructor = services.iter().any(|(_, service)| service.sources.ctors.contains(&overload.base));
 
                 match &overload.kind {
                     OverloadKind::Body(transforms) => {
-                        body.push(render(original_fn, function, transforms, types, type_overloads, trampoline, overload_id, templates, is_destructor)?);
+                        body.push(render(original_fn, function, transforms, types, type_overloads, trampoline, overload_id, templates, is_destructor, is_constructor)?);
                     }
                     OverloadKind::Async(transforms) => {
-                        asynk.push(render(original_fn, function, transforms, types, type_overloads, trampoline, overload_id, templates, is_destructor)?);
+                        asynk.push(render(original_fn, function, transforms, types, type_overloads, trampoline, overload_id, templates, is_destructor, is_constructor)?);
                     }
                     OverloadKind::Simple => {}
                 }
@@ -101,6 +102,7 @@ fn render(
     overload_id: FunctionId,
     templates: &TemplateEngine,
     is_destructor: bool,
+    is_constructor: bool,
 ) -> Result<String, crate::Error> {
     let name = &original_fn.name;
     let is_async = matches!(transforms.rval, RvalTransform::AsyncTask(_));
@@ -131,9 +133,24 @@ fn render(
 
     let native_rval_is_result = is_async && matches!(types.get(original_fn.signature.rval).map(|t| &t.kind), Some(TypeKind::TypePattern(TypePattern::Result(_, _, _))));
 
+    let result_local = service_context_name(overload_fn.signature.arguments.len(), &overload_fn.signature.arguments);
+    let mut copy_result = None;
+    if !is_constructor && transforms.args.iter().any(|arg| matches!(arg, ArgTransform::Service)) {
+        let result_type = match transforms.rval {
+            RvalTransform::AsyncTask(inner) => inner,
+            _ => original_fn.signature.rval,
+        };
+        copy_result = output::rust::fns::rust::service_result_copy(result_type, types, name, &result_local)?;
+        if is_async && copy_result.is_some() {
+            return Err(crate::Error::from(format!("Cannot emit async service call `{name}` with a borrowed result; return owned data.")));
+        }
+    }
+
     let docs = format_docs(&overload_fn.docs);
     let mut context = Context::new();
     context.insert("name", name);
+    context.insert("copy_result", &copy_result);
+    context.insert("result_local", &result_local);
     context.insert("rval", &rval);
     context.insert("is_void", &is_void);
     context.insert("is_async", &is_async);

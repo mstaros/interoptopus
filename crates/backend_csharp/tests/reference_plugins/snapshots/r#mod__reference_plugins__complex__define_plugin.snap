@@ -479,7 +479,7 @@ public partial struct Array
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged ToUnmanaged()
+    internal Unmanaged ToUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
         var _unmanaged = new Unmanaged();
         unsafe
@@ -497,7 +497,7 @@ public partial struct Array
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged AsUnmanaged()
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
     {
         var _unmanaged = new Unmanaged();
         unsafe
@@ -526,21 +526,28 @@ public partial struct Array
     public ref struct InMarshaller
     {
         private Array _managed;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void FromManaged(Array managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
     public ref struct Marshaller
     {
         private Array _managed;
         private Unmanaged _unmanaged;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public Marshaller(Array managed) { _managed = managed; }
@@ -555,13 +562,18 @@ public partial struct Array
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.ToUnmanaged(); }
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public Array ToManaged() { return _unmanaged.ToManaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
 }
@@ -628,11 +640,11 @@ public partial struct NestedArray
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged ToUnmanaged()
+    internal Unmanaged ToUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
         var _unmanaged = new Unmanaged();
         _unmanaged.field_enum = field_enum;
-        _unmanaged.field_vec = field_vec.ToUnmanaged();
+        _unmanaged.field_vec = field_vec.AsUnmanaged(releases);
         _unmanaged.field_bool = field_bool;
         _unmanaged.field_int = field_int;
         unsafe
@@ -651,7 +663,7 @@ public partial struct NestedArray
             var dst = new Span<ushort>(_unmanaged.field_array_2, 5);
             src.CopyTo(dst);
         }
-        _unmanaged.field_struct = field_struct.ToUnmanaged();
+        _unmanaged.field_struct = field_struct.AsUnmanaged(releases);
         return _unmanaged;
     }
 
@@ -659,11 +671,11 @@ public partial struct NestedArray
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged AsUnmanaged()
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
     {
         var _unmanaged = new Unmanaged();
         _unmanaged.field_enum = field_enum;
-        _unmanaged.field_vec = field_vec.AsUnmanaged();
+        _unmanaged.field_vec = field_vec.AsUnmanaged(releases);
         _unmanaged.field_bool = field_bool;
         _unmanaged.field_int = field_int;
         unsafe
@@ -682,7 +694,7 @@ public partial struct NestedArray
             var dst = new Span<ushort>(_unmanaged.field_array_2, 5);
             src.CopyTo(dst);
         }
-        _unmanaged.field_struct = field_struct.AsUnmanaged();
+        _unmanaged.field_struct = field_struct.AsUnmanaged(releases);
         return _unmanaged;
     }
 
@@ -701,21 +713,28 @@ public partial struct NestedArray
     public ref struct InMarshaller
     {
         private NestedArray _managed;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void FromManaged(NestedArray managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
     public ref struct Marshaller
     {
         private NestedArray _managed;
         private Unmanaged _unmanaged;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public Marshaller(NestedArray managed) { _managed = managed; }
@@ -730,13 +749,18 @@ public partial struct NestedArray
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.ToUnmanaged(); }
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public NestedArray ToManaged() { return _unmanaged.ToManaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
 }
@@ -795,7 +819,7 @@ public partial struct Vec3f32
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged ToUnmanaged()
+    internal Unmanaged ToUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
         var _unmanaged = new Unmanaged();
         _unmanaged.x = x;
@@ -808,7 +832,7 @@ public partial struct Vec3f32
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged AsUnmanaged()
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
     {
         var _unmanaged = new Unmanaged();
         _unmanaged.x = x;
@@ -832,21 +856,28 @@ public partial struct Vec3f32
     public ref struct InMarshaller
     {
         private Vec3f32 _managed;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void FromManaged(Vec3f32 managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
     public ref struct Marshaller
     {
         private Vec3f32 _managed;
         private Unmanaged _unmanaged;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public Marshaller(Vec3f32 managed) { _managed = managed; }
@@ -861,13 +892,18 @@ public partial struct Vec3f32
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.ToUnmanaged(); }
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public Vec3f32 ToManaged() { return _unmanaged.ToManaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
 }
@@ -949,12 +985,12 @@ public partial struct EnumPayload : IUnion
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged ToUnmanaged()
+    internal Unmanaged ToUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
         if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default EnumPayload: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
-        if (_variant == 1) _unmanaged._B._B = _B.ToUnmanaged();
+        if (_variant == 1) _unmanaged._B._B = _B.AsUnmanaged(releases!);
         if (_variant == 2) _unmanaged._C._C = _C;
         return _unmanaged;
     }
@@ -963,12 +999,12 @@ public partial struct EnumPayload : IUnion
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged AsUnmanaged()
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
     {
         if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default EnumPayload: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
-        if (_variant == 1) _unmanaged._B._B = _B.AsUnmanaged();
+        if (_variant == 1) _unmanaged._B._B = _B.AsUnmanaged(releases);
         if (_variant == 2) _unmanaged._C._C = _C;
         return _unmanaged;
     }
@@ -1060,21 +1096,28 @@ public partial struct EnumPayload : IUnion
     public ref struct InMarshaller
     {
         private EnumPayload _managed;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void FromManaged(EnumPayload managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
     public ref struct Marshaller
     {
         private EnumPayload _managed;
         private Unmanaged _unmanaged;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public Marshaller(EnumPayload managed) { _managed = managed; }
@@ -1089,13 +1132,18 @@ public partial struct EnumPayload : IUnion
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.ToUnmanaged(); }
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public EnumPayload ToManaged() { return _unmanaged.ToManaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
 }

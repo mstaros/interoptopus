@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ⚠️ Breaking
 
+- Typed service calls copy read-only primitive slice results while their call guards are held,
+  including successful Result payloads. Top-level C strings already become managed strings.
+  Mutable slices, raw pointers, and nested borrowed service results that cannot be copied are
+  rejected during generation; expose owned results or perform mutation inside a service method.
+  Synchronous Rust services now require Send + Sync, as do asynchronous services.
+
+- Generated strings, vectors, callbacks, slices, and wire wrappers retain active native borrows.
+  Dispose or ownership transfer during a borrow throws InvalidOperationException; after disposal
+  or transfer, access throws ObjectDisposedException. Nested fields are retained by identity,
+  including elements of marshalled slices. Dispose a slice before its borrowed element owners.
+  Vec.AsSpan now returns a managed copy so it remains valid after vector disposal.
+  Managed callbacks transferred to Rust retain independent roots until Rust drops them.
+
+- Synchronous #[ffi] exports use a non-unwinding C boundary. Unwinding panics return the existing
+  ffi::Result::Panic for Result return types, including aliases. Bare return types abort the
+  process because they cannot represent an error. panic=abort and panicking destructors can
+  still abort; this does not make arbitrary native failures recoverable. Owned arguments are
+  dropped in Rust without a foreign exception triggering managed marshalling rollback.
+
 - Generated service wrappers now own native resources through a private, service-specific
   `SafeHandle`, including cleanup when `Dispose()` is omitted. Native destruction must be safe
   on the finalizer thread or the thread releasing the last call, and must not panic or throw;
@@ -16,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   contains managed interop exceptions; cleanup failures no longer propagate from `Dispose()`.
   Call scopes retain the handle through native completion or cancellation acknowledgement.
   Interlocked borrow guards and immediate rejection of calls after disposal are preserved.
-  Arbitrary raw pointers and returned borrows do not gain ownership or lifetime guarantees.
+  Arbitrary raw pointer imports still require caller-managed lifetimes. Typed service result handling is described above.
 
 - Generated C# service wrappers use Interlocked borrow guards when exported signatures
   contain mutable service access. Overlapping mutable/mutable or mutable/shared calls
@@ -24,8 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   incompatible service aliases, and direct span methods. Shared borrows may coexist;
   asynchronous scopes retain their borrow through completion or cancellation acknowledgement.
   Generation warns with the affected service and exports. The guards cover managed call
-  duration only: raw pointers, returned borrows, and Rust Send/Sync or thread-affinity
-  requirements still need caller coordination.
+  duration; raw pointer imports still require caller coordination. Rust macro-generated services
+  enforce Send + Sync, while manually supplied inventories must uphold that contract.
 
 - **Read-only custom-marshalled pointer overloads now use `in T` instead of `ref T`.**
   Their dedicated `ManagedToUnmanagedIn` marshaller borrows through `AsUnmanaged()` and does

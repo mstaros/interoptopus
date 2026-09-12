@@ -59,13 +59,13 @@ impl Pass {
                 let has_mutable_calls = !mutable_exports.is_empty();
                 if has_mutable_calls {
                     eprintln!(
-                        "warning: Interoptopus C# service `{name}` has mutable access in {}. Generated Interlocked guards throw InvalidOperationException on conflicting calls, including callback reentry. Guards cover call duration only; raw pointers, returned borrows, and Rust threading requirements still require caller coordination.",
+                        "warning: Interoptopus C# service `{name}` has mutable access in {}. Generated Interlocked guards throw InvalidOperationException on conflicting calls, including callback reentry. Guards cover call duration. Supported read-only service results are copied; unsupported escaping borrows are rejected. Raw pointer imports require caller coordination. Rust #[ffi] services must implement Send + Sync.",
                         mutable_exports.join(", ")
                     );
                 }
 
                 eprintln!(
-                    "warning: Interoptopus C# service `{name}` uses SafeHandle finalization. Native destructor `{}` must be safe on the finalizer thread or the thread releasing the last call, and must not panic or throw. These requirements are not checked by the generator.",
+                    "warning: Interoptopus C# service `{name}` uses SafeHandle finalization. Native destructor `{}` must be safe on the finalizer thread or the thread releasing the last call, and must not panic or throw. Rust #[ffi] service macros enforce Send + Sync; destructor behavior and manually supplied inventories still require author verification.",
                     dtor_fn.name
                 );
 

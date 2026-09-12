@@ -1,0 +1,18 @@
+error[E0277]: `Cell<u32>` cannot be shared between threads safely
+ --> tests/ui/proc/svc/sync_non_sync.rs:9:6
+  |
+9 | impl Service {
+  |      ^^^^^^^ `Cell<u32>` cannot be shared between threads safely
+  |
+  = help: within `Service`, the trait `Sync` is not implemented for `Cell<u32>`
+  = note: if you want to do aliasing and mutation between multiple threads, use `std::sync::RwLock` or `std::sync::atomic::AtomicU32` instead
+note: required because it appears within the type `Service`
+ --> tests/ui/proc/svc/sync_non_sync.rs:4:8
+  |
+4 | struct Service {
+  |        ^^^^^^^
+note: required by a bound in `assert_send_sync`
+ --> src/lang/types/mod.rs
+  |
+  | pub const fn assert_send_sync<T: Send + Sync>() {}
+  |                                         ^^^^ required by this bound in `assert_send_sync`

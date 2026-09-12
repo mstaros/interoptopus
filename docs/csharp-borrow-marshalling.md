@@ -158,3 +158,41 @@ Changing an affected overload from `ref T` to `in T` is a public source break: c
 write `ref` must update to `in` or use the permitted call form. Add an entry under
 `[Unreleased] / ⚠️ Breaking` in `crates/backend_csharp/CHANGELOG.md`. Describe the change as
 an ownership-transfer optimization and API change, not as a bug fix.
+
+## Concurrent ownership and panic boundaries
+
+Generated AsUnmanaged conversions now receive a release list owned by the call marshaller.
+Each native owner adds a release action after atomically acquiring its borrow. Cleanup runs
+those actions in reverse order, including after partial conversion failure. The actions retain
+the actual field objects; assigning another object to a composite field during callback reentry
+does not release the original owner prematurely.
+
+Strings, vectors, callbacks, and wire wrappers atomically claim disposal or transfer only when
+there are no active borrows. Conflicts throw InvalidOperationException without blocking a
+callback or holding a thread-owned monitor across native execution. Reads and native callback
+invocation hold borrows too. A successfully disposed or transferred value cannot be reused.
+Managed callback transfers create independently rooted native references rather than consuming
+the reusable managed delegate.
+
+Marshalled slices retain their borrowed element owners until the slice is disposed or finalized.
+Dispose the slice before disposing its elements. Array-backed slices also keep a managed array
+reference so an escaped managed span remains valid after unpinning; raw-pointer slices retain
+their explicit caller-coordinated lifetime contract. Vec.AsSpan returns a managed copy.
+
+Typed service calls copy read-only primitive slices before releasing the service guard.
+Successful Result payloads use the same copy path. Unsupported mutable, pointer, or nested
+borrowed results are generation errors. Async service results must be owned. Constructors
+return owned service handles and are exempt from the borrowed-result diagnostic.
+
+Rust #[ffi] service macros enforce Send + Sync for synchronous and asynchronous services.
+Destructor thread behavior still depends on correct Rust implementations of those traits.
+Synchronous #[ffi] functions contain unwinding panics at their C boundary: ffi::Result returns
+Panic, while signatures with no error representation abort. TypeInfo::on_ffi_panic supplies
+the return policy, so type aliases are supported. panic=abort or a destructor that panics during
+unwinding still aborts. The managed OnInvoked notification now sees an ordinary Result return
+after a caught panic, preventing managed rollback from freeing an already consumed argument.
+
+Regression coverage includes blocked native calls, callback reentry, competing transfers,
+borrowed nested fields, service disposal/finalization, and panics after an owned string is freed.
+Raw imports, external native allocation validity, and arbitrary pointer aliasing remain outside
+the generated ownership contract.

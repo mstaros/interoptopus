@@ -3,6 +3,38 @@ public partial class {{ name }}
     {{ _fns_decorators_all | indent }}
     private {{ name }}() { }
 
+    // Positive values are active borrows; -1 means disposed or transferred.
+    private int __borrowState;
+
+    private void __AcquireBorrow()
+    {
+        while (true)
+        {
+            var state = global::System.Threading.Volatile.Read(ref __borrowState);
+            ObjectDisposedException.ThrowIf(state < 0, this);
+            if (global::System.Threading.Interlocked.CompareExchange(ref __borrowState, checked(state + 1), state) == state) return;
+        }
+    }
+
+    private void __ReleaseBorrow() => global::System.Threading.Interlocked.Decrement(ref __borrowState);
+
+    private void __Borrow(global::System.Collections.Generic.List<Action> releases)
+    {
+        ArgumentNullException.ThrowIfNull(releases);
+        __AcquireBorrow();
+        try { releases.Add(__ReleaseBorrow); }
+        catch { __ReleaseBorrow(); throw; }
+    }
+
+    private bool __Close(bool disposing)
+    {
+        var state = global::System.Threading.Interlocked.CompareExchange(ref __borrowState, -1, 0);
+        if (state > 0) throw new InvalidOperationException("Cannot dispose or transfer this value while it is borrowed by a call or slice.");
+        if (state < 0 && !disposing) throw new ObjectDisposedException(GetType().Name);
+        return state == 0;
+    }
+
+
     /// Creates an empty Rust-owned vector.
     {{ _fns_decorators_all | indent }}
     public static unsafe {{ name }} Empty()
@@ -15,27 +47,29 @@ public partial class {{ name }}
     public int Count
     {
         {{ _fns_decorators_all | indent(width = 8) }}
-        get { if (_ptr == IntPtr.Zero) { throw new NullReferenceException(); } else { return (int) _len; } }
+        get { __AcquireBorrow(); try { return checked((int)_len); } finally { __ReleaseBorrow(); } }
     }
 
     {{ _fns_decorators_all | indent }}
     {{ _fns_decorators_internal | indent }}
-    internal Unmanaged IntoUnmanaged()
+    internal Unmanaged IntoUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
-        if (_ptr == IntPtr.Zero) throw new NullReferenceException();
+        __Close(disposing: false);
         var rval = new Unmanaged();
         rval._len = _len;
         rval._capacity = _capacity;
         rval._ptr = _ptr;
         _ptr = IntPtr.Zero;
+        _len = 0;
+        _capacity = 0;
         return rval;
     }
 
     {{ _fns_decorators_all | indent }}
     {{ _fns_decorators_internal | indent }}
-    internal Unmanaged AsUnmanaged()
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
     {
-        if (_ptr == IntPtr.Zero) throw new NullReferenceException();
+        __Borrow(releases);
         var rval = new Unmanaged();
         rval._len = _len;
         rval._capacity = _capacity;
@@ -47,15 +81,15 @@ public partial class {{ name }}
     {{ _fns_decorators_all | indent }}
     public void Dispose()
     {
-        if (_ptr == IntPtr.Zero) return;
+        if (!__Close(disposing: true)) return;
         var _unmanaged = new Unmanaged();
         _unmanaged._ptr = _ptr;
         _unmanaged._len = _len;
         _unmanaged._capacity = _capacity;
-        InteropHelper.interoptopus_vec_destroy(_unmanaged);
         _ptr = IntPtr.Zero;
         _len = 0;
         _capacity = 0;
+        _unmanaged.Free();
     }
 
     {{ _fns_decorators_all | indent }}
@@ -109,15 +143,21 @@ public partial class {{ name }}
     public ref struct InMarshaller
     {
         private {{ name }} _managed;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         {{ _fns_decorators_all | indent(width = 8) }}
         public void FromManaged({{ name }} managed) { _managed = managed; }
 
         {{ _fns_decorators_all | indent(width = 8) }}
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         {{ _fns_decorators_all | indent(width = 8) }}
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
     public ref struct Marshaller

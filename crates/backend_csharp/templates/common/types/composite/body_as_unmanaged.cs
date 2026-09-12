@@ -1,6 +1,6 @@
 {{ _fns_decorators_all }}
 {{ _fns_decorators_internal }}
-internal Unmanaged AsUnmanaged()
+internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
 {
     var _unmanaged = new Unmanaged();
     {%- for field in fields %}

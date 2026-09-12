@@ -99,6 +99,38 @@ public partial class SumDelegate2 : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal SumDelegate2() { }
 
+    // Positive values are active borrows; -1 means disposed or transferred.
+    private int __borrowState;
+
+    private void __AcquireBorrow()
+    {
+        while (true)
+        {
+            var state = global::System.Threading.Volatile.Read(ref __borrowState);
+            ObjectDisposedException.ThrowIf(state < 0, this);
+            if (global::System.Threading.Interlocked.CompareExchange(ref __borrowState, checked(state + 1), state) == state) return;
+        }
+    }
+
+    private void __ReleaseBorrow() => global::System.Threading.Interlocked.Decrement(ref __borrowState);
+
+    private void __Borrow(global::System.Collections.Generic.List<Action> releases)
+    {
+        ArgumentNullException.ThrowIfNull(releases);
+        __AcquireBorrow();
+        try { releases.Add(__ReleaseBorrow); }
+        catch { __ReleaseBorrow(); throw; }
+    }
+
+    private bool __Close(bool disposing)
+    {
+        var state = global::System.Threading.Interlocked.CompareExchange(ref __borrowState, -1, 0);
+        if (state > 0) throw new InvalidOperationException("Cannot dispose or transfer this value while it is borrowed by a call or slice.");
+        if (state < 0 && !disposing) throw new ObjectDisposedException(GetType().Name);
+        return state == 0;
+    }
+
+
     /// Wraps a managed delegate so it can be passed to Rust as a callback.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public unsafe SumDelegate2(global::System.Func<int, int, int> managed)
@@ -130,7 +162,7 @@ public partial class SumDelegate2 : IDisposable
         }
         catch (Exception e)
         {
-            _exception = e;
+            global::System.Threading.Interlocked.Exchange(ref _exception, e);
             
             return default;
             
@@ -142,12 +174,23 @@ public partial class SumDelegate2 : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal unsafe int CallRaw(int x, int y)
     {
+        global::System.Collections.Generic.List<Action> releases = null;
+        __AcquireBorrow();
+        try
+        {
 
         var __target = (delegate* unmanaged[Cdecl]<int, int, IntPtr, int>)_ptr;
 
         
         return __target(x, y, _data);
         
+        }
+        finally
+        {
+            if (releases != null)
+                for (var i = releases.Count - 1; i >= 0; --i) releases[i]();
+            __ReleaseBorrow();
+        }
     }
 
     /// Invokes the callback. When created from a managed delegate, calls it directly.
@@ -155,13 +198,17 @@ public partial class SumDelegate2 : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public int Call(int x, int y)
     {
-        if (_ptr == IntPtr.Zero) throw new ObjectDisposedException(nameof(SumDelegate2));
+        __AcquireBorrow();
+        try
+        {
         if (_managed != null)
         {
             return _managed(x, y);
             
         }
         return CallRaw(x, y);
+        }
+        finally { __ReleaseBorrow(); }
     }
 
     /// Disposes the callback. If the managed delegate threw an exception during a
@@ -170,8 +217,13 @@ public partial class SumDelegate2 : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public unsafe void Dispose()
     {
-        var exception = _exception;
-        _exception = null;
+        var closed = __Close(disposing: true);
+        var exception = global::System.Threading.Interlocked.Exchange(ref _exception, null);
+        if (!closed)
+        {
+            if (exception != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
+            return;
+        }
         var destructor = _destructor;
         var data = _data;
         _destructor = IntPtr.Zero;
@@ -192,34 +244,32 @@ public partial class SumDelegate2 : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged IntoUnmanaged()
+    internal Unmanaged IntoUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
-        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
-        var rval = new Unmanaged();
-        rval._callback = _ptr;
         if (_managed != null)
         {
-            var handle = GCHandle.Alloc(this);
-            rval._data = GCHandle.ToIntPtr(handle);
-            rval._destructor = ReleaseHandlePtr;
+            __AcquireBorrow();
+            try
+            {
+                var handle = GCHandle.Alloc(this);
+                return new Unmanaged { _callback = _ptr, _data = GCHandle.ToIntPtr(handle), _destructor = ReleaseHandlePtr };
+            }
+            finally { __ReleaseBorrow(); }
         }
-        else
-        {
-            rval._data = _data;
-            rval._destructor = _destructor;
-            _ptr = IntPtr.Zero;
-            _data = IntPtr.Zero;
-            _destructor = IntPtr.Zero;
-        }
-        return rval;
+        __Close(disposing: false);
+        var native = new Unmanaged { _callback = _ptr, _data = _data, _destructor = _destructor };
+        _ptr = IntPtr.Zero;
+        _data = IntPtr.Zero;
+        _destructor = IntPtr.Zero;
+        return native;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged AsUnmanaged()
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
     {
-        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
+        __Borrow(releases);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         rval._data = _data;
@@ -227,9 +277,8 @@ public partial class SumDelegate2 : IDisposable
 
         if (_managed != null)
         {
-            // Borrowed composite fields have no scoped marshaller to free a handle.
-            // Lazily retain an instance thunk for that path only.
-            _native ??= CallTrampoline;
+            // The release list roots this wrapper and its thunk until the call ends.
+            global::System.Threading.Interlocked.CompareExchange(ref _native, CallTrampoline, null);
             rval._callback = Marshal.GetFunctionPointerForDelegate(_native);
             rval._data = IntPtr.Zero;
             rval._destructor = IntPtr.Zero;
@@ -276,15 +325,21 @@ public partial class SumDelegate2 : IDisposable
     public ref struct InMarshaller
     {
         private SumDelegate2 _managed;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void FromManaged(SumDelegate2 managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
     public ref struct Marshaller
@@ -369,6 +424,38 @@ public partial class MyCallback : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal MyCallback() { }
 
+    // Positive values are active borrows; -1 means disposed or transferred.
+    private int __borrowState;
+
+    private void __AcquireBorrow()
+    {
+        while (true)
+        {
+            var state = global::System.Threading.Volatile.Read(ref __borrowState);
+            ObjectDisposedException.ThrowIf(state < 0, this);
+            if (global::System.Threading.Interlocked.CompareExchange(ref __borrowState, checked(state + 1), state) == state) return;
+        }
+    }
+
+    private void __ReleaseBorrow() => global::System.Threading.Interlocked.Decrement(ref __borrowState);
+
+    private void __Borrow(global::System.Collections.Generic.List<Action> releases)
+    {
+        ArgumentNullException.ThrowIfNull(releases);
+        __AcquireBorrow();
+        try { releases.Add(__ReleaseBorrow); }
+        catch { __ReleaseBorrow(); throw; }
+    }
+
+    private bool __Close(bool disposing)
+    {
+        var state = global::System.Threading.Interlocked.CompareExchange(ref __borrowState, -1, 0);
+        if (state > 0) throw new InvalidOperationException("Cannot dispose or transfer this value while it is borrowed by a call or slice.");
+        if (state < 0 && !disposing) throw new ObjectDisposedException(GetType().Name);
+        return state == 0;
+    }
+
+
     /// Wraps a managed delegate so it can be passed to Rust as a callback.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public unsafe MyCallback(global::System.Func<uint, uint> managed)
@@ -400,7 +487,7 @@ public partial class MyCallback : IDisposable
         }
         catch (Exception e)
         {
-            _exception = e;
+            global::System.Threading.Interlocked.Exchange(ref _exception, e);
             
             return default;
             
@@ -412,12 +499,23 @@ public partial class MyCallback : IDisposable
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal unsafe uint CallRaw(uint value)
     {
+        global::System.Collections.Generic.List<Action> releases = null;
+        __AcquireBorrow();
+        try
+        {
 
         var __target = (delegate* unmanaged[Cdecl]<uint, IntPtr, uint>)_ptr;
 
         
         return __target(value, _data);
         
+        }
+        finally
+        {
+            if (releases != null)
+                for (var i = releases.Count - 1; i >= 0; --i) releases[i]();
+            __ReleaseBorrow();
+        }
     }
 
     /// Invokes the callback. When created from a managed delegate, calls it directly.
@@ -425,13 +523,17 @@ public partial class MyCallback : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public uint Call(uint value)
     {
-        if (_ptr == IntPtr.Zero) throw new ObjectDisposedException(nameof(MyCallback));
+        __AcquireBorrow();
+        try
+        {
         if (_managed != null)
         {
             return _managed(value);
             
         }
         return CallRaw(value);
+        }
+        finally { __ReleaseBorrow(); }
     }
 
     /// Disposes the callback. If the managed delegate threw an exception during a
@@ -440,8 +542,13 @@ public partial class MyCallback : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public unsafe void Dispose()
     {
-        var exception = _exception;
-        _exception = null;
+        var closed = __Close(disposing: true);
+        var exception = global::System.Threading.Interlocked.Exchange(ref _exception, null);
+        if (!closed)
+        {
+            if (exception != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
+            return;
+        }
         var destructor = _destructor;
         var data = _data;
         _destructor = IntPtr.Zero;
@@ -462,34 +569,32 @@ public partial class MyCallback : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged IntoUnmanaged()
+    internal Unmanaged IntoUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
-        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
-        var rval = new Unmanaged();
-        rval._callback = _ptr;
         if (_managed != null)
         {
-            var handle = GCHandle.Alloc(this);
-            rval._data = GCHandle.ToIntPtr(handle);
-            rval._destructor = ReleaseHandlePtr;
+            __AcquireBorrow();
+            try
+            {
+                var handle = GCHandle.Alloc(this);
+                return new Unmanaged { _callback = _ptr, _data = GCHandle.ToIntPtr(handle), _destructor = ReleaseHandlePtr };
+            }
+            finally { __ReleaseBorrow(); }
         }
-        else
-        {
-            rval._data = _data;
-            rval._destructor = _destructor;
-            _ptr = IntPtr.Zero;
-            _data = IntPtr.Zero;
-            _destructor = IntPtr.Zero;
-        }
-        return rval;
+        __Close(disposing: false);
+        var native = new Unmanaged { _callback = _ptr, _data = _data, _destructor = _destructor };
+        _ptr = IntPtr.Zero;
+        _data = IntPtr.Zero;
+        _destructor = IntPtr.Zero;
+        return native;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged AsUnmanaged()
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
     {
-        ObjectDisposedException.ThrowIf(_ptr == IntPtr.Zero, this);
+        __Borrow(releases);
         var rval = new Unmanaged();
         rval._callback = _ptr;
         rval._data = _data;
@@ -497,9 +602,8 @@ public partial class MyCallback : IDisposable
 
         if (_managed != null)
         {
-            // Borrowed composite fields have no scoped marshaller to free a handle.
-            // Lazily retain an instance thunk for that path only.
-            _native ??= CallTrampoline;
+            // The release list roots this wrapper and its thunk until the call ends.
+            global::System.Threading.Interlocked.CompareExchange(ref _native, CallTrampoline, null);
             rval._callback = Marshal.GetFunctionPointerForDelegate(_native);
             rval._data = IntPtr.Zero;
             rval._destructor = IntPtr.Zero;
@@ -546,15 +650,21 @@ public partial class MyCallback : IDisposable
     public ref struct InMarshaller
     {
         private MyCallback _managed;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void FromManaged(MyCallback managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
     public ref struct Marshaller
@@ -1020,7 +1130,7 @@ public partial struct Vec3f32
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged ToUnmanaged()
+    internal Unmanaged ToUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
         var _unmanaged = new Unmanaged();
         _unmanaged.x = x;
@@ -1033,7 +1143,7 @@ public partial struct Vec3f32
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged AsUnmanaged()
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
     {
         var _unmanaged = new Unmanaged();
         _unmanaged.x = x;
@@ -1057,21 +1167,28 @@ public partial struct Vec3f32
     public ref struct InMarshaller
     {
         private Vec3f32 _managed;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void FromManaged(Vec3f32 managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
     public ref struct Marshaller
     {
         private Vec3f32 _managed;
         private Unmanaged _unmanaged;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public Marshaller(Vec3f32 managed) { _managed = managed; }
@@ -1086,13 +1203,18 @@ public partial struct Vec3f32
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.ToUnmanaged(); }
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public Vec3f32 ToManaged() { return _unmanaged.ToManaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
 }
@@ -1172,12 +1294,12 @@ public partial struct ResultVec3f32Error : IUnion, IResult<Vec3f32, Error>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged ToUnmanaged()
+    internal Unmanaged ToUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
         if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default ResultVec3f32Error: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
-        if (_variant == 0) _unmanaged._Ok._Ok = _Ok.ToUnmanaged();
+        if (_variant == 0) _unmanaged._Ok._Ok = _Ok.AsUnmanaged(releases!);
         if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
@@ -1186,12 +1308,12 @@ public partial struct ResultVec3f32Error : IUnion, IResult<Vec3f32, Error>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged AsUnmanaged()
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
     {
         if (!_hasValue) throw new InvalidOperationException("Cannot marshal a default ResultVec3f32Error: it is empty and corresponds to no Rust variant. Construct one through a case constructor or factory.");
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
-        if (_variant == 0) _unmanaged._Ok._Ok = _Ok.AsUnmanaged();
+        if (_variant == 0) _unmanaged._Ok._Ok = _Ok.AsUnmanaged(releases);
         if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
@@ -1335,21 +1457,28 @@ public partial struct ResultVec3f32Error : IUnion, IResult<Vec3f32, Error>
     public ref struct InMarshaller
     {
         private ResultVec3f32Error _managed;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void FromManaged(ResultVec3f32Error managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
     public ref struct Marshaller
     {
         private ResultVec3f32Error _managed;
         private Unmanaged _unmanaged;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public Marshaller(ResultVec3f32Error managed) { _managed = managed; }
@@ -1364,13 +1493,18 @@ public partial struct ResultVec3f32Error : IUnion, IResult<Vec3f32, Error>
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { return _managed.ToUnmanaged(); }
+        public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultVec3f32Error ToManaged() { return _unmanaged.ToManaged(); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
 }

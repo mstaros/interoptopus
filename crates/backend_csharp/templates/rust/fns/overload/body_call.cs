@@ -23,5 +23,6 @@ finally
     try { _cr.Dispose(); }
     finally { unsafe { _th.Dispose(); } }
 }
-{% else %}{% if not is_void %}return {% endif %}{{name}}({% for arg in native_args %}{{arg.name}}{% if not loop.last %}, {% endif %}{% endfor %});
-{% endif %}
+{% else %}{% if copy_result %}var {{result_local}} = {% elif not is_void %}return {% endif %}{{name}}({% for arg in native_args %}{{arg.name}}{% if not loop.last %}, {% endif %}{% endfor %});
+{% if copy_result %}return {{copy_result}};
+{% endif %}{% endif %}

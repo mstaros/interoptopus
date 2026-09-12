@@ -78,8 +78,8 @@ impl Pass {
     pub fn as_unmanaged_suffix(&self, ty: TypeId) -> &'static str {
         match self.conversions.get(&ty) {
             Some(ManagedConversion::AsIs) => "",
-            Some(ManagedConversion::To) => ".AsUnmanaged()",
-            Some(ManagedConversion::Into) => ".AsUnmanaged()",
+            Some(ManagedConversion::To) => ".AsUnmanaged(releases)",
+            Some(ManagedConversion::Into) => ".AsUnmanaged(releases)",
             None => panic!("Unknown conversion for type {ty:?}"),
         }
     }

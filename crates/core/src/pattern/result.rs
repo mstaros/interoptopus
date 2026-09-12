@@ -94,6 +94,10 @@ unsafe impl<T: TypeInfo, E: TypeInfo> TypeInfo for Result<T, E> {
     const SERVICE_SAFE: bool = false;
     const SERVICE_CTOR_SAFE: bool = T::SERVICE_SAFE;
 
+    fn on_ffi_panic() -> Self {
+        Self::Panic
+    }
+
     fn id() -> TypeId {
         TypeId::new(0x9BCBD2325F73A8CBDAE991B5BB8EB6FC).derive_id(T::id()).derive_id(E::id())
     }

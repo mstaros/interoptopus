@@ -184,7 +184,7 @@ public partial class ResultCounterError : IUnion, IResult<IntPtr, Error>, IDispo
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged IntoUnmanaged()
+    internal Unmanaged IntoUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
         var _unmanaged = new Unmanaged();
         try
@@ -205,7 +205,7 @@ public partial class ResultCounterError : IUnion, IResult<IntPtr, Error>, IDispo
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged AsUnmanaged()
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
     {
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
@@ -345,21 +345,28 @@ public partial class ResultCounterError : IUnion, IResult<IntPtr, Error>, IDispo
     public ref struct InMarshaller
     {
         private ResultCounterError _managed;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void FromManaged(ResultCounterError managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultCounterError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultCounterError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
     public ref struct Marshaller
     {
         private ResultCounterError _managed;
         private Unmanaged _unmanaged;
+        private global::System.Collections.Generic.List<Action> _releases;
         private bool _ownsUnmanaged;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -375,7 +382,7 @@ public partial class ResultCounterError : IUnion, IResult<IntPtr, Error>, IDispo
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultCounterError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); _unmanaged = _managed.IntoUnmanaged(); _ownsUnmanaged = true; return _unmanaged; }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultCounterError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); _unmanaged = _managed.IntoUnmanaged(_releases ??= new()); _ownsUnmanaged = true; return _unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultCounterError ToManaged() { return _unmanaged.IntoManaged(); }
@@ -385,9 +392,18 @@ public partial class ResultCounterError : IUnion, IResult<IntPtr, Error>, IDispo
 
         public void Free()
         {
-            if (!_ownsUnmanaged) return;
-            _ownsUnmanaged = false;
-            _unmanaged.Free();
+            try
+            {
+                if (_ownsUnmanaged) { _ownsUnmanaged = false; _unmanaged.Free(); }
+            }
+            finally
+            {
+                if (_releases != null)
+                {
+                    for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+                    _releases.Clear();
+                }
+            }
         }
     }
 
