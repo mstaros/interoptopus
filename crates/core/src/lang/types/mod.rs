@@ -62,6 +62,7 @@ pub unsafe trait TypeInfo {
     /// as `ffi::Result` override this to return an explicit error without unwinding into
     /// foreign code. Implementations must never resume unwinding or return invalid data.
     #[doc(hidden)]
+    #[must_use]
     fn on_ffi_panic() -> Self
     where
         Self: Sized,
