@@ -330,7 +330,7 @@ fn borrowed_result_copy(
     }
     let result_type = match transforms.rval {
         RvalTransform::AsyncTask(inner) => inner,
-        _ => original.signature.rval,
+        RvalTransform::PassThrough => original.signature.rval,
     };
     let copy = output::rust::fns::rust::service_result_copy(result_type, types, &original.name, local)?;
     if matches!(transforms.rval, RvalTransform::AsyncTask(_)) && copy.is_some() {
