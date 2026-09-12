@@ -12,6 +12,24 @@ pub fn disposal_call_services(_first: &ServiceCallbacks, _second: &ServiceCallba
 }
 
 #[ffi]
+pub fn disposal_call_services_mut_shared(_first: &mut ServiceCallbacks, _second: &ServiceCallbacks, callback: MyCallback) -> u32 {
+    callback.call(0)
+}
+
+#[ffi]
+pub fn disposal_call_services_shared_mut(_first: &ServiceCallbacks, _second: &mut ServiceCallbacks, callback: MyCallback) -> u32 {
+    callback.call(0)
+}
+
+#[ffi]
+pub fn disposal_call_services_mut_mut(_first: &mut ServiceCallbacks, _second: &mut ServiceCallbacks, callback: MyCallback) -> u32 {
+    callback.call(0)
+}
+
+#[ffi]
+pub fn disposal_borrow_async_service(_service: &mut crate::services::asynk::cancel::ServiceAsyncCancel) {}
+
+#[ffi]
 pub fn disposal_take_strings(_first: ffi::String, _second: ffi::String) {}
 
 #[ffi]

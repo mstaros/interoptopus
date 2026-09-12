@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ⚠️ Breaking
 
+- Generated C# service wrappers use Interlocked borrow guards when exported signatures
+  contain mutable service access. Overlapping mutable/mutable or mutable/shared calls
+  now throw `InvalidOperationException` before native entry, including callback reentry,
+  incompatible service aliases, and direct span methods. Shared borrows may coexist;
+  asynchronous scopes retain their borrow through completion or cancellation acknowledgement.
+  Generation warns with the affected service and exports. The guards cover managed call
+  duration only: raw pointers, returned borrows, and Rust Send/Sync or thread-affinity
+  requirements still need caller coordination.
+
 - **Read-only custom-marshalled pointer overloads now use `in T` instead of `ref T`.**
   Their dedicated `ManagedToUnmanagedIn` marshaller borrows through `AsUnmanaged()` and does
   not move ownership out of the managed value or write it back after the call. Call sites that
@@ -63,7 +72,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   completion or cancellation acknowledgement. `Dispose()` rejects new calls immediately
   and destroys the native service exactly once after acquired calls release it, without
   waiting inside callbacks. Raw `IntPtr` imports still require caller-managed lifetimes;
-  this does not make concurrent mutable Rust methods safe.
+  lifetime retention is separate from the mutable-access guards described above.
 
 - **Generated custom-marshalled types now work in consumer-owned `LibraryImport` declarations.**
   Their nested `Unmanaged`, default `Marshaller`, and read-only `InMarshallerMeta` /

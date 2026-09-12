@@ -11,6 +11,7 @@ use crate::lang::ServiceId;
 use crate::lang::functions::FunctionKind;
 use crate::lang::functions::overload::{OverloadKind, RvalTransform};
 use crate::lang::types::kind::{PointerKind, Primitive, TypeKind, TypePattern};
+use crate::pass::model::rust::fns::overload::is_mutable_service_pointer;
 use crate::pass::{OutputResult, PassInfo, format_docs, model, output};
 use interoptopus_backends::template::{Context, Value};
 use std::collections::HashMap;
@@ -69,7 +70,7 @@ impl Pass {
                         if let Some(rval) = result.rval_name.as_deref().or_else(|| types.get(method_fn.signature.rval).map(|ty| ty.name.as_str())) {
                             let is_void = result.is_void || matches!(rval_kind, Some(TypeKind::Primitive(Primitive::Void)));
                             rendered_methods.push(render(templates, rval, is_void, result.as_ok, method_name, &method_fn.name, &args,
-                                "/// Borrows span memory for this call.", "public", "_context")?);
+                                "/// Borrows span memory for this call.", "public", "_context", is_mutable_service_pointer(method_fn.signature.arguments[0].ty, types))?);
                         }
                     }
                 }
@@ -94,7 +95,7 @@ impl Pass {
 
                         let docs = format_docs(&method_fn.docs);
                         let args = build_args(&method_fn.signature.arguments[1..], types);
-                        rendered_methods.push(render(templates, rval, is_void, result_info.as_ok, method_name, &method_fn.name, &args, &docs, "public", "_context")?);
+                        rendered_methods.push(render(templates, rval, is_void, result_info.as_ok, method_name, &method_fn.name, &args, &docs, "public", "_context", is_mutable_service_pointer(method_fn.signature.arguments[0].ty, types))?);
                     }
                     FunctionKind::Overload(overload) => {
                         let Some(original_fn) = fns.get(overload.base) else { continue };
@@ -147,6 +148,7 @@ impl Pass {
                                 &docs,
                                 "public",
                                 self_arg,
+                                is_mutable_service_pointer(original_fn.signature.arguments[0].ty, types),
                             )?);
                         }
                     }
@@ -205,6 +207,7 @@ fn render(
     docs: &str,
     visibility: &str,
     self_arg: &str,
+    exclusive: bool,
 ) -> Result<String, crate::Error> {
     let mut context = Context::new();
     context.insert("rval", rval);
@@ -216,6 +219,7 @@ fn render(
     context.insert("docs", docs);
     context.insert("visibility", visibility);
     context.insert("self_arg", self_arg);
+    context.insert("exclusive", &exclusive);
     Ok(templates.render("rust/service/body_methods.cs", &context)?)
 }
 

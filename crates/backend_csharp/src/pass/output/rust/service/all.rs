@@ -1,6 +1,7 @@
 //! Renders service classes through the `service/all.cs` template, grouped per output file.
 
 use crate::output::{FileType, Output};
+use crate::pass::model::rust::fns::overload::{is_mutable_service_pointer, service_intptr_target};
 use crate::pass::{OutputResult, PassInfo, model, output};
 use interoptopus_backends::template::Context;
 use std::collections::HashMap;
@@ -44,18 +45,38 @@ impl Pass {
                 let ctors = body_ctors.get(*service_id).unwrap_or_default();
                 let methods = body_methods.get(*service_id).unwrap_or_default();
 
+                let mut mutable_exports: Vec<_> = fns
+                    .originals()
+                    .filter(|(id, function)| {
+                        **id != service.destructor
+                            && function.signature.arguments.iter().any(|arg| {
+                                service_intptr_target(arg.ty, types) == Some(service.ty) && is_mutable_service_pointer(arg.ty, types)
+                            })
+                    })
+                    .map(|(_, function)| function.name.as_str())
+                    .collect();
+                mutable_exports.sort_unstable();
+                let has_mutable_calls = !mutable_exports.is_empty();
+                if has_mutable_calls {
+                    eprintln!(
+                        "warning: Interoptopus C# service `{name}` has mutable access in {}. Generated Interlocked guards throw InvalidOperationException on conflicting calls, including callback reentry. Guards cover call duration only; raw pointers, returned borrows, and Rust threading requirements still require caller coordination.",
+                        mutable_exports.join(", ")
+                    );
+                }
+
                 let mut context = Context::new();
                 context.insert("name", name);
                 context.insert("dtor", &dtor_fn.name);
                 context.insert("ctors", &ctors);
                 context.insert("methods", &methods);
+                context.insert("has_mutable_calls", &has_mutable_calls);
                 let rendered = templates.render("rust/service/all.cs", &context)?;
-                rendered_services.push(rendered);
+                rendered_services.push((name, rendered));
             }
 
-            rendered_services.sort();
+            rendered_services.sort_by_key(|(name, _)| *name);
 
-            self.services.insert(file.clone(), rendered_services);
+            self.services.insert(file.clone(), rendered_services.into_iter().map(|(_, source)| source).collect());
         }
 
         Ok(())

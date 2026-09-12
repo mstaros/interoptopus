@@ -13,6 +13,7 @@ use crate::lang::functions::{Argument, Function};
 use crate::lang::types::{OverloadFamily, ParamDecorator};
 use crate::lang::types::kind::{Primitive, TypeKind, TypePattern};
 use crate::output::{FileType, Output};
+use crate::pass::model::rust::fns::overload::is_mutable_service_pointer;
 use crate::pass::{OutputResult, PassInfo, format_docs, model, output};
 use interoptopus_backends::template::{Context, TemplateEngine, Value};
 use std::collections::HashMap;
@@ -164,6 +165,7 @@ fn render(
     for (index, (arg, transform)) in overload_fn.signature.arguments.iter().zip(&transforms.args).enumerate().rev() {
         if !is_destructor && matches!(transform, ArgTransform::Service) {
             let context_name = service_context_name(index, &overload_fn.signature.arguments);
+            let exclusive = if is_mutable_service_pointer(original_args[index].ty, types) { "true" } else { "" };
             let mut indented = String::new();
             for line in call_body.lines() {
                 indented.push_str("    ");
@@ -171,7 +173,7 @@ fn render(
                 indented.push('\n');
             }
             call_body = format!(
-                "var {context_name} = {name}.__AcquireCall();\ntry\n{{\n{indented}}}\nfinally\n{{\n    {name}.__ReleaseCall();\n}}\n",
+                "var {context_name} = {name}.__AcquireCall({exclusive});\ntry\n{{\n{indented}}}\nfinally\n{{\n    {name}.__ReleaseCall({exclusive});\n}}\n",
                 name = arg.name,
             );
         }

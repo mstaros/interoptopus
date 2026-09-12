@@ -61,6 +61,10 @@ pub fn inventory() -> RustInventory {
         // Functions
         .register(function!(functions::disposal::disposal_take_strings))
         .register(function!(functions::disposal::disposal_call_services))
+        .register(function!(functions::disposal::disposal_call_services_mut_shared))
+        .register(function!(functions::disposal::disposal_call_services_shared_mut))
+        .register(function!(functions::disposal::disposal_call_services_mut_mut))
+        .register(function!(functions::disposal::disposal_borrow_async_service))
         .register(function!(functions::disposal::disposal_take_callback))
         .register(function!(functions::disposal::disposal_fields_invoke))
         .register(function!(functions::disposal::disposal_callbacks_invoke))

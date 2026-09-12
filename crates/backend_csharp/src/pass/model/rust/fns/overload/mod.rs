@@ -1,5 +1,5 @@
 use crate::lang::functions::Signature;
-use crate::lang::types::kind::{Pointer, PointerKind, Primitive, TypeKind, TypePattern};
+use crate::lang::types::kind::{IntPtrHint, Pointer, PointerKind, Primitive, TypeKind, TypePattern};
 use crate::lang::{FunctionId, TypeId};
 use crate::pass::model;
 
@@ -48,6 +48,13 @@ pub fn service_intptr_target(ty: TypeId, types: &model::common::types::all::Pass
     };
     let target_type = types.get(*target)?;
     matches!(&target_type.kind, TypeKind::Service).then_some(*target)
+}
+
+/// Whether an original argument requires exclusive access to a managed service.
+#[must_use]
+pub fn is_mutable_service_pointer(ty: TypeId, types: &model::common::types::all::Pass) -> bool {
+    service_intptr_target(ty, types).is_some()
+        && matches!(types.get(ty).map(|t| &t.kind), Some(TypeKind::Pointer(Pointer { kind: PointerKind::IntPtr(IntPtrHint::ReadWrite), .. })))
 }
 
 fn derive_overload_id(original_id: FunctionId, signature: &Signature) -> FunctionId {

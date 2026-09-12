@@ -14,6 +14,142 @@ public partial class TestDisposal
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task service_borrows_reject_conflicts_and_release_after_native_return(bool mutable)
+    {
+        int drops = 0;
+        int unexpectedEntries = 0;
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        using var service = ServiceCallbacks.CreateWithDropCallback(_ => (uint)Interlocked.Increment(ref drops));
+        using var other = ServiceCallbacks.Create();
+        bool released = false;
+        uint Hold(uint value)
+        {
+            entered.Set();
+            released = release.Wait(TimeSpan.FromSeconds(10));
+            return value;
+        }
+        var call = Task.Run(() =>
+        {
+            if (mutable) service.CallbackSimple(Hold);
+            else Interop.disposal_call_services(service, service, Hold);
+        });
+        try
+        {
+            Assert.True(entered.Wait(TimeSpan.FromSeconds(10)));
+            Assert.Throws<InvalidOperationException>(() => service.CallbackSimple(_ =>
+            {
+                Interlocked.Increment(ref unexpectedEntries);
+                return 0;
+            }));
+            using var callback = new SumDelegateReturn((_, _) =>
+            {
+                Interlocked.Increment(ref unexpectedEntries);
+                return ResultVoidError.Ok;
+            });
+            Assert.Throws<InvalidOperationException>(() => service.CallbackWithSlice(callback, new[] { 1, 2 }.AsSpan()));
+            if (mutable)
+                Assert.Throws<InvalidOperationException>(() => service.InvokeStoredCallback(0));
+            else
+                Assert.Equal(0u, service.InvokeStoredCallback(0));
+
+            Assert.Throws<InvalidOperationException>(() => Interop.disposal_call_services_shared_mut(other, service, _ =>
+            {
+                Interlocked.Increment(ref unexpectedEntries);
+                return 0;
+            }));
+            // A failed later acquisition releases the earlier, independent service.
+            other.CallbackSimple(_ => 0);
+            Assert.Equal(0, Volatile.Read(ref unexpectedEntries));
+        }
+        finally
+        {
+            release.Set();
+            await call.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        Assert.True(released);
+        service.CallbackSimple(_ => 0);
+        service.Dispose();
+        Assert.Equal(1, Volatile.Read(ref drops));
+    }
+
+    [Fact]
+    public void conflicting_callback_reentry_fails_without_waiting_or_losing_disposal()
+    {
+        int drops = 0;
+        int dropsInsideCallback = -1;
+        Exception? sharedError = null;
+        Exception? mutableError = null;
+        using var service = ServiceCallbacks.CreateWithDropCallback(_ => (uint)++drops);
+        service.CallbackSimple(_ =>
+        {
+            sharedError = Record.Exception(() => service.InvokeStoredCallback(0));
+            mutableError = Record.Exception(() => service.CallbackSimple(_ => 0));
+            service.Dispose();
+            dropsInsideCallback = drops;
+            return 0;
+        });
+        Assert.IsType<InvalidOperationException>(sharedError);
+        Assert.IsType<InvalidOperationException>(mutableError);
+        Assert.Equal(0, dropsInsideCallback);
+        Assert.Equal(1, drops);
+    }
+
+    [Fact]
+    public void incompatible_service_aliases_fail_before_native_entry_and_roll_back()
+    {
+        int entries = 0;
+        int drops = 0;
+        using var service = ServiceCallbacks.CreateWithDropCallback(_ => (uint)++drops);
+        uint Enter(uint value) { ++entries; return value; }
+        Assert.Throws<InvalidOperationException>(() => Interop.disposal_call_services_mut_shared(service, service, Enter));
+        Assert.Throws<InvalidOperationException>(() => Interop.disposal_call_services_shared_mut(service, service, Enter));
+        Assert.Throws<InvalidOperationException>(() => Interop.disposal_call_services_mut_mut(service, service, Enter));
+        Assert.Equal(0, entries);
+        // Compatible aliases still enter Rust, and each failed exclusive scope released its reservation.
+        Assert.Equal(0u, Interop.disposal_call_services(service, service, Enter));
+        service.CallbackSimple(Enter);
+        Assert.Equal(2, entries);
+        service.Dispose();
+        Assert.Equal(1, drops);
+    }
+
+    [Fact]
+    public async Task concurrent_shared_borrows_keep_exclusive_access_closed_until_all_return()
+    {
+        const int count = 8;
+        using var entered = new CountdownEvent(count);
+        using var release = new ManualResetEventSlim();
+        using var service = ServiceCallbacks.Create();
+        var calls = new Task[count];
+        int timeouts = 0;
+        for (int i = 0; i < count; ++i)
+        {
+            calls[i] = Task.Run(() => Interop.disposal_call_services(service, service, _ =>
+            {
+                entered.Signal();
+                if (!release.Wait(TimeSpan.FromSeconds(15))) Interlocked.Increment(ref timeouts);
+                return 0;
+            }));
+        }
+        try
+        {
+            Assert.True(entered.Wait(TimeSpan.FromSeconds(15)));
+            Assert.Throws<InvalidOperationException>(() => service.CallbackSimple(_ => 0));
+            Assert.Equal(0u, service.InvokeStoredCallback(0));
+        }
+        finally
+        {
+            release.Set();
+            await Task.WhenAll(calls).WaitAsync(TimeSpan.FromSeconds(15));
+        }
+        Assert.Equal(0, Volatile.Read(ref timeouts));
+        service.CallbackSimple(_ => 0);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task active_call_defers_native_destruction(bool span)
     {
         int drops = 0;
@@ -185,6 +321,7 @@ public partial class TestDisposal
         try
         {
             Assert.True(entered.Wait(TimeSpan.FromSeconds(10)));
+            Assert.Throws<InvalidOperationException>(() => Interop.disposal_borrow_async_service(service));
             service.Dispose();
             service.Dispose();
             Assert.Equal(0, Volatile.Read(ref drops));
