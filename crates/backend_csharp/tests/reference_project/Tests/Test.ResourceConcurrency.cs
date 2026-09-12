@@ -22,6 +22,23 @@ public class TestResourceConcurrency
         Parallel.For(0, 16, _ => empty.Dispose());
     }
 
+    [Fact]
+    public void native_void_callback_holds_its_slice_argument_until_return()
+    {
+        using var slice = SliceMutByte.From(new byte[] { 1 });
+        Exception? conflict = null;
+        using var managed = new CallbackSliceMut(input =>
+        {
+            conflict = Record.Exception(slice.Dispose);
+            input[0] = 42;
+        });
+        using var callback = Interop.disposal_native_slice_callback(managed);
+        callback.Call(slice);
+        Assert.IsType<InvalidOperationException>(conflict);
+        Assert.Equal((byte)42, slice[0]);
+        slice.Dispose();
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -35,7 +52,7 @@ public class TestResourceConcurrency
         using (var release = new ManualResetEventSlim())
         {
             MyCallback callback = null!;
-            Exception textReentry = null, vectorReentry = null, callbackReentry = null;
+            Exception? textReentry = null, vectorReentry = null, callbackReentry = null;
             bool released = false;
             using var managed = new MyCallback(input =>
             {
@@ -113,7 +130,7 @@ public class TestResourceConcurrency
             using (owner)
             using (var start = new Barrier(2))
             {
-                Task<Exception> Attempt() => Task.Run(() =>
+                Task<Exception?> Attempt() => Task.Run(() =>
                 {
                     if (!start.SignalAndWait(TimeSpan.FromSeconds(10))) throw new TimeoutException();
                     return Record.Exception(transfer);
@@ -152,7 +169,7 @@ public class TestResourceConcurrency
         using var slice = SliceUtf8String.From(new[] { text });
         using var vector = VecUtf8String.From(new[] { text });
         using var holder = new UseSliceAndVec { s1 = slice, s2 = vector };
-        Exception conflict = null;
+        Exception? conflict = null;
         Assert.Equal(1u, Interop.disposal_borrow_owned_fields(holder, _ =>
         {
             conflict = Record.Exception(slice.Dispose);

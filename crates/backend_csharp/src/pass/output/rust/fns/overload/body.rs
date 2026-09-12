@@ -134,17 +134,7 @@ fn render(
     let native_rval_is_result = is_async && matches!(types.get(original_fn.signature.rval).map(|t| &t.kind), Some(TypeKind::TypePattern(TypePattern::Result(_, _, _))));
 
     let result_local = service_context_name(overload_fn.signature.arguments.len(), &overload_fn.signature.arguments);
-    let mut copy_result = None;
-    if !is_constructor && transforms.args.iter().any(|arg| matches!(arg, ArgTransform::Service)) {
-        let result_type = match transforms.rval {
-            RvalTransform::AsyncTask(inner) => inner,
-            _ => original_fn.signature.rval,
-        };
-        copy_result = output::rust::fns::rust::service_result_copy(result_type, types, name, &result_local)?;
-        if is_async && copy_result.is_some() {
-            return Err(crate::Error::from(format!("Cannot emit async service call `{name}` with a borrowed result; return owned data.")));
-        }
-    }
+    let copy_result = borrowed_result_copy(original_fn, transforms, types, is_constructor, &result_local)?;
 
     let docs = format_docs(&overload_fn.docs);
     let mut context = Context::new();
@@ -326,4 +316,25 @@ fn build_native_args(
             Ok(m)
         })
         .collect()
+}
+
+fn borrowed_result_copy(
+    original: &Function,
+    transforms: &FnTransforms,
+    types: &model::common::types::all::Pass,
+    is_constructor: bool,
+    local: &str,
+) -> Result<Option<String>, crate::Error> {
+    if is_constructor || !transforms.args.iter().any(|arg| matches!(arg, ArgTransform::Service)) {
+        return Ok(None);
+    }
+    let result_type = match transforms.rval {
+        RvalTransform::AsyncTask(inner) => inner,
+        _ => original.signature.rval,
+    };
+    let copy = output::rust::fns::rust::service_result_copy(result_type, types, &original.name, local)?;
+    if matches!(transforms.rval, RvalTransform::AsyncTask(_)) && copy.is_some() {
+        return Err(crate::Error::from(format!("Cannot emit async service call `{}` with a borrowed result; return owned data.", original.name)));
+    }
+    Ok(copy)
 }

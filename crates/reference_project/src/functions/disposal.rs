@@ -119,3 +119,8 @@ pub fn disposal_borrow_owned_fields(input: crate::types::vec::UseSliceAndVec, ca
 
 #[ffi]
 pub fn disposal_empty_callback() -> MyCallback { MyCallback::default() }
+
+#[ffi]
+pub fn disposal_native_slice_callback(callback: crate::patterns::slice::CallbackSliceMut) -> crate::patterns::slice::CallbackSliceMut {
+    crate::patterns::slice::CallbackSliceMut::from_fn(move |input| callback.call(input))
+}

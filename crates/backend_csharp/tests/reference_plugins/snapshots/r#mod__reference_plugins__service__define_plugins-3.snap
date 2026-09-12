@@ -565,7 +565,7 @@ public partial class AsyncCancellation : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged IntoUnmanaged()
+    internal Unmanaged IntoUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
         var h = GCHandle.Alloc(this);
         return new Unmanaged { _handle = GCHandle.ToIntPtr(h) };
@@ -574,6 +574,14 @@ public partial class AsyncCancellation : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
+    {
+        var h = GCHandle.Alloc(this);
+        try { releases.Add(() => h.Free()); }
+        catch { h.Free(); throw; }
+        return new Unmanaged { _handle = GCHandle.ToIntPtr(h) };
+    }
+
     internal Unmanaged AsUnmanaged()
     {
         var h = GCHandle.Alloc(this);

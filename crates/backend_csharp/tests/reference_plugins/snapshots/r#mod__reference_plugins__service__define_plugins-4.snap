@@ -647,7 +647,7 @@ public partial class NestedA : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged IntoUnmanaged()
+    internal Unmanaged IntoUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
         var h = GCHandle.Alloc(this);
         return new Unmanaged { _handle = GCHandle.ToIntPtr(h) };
@@ -656,6 +656,14 @@ public partial class NestedA : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
+    {
+        var h = GCHandle.Alloc(this);
+        try { releases.Add(() => h.Free()); }
+        catch { h.Free(); throw; }
+        return new Unmanaged { _handle = GCHandle.ToIntPtr(h) };
+    }
+
     internal Unmanaged AsUnmanaged()
     {
         var h = GCHandle.Alloc(this);
@@ -703,7 +711,7 @@ public partial class NestedB : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged IntoUnmanaged()
+    internal Unmanaged IntoUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
         var h = GCHandle.Alloc(this);
         return new Unmanaged { _handle = GCHandle.ToIntPtr(h) };
@@ -712,6 +720,14 @@ public partial class NestedB : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
+    {
+        var h = GCHandle.Alloc(this);
+        try { releases.Add(() => h.Free()); }
+        catch { h.Free(); throw; }
+        return new Unmanaged { _handle = GCHandle.ToIntPtr(h) };
+    }
+
     internal Unmanaged AsUnmanaged()
     {
         var h = GCHandle.Alloc(this);
@@ -808,13 +824,13 @@ public partial class ResultNestedAError : IUnion, IResult<NestedA, Error>, IDisp
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged IntoUnmanaged()
+    internal Unmanaged IntoUnmanaged(global::System.Collections.Generic.List<Action> releases = null)
     {
         var _unmanaged = new Unmanaged();
         try
         {
             _unmanaged._variant = _variant;
-            if (_variant == 0) _unmanaged._Ok._Ok = _Ok.IntoUnmanaged();
+            if (_variant == 0) _unmanaged._Ok._Ok = _Ok.IntoUnmanaged(releases);
             if (_variant == 1) _unmanaged._Err._Err = _Err;
             return _unmanaged;
         }
@@ -829,11 +845,11 @@ public partial class ResultNestedAError : IUnion, IResult<NestedA, Error>, IDisp
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     [Obsolete("This method is intended for use by generated code only.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
-    internal Unmanaged AsUnmanaged()
+    internal Unmanaged AsUnmanaged(global::System.Collections.Generic.List<Action> releases)
     {
         var _unmanaged = new Unmanaged();
         _unmanaged._variant = _variant;
-        if (_variant == 0) _unmanaged._Ok._Ok = _Ok.AsUnmanaged();
+        if (_variant == 0) _unmanaged._Ok._Ok = _Ok.AsUnmanaged(releases);
         if (_variant == 1) _unmanaged._Err._Err = _Err;
         return _unmanaged;
     }
@@ -987,21 +1003,28 @@ public partial class ResultNestedAError : IUnion, IResult<NestedA, Error>, IDisp
     public ref struct InMarshaller
     {
         private ResultNestedAError _managed;
+        private global::System.Collections.Generic.List<Action> _releases;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void FromManaged(ResultNestedAError managed) { _managed = managed; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultNestedAError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(); }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultNestedAError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public void Free() {}
+        public void Free()
+        {
+            if (_releases == null) return;
+            for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+            _releases.Clear();
+        }
     }
 
     public ref struct Marshaller
     {
         private ResultNestedAError _managed;
         private Unmanaged _unmanaged;
+        private global::System.Collections.Generic.List<Action> _releases;
         private bool _ownsUnmanaged;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -1017,7 +1040,7 @@ public partial class ResultNestedAError : IUnion, IResult<NestedA, Error>, IDisp
         public void FromUnmanaged(Unmanaged unmanaged) { _unmanaged = unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultNestedAError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); _unmanaged = _managed.IntoUnmanaged(); _ownsUnmanaged = true; return _unmanaged; }
+        public Unmanaged ToUnmanaged() { if (_managed is null) throw new InvalidOperationException("Cannot marshal a null ResultNestedAError: it corresponds to no Rust variant. Construct it through a case constructor or factory."); _unmanaged = _managed.IntoUnmanaged(_releases ??= new()); _ownsUnmanaged = true; return _unmanaged; }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public ResultNestedAError ToManaged() { return _unmanaged.IntoManaged(); }
@@ -1027,9 +1050,18 @@ public partial class ResultNestedAError : IUnion, IResult<NestedA, Error>, IDisp
 
         public void Free()
         {
-            if (!_ownsUnmanaged) return;
-            _ownsUnmanaged = false;
-            _unmanaged.Free();
+            try
+            {
+                if (_ownsUnmanaged) { _ownsUnmanaged = false; _unmanaged.Free(); }
+            }
+            finally
+            {
+                if (_releases != null)
+                {
+                    for (var i = _releases.Count - 1; i >= 0; --i) _releases[i]();
+                    _releases.Clear();
+                }
+            }
         }
     }
 

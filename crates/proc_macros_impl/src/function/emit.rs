@@ -19,7 +19,7 @@ impl FunctionModel {
                 let ident = syn::Ident::new(&format!("__interoptopus_arg_{index}"), argument.span());
                 patterns.push(argument.pat.clone());
                 arguments.push(ident.clone());
-                argument.pat = Box::new(syn::parse_quote!(#ident));
+                *argument.pat = syn::parse_quote!(#ident);
             }
         }
         let output = &self.signature.output;

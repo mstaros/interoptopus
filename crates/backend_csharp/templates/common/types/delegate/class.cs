@@ -140,7 +140,7 @@ delegate void {{ name }}Destructor(IntPtr data);
         {% if not is_void %}
         return __target({% for arg in args %}{{ arg.native_value }}{{ arg.to_unmanaged | replace(from=".ToUnmanaged()", to=".AsUnmanaged(releases ??= new())") | replace(from=".IntoUnmanaged()", to=".IntoUnmanaged(releases ??= new())") }}, {% endfor %}_data){{ rval_to_managed }};
         {% else %}
-        __target({% for arg in args %}{{ arg.native_value }}{{ arg.to_unmanaged | replace(from=".ToUnmanaged()", to=".AsUnmanaged(releases)") | replace(from=".IntoUnmanaged()", to=".IntoUnmanaged(releases)") }}, {% endfor %}_data);
+        __target({% for arg in args %}{{ arg.native_value }}{{ arg.to_unmanaged | replace(from=".ToUnmanaged()", to=".AsUnmanaged(releases ??= new())") | replace(from=".IntoUnmanaged()", to=".IntoUnmanaged(releases ??= new())") }}, {% endfor %}_data);
         {% endif %}
         }
         finally
