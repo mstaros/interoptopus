@@ -1,0 +1,27 @@
+[package]
+name = "interoptopus_rustdoc_gen_mps"
+publish = ["local"]
+description = "Generates interoptopus facades and C# bindings from rustdoc JSON"
+authors.workspace = true
+keywords = ["ffi", "code-generation", "bindings", "rustdoc"]
+categories = ["development-tools::ffi"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "interoptopus_rustdoc_gen"
+
+[[bin]]
+name = "interoptopus-rustdoc-gen"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+rustdoc-types.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
