@@ -1,7 +1,7 @@
 # Rust interop service
 
-Status: **approved design**, 2026-10-17. Implementation has not started; progress is
-tracked in the Todo section below.
+Status: **approved design**, 2026-10-17. E1 and R1 are done; progress is tracked in the
+Todo section below.
 
 ## Goal
 
@@ -20,7 +20,7 @@ by a per-repository manifest. The first target is gix (gitoxide fork) -> GixShar
 
 | Component | Location |
 |---|---|
-| Engine (Rust command-line tool) | This repository, `crates/<engine>`. Released with interoptopus via `publish_localcargo`; the binary is packaged with `package_rust_binary`. |
+| Engine (Rust command-line tool) | This repository, `crates/rustdoc_gen` (package `interoptopus_rustdoc_gen_mps`, binary `interoptopus-rustdoc-gen`). Released with interoptopus via `publish_localcargo`; the binary is packaged with `package_rust_binary`. |
 | Names sidecar | This repository's C# backend writes the generated type and method names next to `Interop.cs`. |
 | C# service | `MerkleCompiler/MpsAgent.RustInteropService`, following `MpsAgent.GitService`: contract and options, an `IScriptAdapter`, an internal implementation. |
 | Manifest, runtime and outputs | The target bindings repository (GixSharp). |
@@ -121,7 +121,6 @@ One JSON file per target repository.
 
 ## Open decisions
 
-- Engine crate and binary name.
 - Namespace for the generated mirror.
 - Object ID representation (hex or binary).
 - Filesystem path representation.
@@ -131,13 +130,13 @@ One JSON file per target repository.
 
 ### Prerequisites (gitoxide fork, first)
 
-- [ ] R1 Merge or drop the three unmerged slices (merge/snapshot, sparse-checkout, read-tree recovery).
+- [x] R1 Merge or drop the three unmerged slices (merge/snapshot, sparse-checkout, read-tree recovery). Integrated on gitoxide `main`: sparse-checkout `19d524c8`, read-tree recovery `219b4788`, merge/snapshot `3d5b6f94` (one shared read-tree publication and recovery path); 13 superseded transactions rolled back.
 - [ ] R2 Move `gix-ffi` to the next interoptopus release.
 - [ ] R3 Make every export return `ffi::Result` (no plain-value returns).
 
 ### Engine (this repository)
 
-- [ ] E1 Pick the `rustdoc-types` release whose `FORMAT_VERSION` is 60; create the engine crate with `extract`, `analyze` and `generate` subcommands and JSON input/output.
+- [x] E1 Pick the `rustdoc-types` release whose `FORMAT_VERSION` is 60; create the engine crate with `extract`, `analyze` and `generate` subcommands and JSON input/output. Integrated at `97c9ffbc`: `rustdoc-types` 0.60.0; `analyze` on `gix.json` reports 682 methods and 22 free functions (704).
 - [ ] E2 `extract`: crate list from `Cargo.lock`, plus caching.
 - [ ] E3 Model, classifier and signature hashes; `analyze` writes the manifest. Check the result against the 704-function reference count.
 - [ ] E4 Decision validation and the compile check for snippets.
