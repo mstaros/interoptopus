@@ -1,7 +1,7 @@
 # Rust interop service
 
-Status: **approved design**, 2026-10-17. E1 and R1 are done; progress is tracked in the
-Todo section below.
+Status: **approved design**, 2026-10-17. R1 to R3, E1 and E2 are done; progress is tracked
+in the Todo section below.
 
 ## Goal
 
@@ -147,13 +147,13 @@ interoptopus itself needs no change for this.
 ### Prerequisites (gitoxide fork, first)
 
 - [x] R1 Merge or drop the three unmerged slices (merge/snapshot, sparse-checkout, read-tree recovery). Integrated on gitoxide `main`: sparse-checkout `19d524c8`, read-tree recovery `219b4788`, merge/snapshot `3d5b6f94` (one shared read-tree publication and recovery path); 13 superseded transactions rolled back.
-- [ ] R2 Move `gix-ffi` to the next interoptopus release.
-- [ ] R3 Make every export return `ffi::Result` (no plain-value returns).
+- [x] R2 Move `gix-ffi` to the next interoptopus release. Released 0.19.0 at `d33b37ae` (local registry commit `430744f0`); `gix-ffi` consumes it at gitoxide `aaaa9516`. `ByteReader` became `Send + Sync` (its source behind a `Mutex`; gix-worktree-stream's `Stream::from_read` now requires `Send`); the managed layer needed no changes.
+- [x] R3 Make every export return `ffi::Result` (no plain-value returns). All 84 exports do, at gitoxide `aaaa9516`; 116/116 native and 119/119 managed tests pass.
 
 ### Engine (this repository)
 
 - [x] E1 Pick the `rustdoc-types` release whose `FORMAT_VERSION` is 60; create the engine crate with `extract`, `analyze` and `generate` subcommands and JSON input/output. Integrated at `97c9ffbc`: `rustdoc-types` 0.60.0; `analyze` on `gix.json` reports 682 methods and 22 free functions (704).
-- [ ] E2 `extract`: crate list from `Cargo.lock`, plus caching.
+- [x] E2 `extract`: crate list, plus caching. Integrated at `744975c5`: the crate list comes from `cargo metadata --locked` (normal dependencies sharing the root's prefix), rustdoc runs in a target directory owned by the checkout, and results are cached under a content hash of toolchain, features, `Cargo.lock` and crate sources.
 - [ ] E3 Model, classifier and signature hashes; `analyze` writes the manifest. Check the result against the 704-function reference count.
 - [ ] E4 Decision validation and the compile check for snippets.
 - [ ] E5 Rust facade emitter (automatic, handle, convert and record kinds) plus inventory registration. Facade types get unique module-qualified names (see Naming and namespaces).
