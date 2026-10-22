@@ -10,8 +10,9 @@
 //! Exit codes: `0` success, `1` the command failed and the response file holds the error,
 //! `2` usage or file error before a response could be written (message on stderr).
 //!
-//! Only `analyze` is functional so far: it loads one crate's rustdoc JSON and reports its
-//! public function surface. `extract` and `generate` answer with `not_implemented`.
+//! `extract` runs rustdoc with JSON output for a crate and its prefixed dependencies, and
+//! `analyze` reports the public function surface of one crate's JSON. `generate` answers
+//! with `not_implemented`.
 
 use std::fmt;
 use std::fs;
@@ -19,7 +20,12 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use rustdoc_types::{Crate, FORMAT_VERSION, Id, ItemEnum, Type, Visibility};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+
+mod cargo_doc;
+
+pub use cargo_doc::{CrateJson, ExtractRequest, ExtractResult, extract};
 
 /// The rustdoc `crate_id` of the documented crate itself.
 const LOCAL_CRATE: u32 = 0;
@@ -77,6 +83,8 @@ pub enum ErrorCode {
     UnsupportedFormat,
     /// The subcommand is not implemented yet.
     NotImplemented,
+    /// An external tool such as cargo or rustdoc failed.
+    ToolFailed,
     /// An unexpected internal failure.
     Internal,
 }
@@ -154,18 +162,30 @@ pub struct AnalyzeResult {
 #[must_use]
 pub fn run(command: Command, request_json: &str) -> Response {
     let outcome = match command {
-        Command::Analyze => serde_json::from_str::<AnalyzeRequest>(request_json)
-            .map_err(|e| EngineError::new(ErrorCode::InvalidRequest, format!("invalid analyze request: {e}")))
-            .and_then(|request| analyze(&request))
-            .and_then(|result| serde_json::to_value(result).map_err(|e| EngineError::new(ErrorCode::Internal, e.to_string()))),
-        Command::Extract | Command::Generate => {
-            Err(EngineError::new(ErrorCode::NotImplemented, format!("`{command}` is not implemented yet")))
-        }
+        Command::Extract => handle(command, request_json, extract),
+        Command::Analyze => handle(command, request_json, analyze),
+        Command::Generate => Err(EngineError::new(ErrorCode::NotImplemented, format!("`{command}` is not implemented yet"))),
     };
     match outcome {
         Ok(result) => Response { command, result: Some(result), error: None },
         Err(error) => Response { command, result: None, error: Some(error) },
     }
+}
+
+/// Parses a typed request, runs `handler` and serializes its result.
+fn handle<Request, Output>(
+    command: Command,
+    request_json: &str,
+    handler: impl FnOnce(&Request) -> Result<Output, EngineError>,
+) -> Result<serde_json::Value, EngineError>
+where
+    Request: DeserializeOwned,
+    Output: Serialize,
+{
+    let request = serde_json::from_str::<Request>(request_json)
+        .map_err(|e| EngineError::new(ErrorCode::InvalidRequest, format!("invalid {command} request: {e}")))?;
+    let output = handler(&request)?;
+    serde_json::to_value(output).map_err(|e| EngineError::new(ErrorCode::Internal, e.to_string()))
 }
 
 /// Loads one crate's rustdoc JSON and counts its public function surface.
@@ -254,6 +274,12 @@ mod tests {
     fn rejects_unknown_command() {
         let error = "publish".parse::<Command>().unwrap_err();
         assert_eq!(error.code, ErrorCode::InvalidRequest);
+    }
+
+    #[test]
+    fn extract_rejects_malformed_request() {
+        let response = run(Command::Extract, r#"{"workspace_manifest": "Cargo.toml"}"#);
+        assert_eq!(response.error.map(|error| error.code), Some(ErrorCode::InvalidRequest));
     }
 
     #[test]
