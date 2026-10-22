@@ -108,7 +108,7 @@ names, and 69 names repeat across modules (`Error` x166, `Options` x15, `Outcome
   Nothing in this layer is public API.
 - **Public layer** (emitted by the engine): namespaces come from the rustdoc module path and
   types keep their Rust names, e.g. `gix::remote::fetch::Outcome` ->
-  `<Root>.Remote.Fetch.Outcome`.
+  `Gix.Remote.Fetch.Outcome`. The root namespace is `Gix`.
 
 interoptopus itself needs no change for this.
 
@@ -138,7 +138,6 @@ interoptopus itself needs no change for this.
 
 ## Open decisions
 
-- Root namespace prefix for the public layer (for example `Gix` or `GixSharp.Generated`).
 - Object ID representation (hex or binary).
 - Filesystem path representation.
 - Whether `gix-ffi` moves into GixSharp with its git history.
