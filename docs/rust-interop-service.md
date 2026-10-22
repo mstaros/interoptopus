@@ -95,6 +95,23 @@ One JSON file per target repository.
 - `Option`, `Vec` and `Result` -> their interoptopus equivalents.
 - Errors go through the runtime's error mapper.
 
+## Naming and namespaces
+
+interoptopus names each FFI type by its bare Rust identifier, or by the `name` argument on
+`#[ffi]`; module paths never take part. gix has 460 public types but only 186 distinct
+names, and 69 names repeat across modules (`Error` x166, `Options` x15, `Outcome` x10,
+`Platform` x9), so a flat mirror would collide.
+
+- **Internal layer** (`Interop.cs`, one namespace via `Dispatch::single_file`): stays flat.
+  The engine gives every facade type a unique, module-qualified name, such as
+  `RemoteFetchOutcome`, through the generated struct name or the `name` argument.
+  Nothing in this layer is public API.
+- **Public layer** (emitted by the engine): namespaces come from the rustdoc module path and
+  types keep their Rust names, e.g. `gix::remote::fetch::Outcome` ->
+  `<Root>.Remote.Fetch.Outcome`.
+
+interoptopus itself needs no change for this.
+
 ## Hand-written runtime (per target)
 
 - A persistent repository holder (a mutex-guarded repository or a pool).
@@ -121,7 +138,7 @@ One JSON file per target repository.
 
 ## Open decisions
 
-- Namespace for the generated mirror.
+- Root namespace prefix for the public layer (for example `Gix` or `GixSharp.Generated`).
 - Object ID representation (hex or binary).
 - Filesystem path representation.
 - Whether `gix-ffi` moves into GixSharp with its git history.
@@ -140,9 +157,9 @@ One JSON file per target repository.
 - [ ] E2 `extract`: crate list from `Cargo.lock`, plus caching.
 - [ ] E3 Model, classifier and signature hashes; `analyze` writes the manifest. Check the result against the 704-function reference count.
 - [ ] E4 Decision validation and the compile check for snippets.
-- [ ] E5 Rust facade emitter (automatic, handle, convert and record kinds) plus inventory registration.
+- [ ] E5 Rust facade emitter (automatic, handle, convert and record kinds) plus inventory registration. Facade types get unique module-qualified names (see Naming and namespaces).
 - [ ] E6 Names sidecar in the C# backend.
-- [ ] E7 Emitter for the public C# layer and smoke tests.
+- [ ] E7 Emitter for the public C# layer and smoke tests. Namespaces follow rustdoc module paths (see Naming and namespaces).
 - [ ] E8 Release with `publish_localcargo`; package the binary with `package_rust_binary`.
 
 ### Service (MerkleCompiler)
