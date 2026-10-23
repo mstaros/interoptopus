@@ -96,6 +96,12 @@ fn interop() -> Result<(), Box<dyn std::error::Error>> {
     assert!(interop.contains("return pattern_string_13(in _0, callback_wrapped);"));
     assert!(interop.contains("public static partial ulong __test_live_bytes();"));
     assert!(interop.contains("public static partial ulong __test_live_allocations();"));
+    // A slice passed by `ref` and left unchanged by the callee must come back as the caller's
+    // own wrapper; a fresh one would leave the owning original to its finalizer.
+    assert!(
+        [&interop, &common].iter().any(|source| source
+            .contains("if (_managed is not null && _managed._data == _unmanaged._data && _managed._len == _unmanaged._len) return _managed;"))
+    );
 
     let slice_from = common
         .split_once("public static unsafe SliceOptionUtf8String From(OptionUtf8String[] managed)")

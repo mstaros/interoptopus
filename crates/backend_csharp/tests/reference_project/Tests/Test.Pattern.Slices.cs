@@ -77,6 +77,23 @@ public class TestPatternSlices
     }
 
     [Fact]
+    public void ref_round_trip_keeps_the_callers_slice()
+    {
+        var input = new byte[] { 1 }.Slice();
+        var output = new byte[] { 1, 2, 3 }.SliceMut();
+        var original = output;
+
+        Interop.pattern_ffi_slice_5(ref input, ref output);
+
+        // The callee left the descriptor alone, so the caller must keep its own wrapper. A fresh
+        // wrapper would leave the original, which holds the pin, to a finalizer that unpins the
+        // array while the caller still reads through its pointer.
+        Assert.Same(original, output);
+        input.Dispose();
+        output.Dispose();
+    }
+
+    [Fact]
     public void pattern_ffi_slice_6()
     {
         var data = new byte[] { 1, 2, 3 }.SliceMut();

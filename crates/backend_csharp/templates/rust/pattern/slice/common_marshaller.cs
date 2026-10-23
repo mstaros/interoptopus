@@ -45,7 +45,13 @@ public partial class {{ name }}
         public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         {{ _fns_decorators_all | indent(width = 8) }}
-        public {{ name }} ToManaged() { return _unmanaged.ToManaged(); }
+        public {{ name }} ToManaged()
+        {
+            // An unchanged `ref` round-trip keeps the caller's wrapper, so a slice it owns or pins
+            // stays owned or pinned; a descriptor the callee replaced becomes a borrowed view.
+            if (_managed is not null && _managed._data == _unmanaged._data && _managed._len == _unmanaged._len) return _managed;
+            return _unmanaged.ToManaged();
+        }
 
         {{ _fns_decorators_all | indent(width = 8) }}
         public void Free()

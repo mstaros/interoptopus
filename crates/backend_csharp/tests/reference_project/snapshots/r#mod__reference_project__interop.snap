@@ -1,6 +1,6 @@
 ---
 source: crates/backend_csharp/tests/reference_project/mod.rs
-assertion_line: 140
+assertion_line: 146
 expression: multibuf
 ---
 === Interop.Common.cs ===
@@ -6573,7 +6573,13 @@ public partial class SliceBool : IEnumerable<Bool>, IDisposable
         public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public SliceBool ToManaged() { return _unmanaged.ToManaged(); }
+        public SliceBool ToManaged()
+        {
+            // An unchanged `ref` round-trip keeps the caller's wrapper, so a slice it owns or pins
+            // stays owned or pinned; a descriptor the callee replaced becomes a borrowed view.
+            if (_managed is not null && _managed._data == _unmanaged._data && _managed._len == _unmanaged._len) return _managed;
+            return _unmanaged.ToManaged();
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free()
@@ -6816,7 +6822,13 @@ public partial class SliceByte : IEnumerable<byte>, IDisposable
         public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public SliceByte ToManaged() { return _unmanaged.ToManaged(); }
+        public SliceByte ToManaged()
+        {
+            // An unchanged `ref` round-trip keeps the caller's wrapper, so a slice it owns or pins
+            // stays owned or pinned; a descriptor the callee replaced becomes a borrowed view.
+            if (_managed is not null && _managed._data == _unmanaged._data && _managed._len == _unmanaged._len) return _managed;
+            return _unmanaged.ToManaged();
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free()
@@ -7059,7 +7071,13 @@ public partial class SliceInt : IEnumerable<int>, IDisposable
         public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public SliceInt ToManaged() { return _unmanaged.ToManaged(); }
+        public SliceInt ToManaged()
+        {
+            // An unchanged `ref` round-trip keeps the caller's wrapper, so a slice it owns or pins
+            // stays owned or pinned; a descriptor the callee replaced becomes a borrowed view.
+            if (_managed is not null && _managed._data == _unmanaged._data && _managed._len == _unmanaged._len) return _managed;
+            return _unmanaged.ToManaged();
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free()
@@ -7319,7 +7337,13 @@ public partial class SliceMutByte : IEnumerable<byte>, IDisposable
         public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public SliceMutByte ToManaged() { return _unmanaged.ToManaged(); }
+        public SliceMutByte ToManaged()
+        {
+            // An unchanged `ref` round-trip keeps the caller's wrapper, so a slice it owns or pins
+            // stays owned or pinned; a descriptor the callee replaced becomes a borrowed view.
+            if (_managed is not null && _managed._data == _unmanaged._data && _managed._len == _unmanaged._len) return _managed;
+            return _unmanaged.ToManaged();
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free()
@@ -7579,7 +7603,13 @@ public partial class SliceMutUint : IEnumerable<uint>, IDisposable
         public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public SliceMutUint ToManaged() { return _unmanaged.ToManaged(); }
+        public SliceMutUint ToManaged()
+        {
+            // An unchanged `ref` round-trip keeps the caller's wrapper, so a slice it owns or pins
+            // stays owned or pinned; a descriptor the callee replaced becomes a borrowed view.
+            if (_managed is not null && _managed._data == _unmanaged._data && _managed._len == _unmanaged._len) return _managed;
+            return _unmanaged.ToManaged();
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free()
@@ -7816,7 +7846,13 @@ public partial class SliceMutVec : IDisposable
         public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public SliceMutVec ToManaged() { return _unmanaged.ToManaged(); }
+        public SliceMutVec ToManaged()
+        {
+            // An unchanged `ref` round-trip keeps the caller's wrapper, so a slice it owns or pins
+            // stays owned or pinned; a descriptor the callee replaced becomes a borrowed view.
+            if (_managed is not null && _managed._data == _unmanaged._data && _managed._len == _unmanaged._len) return _managed;
+            return _unmanaged.ToManaged();
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free()
@@ -8040,7 +8076,13 @@ public partial class SliceOptionUtf8String : IDisposable
         public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public SliceOptionUtf8String ToManaged() { return _unmanaged.ToManaged(); }
+        public SliceOptionUtf8String ToManaged()
+        {
+            // An unchanged `ref` round-trip keeps the caller's wrapper, so a slice it owns or pins
+            // stays owned or pinned; a descriptor the callee replaced becomes a borrowed view.
+            if (_managed is not null && _managed._data == _unmanaged._data && _managed._len == _unmanaged._len) return _managed;
+            return _unmanaged.ToManaged();
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free()
@@ -8283,7 +8325,13 @@ public partial class SliceUint : IEnumerable<uint>, IDisposable
         public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public SliceUint ToManaged() { return _unmanaged.ToManaged(); }
+        public SliceUint ToManaged()
+        {
+            // An unchanged `ref` round-trip keeps the caller's wrapper, so a slice it owns or pins
+            // stays owned or pinned; a descriptor the callee replaced becomes a borrowed view.
+            if (_managed is not null && _managed._data == _unmanaged._data && _managed._len == _unmanaged._len) return _managed;
+            return _unmanaged.ToManaged();
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free()
@@ -8500,7 +8548,13 @@ public partial class SliceUtf8String : IDisposable
         public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public SliceUtf8String ToManaged() { return _unmanaged.ToManaged(); }
+        public SliceUtf8String ToManaged()
+        {
+            // An unchanged `ref` round-trip keeps the caller's wrapper, so a slice it owns or pins
+            // stays owned or pinned; a descriptor the callee replaced becomes a borrowed view.
+            if (_managed is not null && _managed._data == _unmanaged._data && _managed._len == _unmanaged._len) return _managed;
+            return _unmanaged.ToManaged();
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free()
@@ -8737,7 +8791,13 @@ public partial class SliceVec : IDisposable
         public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public SliceVec ToManaged() { return _unmanaged.ToManaged(); }
+        public SliceVec ToManaged()
+        {
+            // An unchanged `ref` round-trip keeps the caller's wrapper, so a slice it owns or pins
+            // stays owned or pinned; a descriptor the callee replaced becomes a borrowed view.
+            if (_managed is not null && _managed._data == _unmanaged._data && _managed._len == _unmanaged._len) return _managed;
+            return _unmanaged.ToManaged();
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free()
@@ -40207,7 +40267,13 @@ public partial class SliceEnumDocumented : IEnumerable<EnumDocumented>, IDisposa
         public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public SliceEnumDocumented ToManaged() { return _unmanaged.ToManaged(); }
+        public SliceEnumDocumented ToManaged()
+        {
+            // An unchanged `ref` round-trip keeps the caller's wrapper, so a slice it owns or pins
+            // stays owned or pinned; a descriptor the callee replaced becomes a borrowed view.
+            if (_managed is not null && _managed._data == _unmanaged._data && _managed._len == _unmanaged._len) return _managed;
+            return _unmanaged.ToManaged();
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free()
@@ -40444,7 +40510,13 @@ public partial class SliceMutCharArray : IDisposable
         public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public SliceMutCharArray ToManaged() { return _unmanaged.ToManaged(); }
+        public SliceMutCharArray ToManaged()
+        {
+            // An unchanged `ref` round-trip keeps the caller's wrapper, so a slice it owns or pins
+            // stays owned or pinned; a descriptor the callee replaced becomes a borrowed view.
+            if (_managed is not null && _managed._data == _unmanaged._data && _managed._len == _unmanaged._len) return _managed;
+            return _unmanaged.ToManaged();
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free()
@@ -40681,7 +40753,13 @@ public partial class SliceTuplePair : IDisposable
         public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public SliceTuplePair ToManaged() { return _unmanaged.ToManaged(); }
+        public SliceTuplePair ToManaged()
+        {
+            // An unchanged `ref` round-trip keeps the caller's wrapper, so a slice it owns or pins
+            // stays owned or pinned; a descriptor the callee replaced becomes a borrowed view.
+            if (_managed is not null && _managed._data == _unmanaged._data && _managed._len == _unmanaged._len) return _managed;
+            return _unmanaged.ToManaged();
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free()
@@ -40918,7 +40996,13 @@ public partial class SliceUseCStrPtr : IDisposable
         public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public SliceUseCStrPtr ToManaged() { return _unmanaged.ToManaged(); }
+        public SliceUseCStrPtr ToManaged()
+        {
+            // An unchanged `ref` round-trip keeps the caller's wrapper, so a slice it owns or pins
+            // stays owned or pinned; a descriptor the callee replaced becomes a borrowed view.
+            if (_managed is not null && _managed._data == _unmanaged._data && _managed._len == _unmanaged._len) return _managed;
+            return _unmanaged.ToManaged();
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free()
@@ -41155,7 +41239,13 @@ public partial class SliceUseSliceByteInStruct : IDisposable
         public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public SliceUseSliceByteInStruct ToManaged() { return _unmanaged.ToManaged(); }
+        public SliceUseSliceByteInStruct ToManaged()
+        {
+            // An unchanged `ref` round-trip keeps the caller's wrapper, so a slice it owns or pins
+            // stays owned or pinned; a descriptor the callee replaced becomes a borrowed view.
+            if (_managed is not null && _managed._data == _unmanaged._data && _managed._len == _unmanaged._len) return _managed;
+            return _unmanaged.ToManaged();
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free()
@@ -41379,7 +41469,13 @@ public partial class SliceUseString : IDisposable
         public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public SliceUseString ToManaged() { return _unmanaged.ToManaged(); }
+        public SliceUseString ToManaged()
+        {
+            // An unchanged `ref` round-trip keeps the caller's wrapper, so a slice it owns or pins
+            // stays owned or pinned; a descriptor the callee replaced becomes a borrowed view.
+            if (_managed is not null && _managed._data == _unmanaged._data && _managed._len == _unmanaged._len) return _managed;
+            return _unmanaged.ToManaged();
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free()
@@ -41616,7 +41712,13 @@ public partial class SliceVec3f32 : IDisposable
         public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public SliceVec3f32 ToManaged() { return _unmanaged.ToManaged(); }
+        public SliceVec3f32 ToManaged()
+        {
+            // An unchanged `ref` round-trip keeps the caller's wrapper, so a slice it owns or pins
+            // stays owned or pinned; a descriptor the callee replaced becomes a borrowed view.
+            if (_managed is not null && _managed._data == _unmanaged._data && _managed._len == _unmanaged._len) return _managed;
+            return _unmanaged.ToManaged();
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free()

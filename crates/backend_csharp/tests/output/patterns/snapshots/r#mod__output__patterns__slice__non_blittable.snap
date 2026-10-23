@@ -395,7 +395,13 @@ public partial class SliceAttribute : IDisposable
         public Unmanaged ToUnmanaged() { return _managed.AsUnmanaged(_releases ??= new()); }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public SliceAttribute ToManaged() { return _unmanaged.ToManaged(); }
+        public SliceAttribute ToManaged()
+        {
+            // An unchanged `ref` round-trip keeps the caller's wrapper, so a slice it owns or pins
+            // stays owned or pinned; a descriptor the callee replaced becomes a borrowed view.
+            if (_managed is not null && _managed._data == _unmanaged._data && _managed._len == _unmanaged._len) return _managed;
+            return _unmanaged.ToManaged();
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public void Free()
