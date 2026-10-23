@@ -1,6 +1,6 @@
 # Rust interop service
 
-Status: **approved design**, 2026-10-17. R1 to R3, E1 and E2 are done; progress is tracked
+Status: **approved design**, 2026-10-17. R1 to R3 and E1 to E3 are done; progress is tracked
 in the Todo section below.
 
 ## Goal
@@ -135,12 +135,20 @@ interoptopus itself needs no change for this.
   60 files, format version 60, 108 s with `nightly-2026-07-18`.
 - Public `gix` surface: 704 functions (682 methods on public types and 22 free functions),
   excluding 202 re-exports of the plumbing crates.
+- First classification (E3, 2026-10-23), with `Repository` and `ThreadSafeRepository` as
+  runtime handles and `gix::config::tree` excluded: 712 items (the 704 plus 8 deprecated):
+  39 automatic, 75 excluded, 598 needing a decision. Reasons: receiver not a handle 405,
+  unmapped type 113, borrowed 28, generic 26, `&mut self` on the repository 13,
+  iterator or platform 7, other 6.
 
 ## Open decisions
 
 - Object ID representation (hex or binary).
 - Filesystem path representation.
 - Whether `gix-ffi` moves into GixSharp with its git history.
+- Handle decisions per type instead of per item: 405 of the 598 open items wait only on
+  their receiver (`Reference`, `Object`, `Commit`, `Tree` and about 20 other types) being a
+  handle.
 
 ## Todo
 
@@ -154,7 +162,7 @@ interoptopus itself needs no change for this.
 
 - [x] E1 Pick the `rustdoc-types` release whose `FORMAT_VERSION` is 60; create the engine crate with `extract`, `analyze` and `generate` subcommands and JSON input/output. Integrated at `97c9ffbc`: `rustdoc-types` 0.60.0; `analyze` on `gix.json` reports 682 methods and 22 free functions (704).
 - [x] E2 `extract`: crate list, plus caching. Integrated at `744975c5`: the crate list comes from `cargo metadata --locked` (normal dependencies sharing the root's prefix), rustdoc runs in a target directory owned by the checkout, and results are cached under a content hash of toolchain, features, `Cargo.lock` and crate sources.
-- [ ] E3 Model, classifier and signature hashes; `analyze` writes the manifest. Check the result against the 704-function reference count.
+- [x] E3 Model, classifier and signature hashes; `analyze` writes the manifest. Check the result against the 704-function reference count. Done: the non-deprecated gix surface is 704 functions; items carry a canonical signature, its hash, a class and a status (ready, unresolved, resolved, stale, excluded), and `analyze` rewrites the manifest only when it changes.
 - [ ] E4 Decision validation and the compile check for snippets.
 - [ ] E5 Rust facade emitter (automatic, handle, convert and record kinds) plus inventory registration. Facade types get unique module-qualified names (see Naming and namespaces).
 - [ ] E6 Names sidecar in the C# backend.

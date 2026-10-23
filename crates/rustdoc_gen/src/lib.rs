@@ -10,25 +10,30 @@
 //! Exit codes: `0` success, `1` the command failed and the response file holds the error,
 //! `2` usage or file error before a response could be written (message on stderr).
 //!
-//! `extract` runs rustdoc with JSON output for a crate and its prefixed dependencies, and
-//! `analyze` reports the public function surface of one crate's JSON. `generate` answers
-//! with `not_implemented`.
+//! `extract` runs rustdoc with JSON output for a crate and its prefixed dependencies.
+//! `analyze` classifies the public function surface of the root crate's JSON and, given a
+//! manifest, rewrites its items and summary. `generate` answers with `not_implemented`.
 
+use std::collections::BTreeMap;
 use std::fmt;
 use std::fs;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use rustdoc_types::{Crate, FORMAT_VERSION, Id, ItemEnum, Type, Visibility};
+use rustdoc_types::{Crate, FORMAT_VERSION};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 mod cargo_doc;
+mod classify;
+mod hash;
+mod manifest;
+mod render;
+mod surface;
 
 pub use cargo_doc::{CrateJson, ExtractRequest, ExtractResult, extract};
-
-/// The rustdoc `crate_id` of the documented crate itself.
-const LOCAL_CRATE: u32 = 0;
+pub use classify::{Category, Class, Mapping};
+pub use manifest::{Configuration, Decision, DecisionKind, Item, Manifest, Status, Summary};
 
 /// An engine subcommand.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -141,9 +146,13 @@ impl Response {
 pub struct AnalyzeRequest {
     /// The root crate's rustdoc JSON file.
     pub rustdoc_json: PathBuf,
+    /// The manifest to classify against and update; without one, defaults apply and nothing
+    /// is written.
+    #[serde(default)]
+    pub manifest: Option<PathBuf>,
 }
 
-/// Result of `analyze`: the public function surface of one crate.
+/// Result of `analyze`: the classified public function surface of one crate.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct AnalyzeResult {
     /// rustdoc JSON format version of the input.
@@ -156,6 +165,10 @@ pub struct AnalyzeResult {
     pub public_methods: usize,
     /// Public, non-deprecated free functions reachable through public modules.
     pub public_free_functions: usize,
+    /// Counts over the classified surface.
+    pub summary: Summary,
+    /// Whether the manifest file changed.
+    pub manifest_updated: bool,
 }
 
 /// Runs one command against a JSON request and returns the response envelope.
@@ -188,12 +201,42 @@ where
     serde_json::to_value(output).map_err(|e| EngineError::new(ErrorCode::Internal, e.to_string()))
 }
 
-/// Loads one crate's rustdoc JSON and counts its public function surface.
+/// Classifies the public function surface of one crate's rustdoc JSON and updates the manifest.
 pub fn analyze(request: &AnalyzeRequest) -> Result<AnalyzeResult, EngineError> {
     let json = fs::read_to_string(&request.rustdoc_json)
         .map_err(|e| EngineError::new(ErrorCode::Io, format!("cannot read {}: {e}", request.rustdoc_json.display())))?;
     let krate = load_crate(&json)?;
-    Ok(surface(&krate))
+    let mut manifest = request.manifest.as_deref().map(Manifest::read).transpose()?;
+    let configuration = manifest.as_ref().map(|manifest| manifest.configuration.clone()).unwrap_or_default();
+    let renderer = render::Renderer::new(&krate);
+    let functions = surface::collect(&krate, &renderer);
+    let aliases = surface::public_to_canonical(&krate);
+    let type_map: BTreeMap<String, Mapping> = configuration
+        .type_map
+        .iter()
+        .map(|(path, mapping)| (aliases.get(path).cloned().unwrap_or_else(|| path.clone()), *mapping))
+        .collect();
+    let classifier = classify::Classifier::new(&renderer, &type_map, &configuration.exclude_paths);
+    let decisions = manifest.as_ref().map_or(&[][..], |manifest| manifest.decisions.as_slice());
+    let (items, summary) = manifest::items(&functions, &renderer, &classifier, decisions);
+    let manifest_updated = match (manifest.as_mut(), request.manifest.as_deref()) {
+        (Some(manifest), Some(path)) => {
+            manifest.items = items;
+            manifest.summary = summary.clone();
+            manifest.write(path)?
+        }
+        _ => false,
+    };
+    let current = |owned: bool| functions.iter().filter(|function| function.owner.is_some() == owned && !function.deprecated).count();
+    Ok(AnalyzeResult {
+        format_version: krate.format_version,
+        crate_name: krate.index.get(&krate.root).and_then(|root| root.name.clone()).unwrap_or_default(),
+        index_items: krate.index.len(),
+        public_methods: current(true),
+        public_free_functions: current(false),
+        summary,
+        manifest_updated,
+    })
 }
 
 /// Parses rustdoc JSON after checking that its format version is the one this engine reads.
@@ -212,51 +255,6 @@ pub fn load_crate(json: &str) -> Result<Crate, EngineError> {
         ));
     }
     serde_json::from_str(json).map_err(|e| EngineError::new(ErrorCode::InvalidRequest, format!("invalid rustdoc JSON: {e}")))
-}
-
-/// Counts the public, non-deprecated inherent methods and free functions of the documented crate.
-#[must_use]
-pub fn surface(krate: &Crate) -> AnalyzeResult {
-    let public_methods = krate
-        .index
-        .values()
-        .filter(|item| item.crate_id == LOCAL_CRATE)
-        .filter_map(|item| match &item.inner {
-            ItemEnum::Impl(imp) if imp.trait_.is_none() && !imp.is_synthetic && imp.blanket_impl.is_none() => Some(imp),
-            _ => None,
-        })
-        .filter(|imp| matches!(&imp.for_, Type::ResolvedPath(path) if krate.paths.contains_key(&path.id)))
-        .map(|imp| imp.items.iter().filter(|id| is_public_function(krate, **id)).count())
-        .sum();
-    AnalyzeResult {
-        format_version: krate.format_version,
-        crate_name: krate.index.get(&krate.root).and_then(|root| root.name.clone()).unwrap_or_default(),
-        index_items: krate.index.len(),
-        public_methods,
-        public_free_functions: count_free_functions(krate, krate.root),
-    }
-}
-
-fn is_public_function(krate: &Crate, id: Id) -> bool {
-    krate.index.get(&id).is_some_and(|item| {
-        matches!(item.inner, ItemEnum::Function(_)) && matches!(item.visibility, Visibility::Public) && item.deprecation.is_none()
-    })
-}
-
-fn count_free_functions(krate: &Crate, module_id: Id) -> usize {
-    let Some(ItemEnum::Module(module)) = krate.index.get(&module_id).map(|item| &item.inner) else {
-        return 0;
-    };
-    module
-        .items
-        .iter()
-        .filter_map(|id| krate.index.get(id).filter(|item| matches!(item.visibility, Visibility::Public)).map(|item| (*id, item)))
-        .map(|(id, item)| match &item.inner {
-            ItemEnum::Module(_) => count_free_functions(krate, id),
-            ItemEnum::Function(_) if item.deprecation.is_none() => 1,
-            _ => 0,
-        })
-        .sum()
 }
 
 #[cfg(test)]
@@ -306,6 +304,108 @@ mod tests {
         let error = load_crate(r#"{"format_version": 1}"#).unwrap_err();
         assert_eq!(error.code, ErrorCode::UnsupportedFormat);
     }
+
+    #[test]
+    #[ignore = "runs cargo doc with the pinned nightly toolchain"]
+    fn analyze_classifies_a_workspace_and_rewrites_the_manifest_deterministically() {
+        let dir = tempfile::tempdir().expect("temporary directory can be created");
+        let root = dir.path();
+        let files = [
+            ("Cargo.toml", "[workspace]\nmembers = [\"demo\"]\nresolver = \"3\"\n"),
+            ("demo/Cargo.toml", "[package]\nname = \"demo\"\nversion = \"0.1.0\"\nedition = \"2024\"\n"),
+            ("demo/src/lib.rs", DEMO),
+        ];
+        for (relative, content) in files {
+            let path = root.join(relative);
+            fs::create_dir_all(path.parent().expect("files have a parent")).expect("directories can be created");
+            fs::write(path, content).expect("files can be written");
+        }
+        let lock = std::process::Command::new("cargo")
+            .args(["+nightly-2026-07-18", "generate-lockfile", "--offline", "--manifest-path"])
+            .arg(root.join("Cargo.toml"))
+            .status()
+            .expect("cargo runs");
+        assert!(lock.success());
+        let extracted = extract(&ExtractRequest {
+            workspace_manifest: root.join("Cargo.toml"),
+            root_crate: "demo".to_owned(),
+            crate_prefix: "demo".to_owned(),
+            features: Vec::new(),
+            toolchain: "nightly-2026-07-18".to_owned(),
+            cache_dir: root.join("cache"),
+        })
+        .expect("the workspace is documented");
+        let manifest_path = root.join("manifest.json");
+        fs::write(&manifest_path, r#"{"configuration": {"type_map": {"demo::Repo": "repository"}, "exclude_paths": ["demo::schema"]}}"#)
+            .expect("the manifest can be written");
+        let request = AnalyzeRequest { rustdoc_json: extracted.crates[0].json.clone(), manifest: Some(manifest_path.clone()) };
+
+        let first = analyze(&request).expect("the surface is analyzed");
+        assert!(first.manifest_updated);
+        assert_eq!((first.public_methods, first.public_free_functions), (5, 1));
+        let manifest = Manifest::read(&manifest_path).expect("the manifest reads back");
+        let state = |path: &str| manifest.items.iter().find(|item| item.path == path).map(|item| (item.class, item.status));
+        assert_eq!(state("demo::Repo::name"), Some((Class::Automatic, Status::Ready)));
+        assert_eq!(state("demo::open"), Some((Class::Automatic, Status::Ready)), "public type-map names reach canonical paths");
+        assert_eq!(state("demo::Repo::rename"), Some((Class::Decision, Status::Unresolved)));
+        assert_eq!(state("demo::Repo::find"), Some((Class::Decision, Status::Unresolved)));
+        assert_eq!(state("demo::Item::id"), Some((Class::Decision, Status::Unresolved)));
+        assert_eq!(state("demo::Repo::old"), Some((Class::Excluded, Status::Excluded)));
+        assert_eq!(state("demo::schema::Key::name"), Some((Class::Excluded, Status::Excluded)));
+
+        let second = analyze(&request).expect("the surface is analyzed again");
+        assert!(!second.manifest_updated, "an unchanged surface leaves the manifest alone");
+        assert_eq!(second.summary, first.summary);
+    }
+
+    const DEMO: &str = r#"
+mod inner {
+    pub struct Repo;
+
+    impl Repo {
+        pub fn name(&self) -> String {
+            String::new()
+        }
+
+        pub fn rename(&mut self, name: impl AsRef<str>) {
+            let _ = name.as_ref();
+        }
+
+        pub fn find(&self, id: u32) -> Option<crate::Item> {
+            let _ = id;
+            None
+        }
+
+        #[deprecated]
+        pub fn old(&self) {}
+    }
+}
+
+pub use inner::Repo;
+
+pub struct Item;
+
+impl Item {
+    pub fn id(&self) -> u32 {
+        0
+    }
+}
+
+pub mod schema {
+    pub struct Key;
+
+    impl Key {
+        pub fn name(&self) -> &'static str {
+            "key"
+        }
+    }
+}
+
+pub fn open(path: impl AsRef<std::path::Path>) -> Result<Repo, std::io::Error> {
+    let _ = path.as_ref();
+    Ok(Repo)
+}
+"#;
 
     #[test]
     fn response_omits_absent_fields() {

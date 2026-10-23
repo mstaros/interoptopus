@@ -10,6 +10,7 @@ use std::process::Command as Process;
 use rustdoc_types::FORMAT_VERSION;
 use serde::{Deserialize, Serialize};
 
+use crate::hash::Fnv;
 use crate::{EngineError, ErrorCode};
 
 /// Directories inside a crate that never contribute to its documentation.
@@ -232,7 +233,7 @@ fn cache_key(request: &ExtractRequest, crates: &[SelectedCrate]) -> Result<Strin
             hash.field(&read(&file)?);
         }
     }
-    Ok(format!("{:016x}", hash.0))
+    Ok(hash.hex())
 }
 
 /// All files below `dir`, sorted, skipping directories that never feed rustdoc.
@@ -267,7 +268,7 @@ fn cargo_doc(request: &ExtractRequest, crates: &[SelectedCrate]) -> Result<PathB
     // One target directory per checkout. Cargo names path-dependency artifacts identically in
     // every checkout and judges freshness by modification time, so a shared directory can link
     // artifacts built from another checkout's sources.
-    let target = request.cache_dir.join(format!("target-{:016x}", checkout.0));
+    let target = request.cache_dir.join(format!("target-{}", checkout.hex()));
     let mut command = cargo(&request.toolchain);
     command.args(["doc", "--locked", "--no-deps", "--manifest-path"]).arg(&request.workspace_manifest);
     for krate in crates {
@@ -345,24 +346,6 @@ fn read(path: &Path) -> Result<Vec<u8>, EngineError> {
 
 fn io_error(path: &Path, error: &io::Error) -> EngineError {
     EngineError::new(ErrorCode::Io, format!("{}: {error}", path.display()))
-}
-
-/// FNV-1a (64 bit): a stable, dependency-free hash for cache keys, not for security.
-struct Fnv(u64);
-
-impl Fnv {
-    const fn new() -> Self {
-        Self(0xcbf2_9ce4_8422_2325)
-    }
-
-    /// Hashes a length-prefixed field so that adjacent fields cannot run together.
-    fn field(&mut self, data: &[u8]) {
-        let length = u64::try_from(data.len()).unwrap_or(u64::MAX);
-        for byte in length.to_le_bytes().iter().chain(data) {
-            self.0 ^= u64::from(*byte);
-            self.0 = self.0.wrapping_mul(0x0000_0100_0000_01b3);
-        }
-    }
 }
 
 #[cfg(test)]
