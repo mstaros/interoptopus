@@ -193,6 +193,30 @@ impl<'a> Classifier<'a> {
         }
     }
 
+    /// The mapping of a canonical type path, if any.
+    #[must_use]
+    pub fn mapping(&self, canonical: &str) -> Option<Mapping> {
+        self.types.get(canonical).copied()
+    }
+
+    /// Canonical paths of the types mapped to the repository handle.
+    pub fn handles(&self) -> impl Iterator<Item = &str> {
+        self.types.iter().filter(|(_, mapping)| **mapping == Mapping::Repository).map(|(path, _)| path.as_str())
+    }
+
+    /// The conversion-table entry a generic parameter's bounds satisfy: the trait name and its
+    /// canonical type argument.
+    #[must_use]
+    pub fn conversion(&self, bounds: &[GenericBound]) -> Option<(&'static str, &'static str)> {
+        bounds.iter().find_map(|bound| {
+            let GenericBound::TraitBound { trait_, .. } = bound else { return None };
+            let canonical = self.renderer.path(trait_);
+            let name = last_segment(&canonical);
+            let argument = type_args(trait_).into_iter().map(|ty| self.renderer.ty(ty)).collect::<Vec<_>>().join(", ");
+            CONVERSIONS.iter().find(|(trait_name, expected)| *trait_name == name && *expected == argument).copied()
+        })
+    }
+
     fn check(&self, function: &Function) -> Result<(), Reason> {
         if function.is_async || function.is_unsafe {
             return Err(Reason::new(Category::Unsupported, if function.is_async { "async" } else { "unsafe" }));
@@ -285,15 +309,12 @@ impl<'a> Classifier<'a> {
 
     /// Whether some bound can be satisfied from a mapped value.
     fn convertible(&self, bounds: &[GenericBound], label: &str, function: &Function) -> Result<(), Reason> {
+        if self.conversion(bounds).is_some() {
+            return Ok(());
+        }
         for bound in bounds {
             let GenericBound::TraitBound { trait_, .. } = bound else { continue };
-            let canonical = self.renderer.path(trait_);
-            let name = last_segment(&canonical);
-            let argument = type_args(trait_).into_iter().map(|ty| self.renderer.ty(ty)).collect::<Vec<_>>().join(", ");
-            if CONVERSIONS.iter().any(|(trait_name, expected)| *trait_name == name && *expected == argument) {
-                return Ok(());
-            }
-            if name == "IntoIterator" && iterator_item(trait_).is_some_and(|item| self.input(item, function).is_ok()) {
+            if last_segment(&self.renderer.path(trait_)) == "IntoIterator" && iterator_item(trait_).is_some_and(|item| self.input(item, function).is_ok()) {
                 return Ok(());
             }
         }

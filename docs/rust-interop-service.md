@@ -114,10 +114,19 @@ interoptopus itself needs no change for this.
 
 ## Hand-written runtime (per target)
 
-- A persistent repository holder (a mutex-guarded repository or a pool).
-- The error mapper (the planned error contract, P0b in the GixSharp handoff).
-- Conversion helpers.
-- Later, the cursor template.
+The generated facade calls a runtime module (configuration `runtime_module`, default
+`crate::runtime`) that provides:
+
+- `Error`, an FFI type, and `error(e)`, which maps any error a wrapped call returns (the planned
+  error contract, P0b in the GixSharp handoff);
+- the repository holder, named like the generated service (a mutex-guarded repository or a
+  pool), with `From` for each type mapped to `repository` and one accessor per such type, named
+  after it in snake case (`repository()`, `thread_safe_repository()`);
+- `path` and `path_out`, `object_id` and `object_id_out`: the conversions whose representation
+  is still open;
+- later, the cursor template.
+
+Text and bytes convert inline through interoptopus' own types.
 
 ## Determinism and safety
 
@@ -164,7 +173,7 @@ interoptopus itself needs no change for this.
 - [x] E2 `extract`: crate list, plus caching. Integrated at `744975c5`: the crate list comes from `cargo metadata --locked` (normal dependencies sharing the root's prefix), rustdoc runs in a target directory owned by the checkout, and results are cached under a content hash of toolchain, features, `Cargo.lock` and crate sources.
 - [x] E3 Model, classifier and signature hashes; `analyze` writes the manifest. Check the result against the 704-function reference count. Done: the non-deprecated gix surface is 704 functions; items carry a canonical signature, its hash, a class and a status (ready, unresolved, resolved, stale, excluded), and `analyze` rewrites the manifest only when it changes.
 - [ ] E4 Decision validation and the compile check for snippets.
-- [ ] E5 Rust facade emitter (automatic, handle, convert and record kinds) plus inventory registration. Facade types get unique module-qualified names (see Naming and namespaces).
+- [ ] E5 Rust facade emitter (automatic, handle, convert and record kinds) plus inventory registration. Facade types get unique module-qualified names (see Naming and namespaces). First increment, the automatic kind: `generate` emits one service per runtime handle (functions returning the handle become constructors, including `&self` methods as constructors taking `&Self`; free functions and the handle's own type win name clashes; conversions between handle types are dropped), its `&self` methods, and free functions named after their module path. Every member returns `ffi::Result`. It refuses a stale manifest and writes `mod.rs` into `rust_output` only when it changes. An end-to-end test builds the generated facade for a demo crate and validates its inventory.
 - [ ] E6 Names sidecar in the C# backend.
 - [ ] E7 Emitter for the public C# layer and smoke tests. Namespaces follow rustdoc module paths (see Naming and namespaces).
 - [ ] E8 Release with `publish_localcargo`; package the binary with `package_rust_binary`.

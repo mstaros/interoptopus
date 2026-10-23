@@ -12,12 +12,13 @@
 //!
 //! `extract` runs rustdoc with JSON output for a crate and its prefixed dependencies.
 //! `analyze` classifies the public function surface of the root crate's JSON and, given a
-//! manifest, rewrites its items and summary. `generate` answers with `not_implemented`.
+//! manifest, rewrites its items and summary. `generate` emits the Rust facade for the manifest's
+//! ready automatic items into a worktree.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use rustdoc_types::{Crate, FORMAT_VERSION};
@@ -26,6 +27,7 @@ use serde::{Deserialize, Serialize};
 
 mod cargo_doc;
 mod classify;
+mod facade;
 mod hash;
 mod manifest;
 mod render;
@@ -86,6 +88,8 @@ pub enum ErrorCode {
     Io,
     /// The rustdoc JSON format version differs from the one this engine reads.
     UnsupportedFormat,
+    /// The manifest does not match the current surface; run `analyze` first.
+    StaleManifest,
     /// The subcommand is not implemented yet.
     NotImplemented,
     /// An external tool such as cargo or rustdoc failed.
@@ -171,13 +175,51 @@ pub struct AnalyzeResult {
     pub manifest_updated: bool,
 }
 
+/// Request for `generate`.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GenerateRequest {
+    /// The root crate's rustdoc JSON file.
+    pub rustdoc_json: PathBuf,
+    /// The manifest; its items must match the current surface.
+    pub manifest: PathBuf,
+    /// The transaction worktree that receives the generated files; the manifest's output
+    /// folders are relative to it.
+    pub worktree: PathBuf,
+}
+
+/// An item left out of the facade.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct Dropped {
+    /// The item path.
+    pub path: String,
+    /// Why it was left out.
+    pub reason: String,
+}
+
+/// Result of `generate`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct GenerateResult {
+    /// The generated facade module, `mod.rs` in the manifest's Rust output folder.
+    pub rust_module: PathBuf,
+    /// Whether the module file changed.
+    pub written: bool,
+    /// Items emitted into the facade.
+    pub emitted: usize,
+    /// Ready items left out, such as another handle type's duplicate of a method.
+    pub dropped: Vec<Dropped>,
+    /// Items not generated yet: unresolved, or decided with a kind the emitter does not
+    /// support yet.
+    pub pending: usize,
+}
+
 /// Runs one command against a JSON request and returns the response envelope.
 #[must_use]
 pub fn run(command: Command, request_json: &str) -> Response {
     let outcome = match command {
         Command::Extract => handle(command, request_json, extract),
         Command::Analyze => handle(command, request_json, analyze),
-        Command::Generate => Err(EngineError::new(ErrorCode::NotImplemented, format!("`{command}` is not implemented yet"))),
+        Command::Generate => handle(command, request_json, generate),
     };
     match outcome {
         Ok(result) => Response { command, result: Some(result), error: None },
@@ -210,12 +252,7 @@ pub fn analyze(request: &AnalyzeRequest) -> Result<AnalyzeResult, EngineError> {
     let configuration = manifest.as_ref().map(|manifest| manifest.configuration.clone()).unwrap_or_default();
     let renderer = render::Renderer::new(&krate);
     let functions = surface::collect(&krate, &renderer);
-    let aliases = surface::public_to_canonical(&krate);
-    let type_map: BTreeMap<String, Mapping> = configuration
-        .type_map
-        .iter()
-        .map(|(path, mapping)| (aliases.get(path).cloned().unwrap_or_else(|| path.clone()), *mapping))
-        .collect();
+    let type_map = type_map(&krate, &configuration);
     let classifier = classify::Classifier::new(&renderer, &type_map, &configuration.exclude_paths);
     let decisions = manifest.as_ref().map_or(&[][..], |manifest| manifest.decisions.as_slice());
     let (items, summary) = manifest::items(&functions, &renderer, &classifier, decisions);
@@ -237,6 +274,82 @@ pub fn analyze(request: &AnalyzeRequest) -> Result<AnalyzeResult, EngineError> {
         summary,
         manifest_updated,
     })
+}
+
+/// Emits the Rust facade for the manifest's ready automatic items.
+///
+/// # Errors
+///
+/// Fails when the manifest does not match the current surface (`stale_manifest`), names no Rust
+/// output folder, or holds a ready item the emitter cannot lower.
+pub fn generate(request: &GenerateRequest) -> Result<GenerateResult, EngineError> {
+    let json = fs::read_to_string(&request.rustdoc_json)
+        .map_err(|e| EngineError::new(ErrorCode::Io, format!("cannot read {}: {e}", request.rustdoc_json.display())))?;
+    let krate = load_crate(&json)?;
+    let manifest = Manifest::read(&request.manifest)?;
+    let configuration = &manifest.configuration;
+    let rust_output = configuration
+        .rust_output
+        .as_ref()
+        .ok_or_else(|| EngineError::new(ErrorCode::InvalidRequest, "the manifest configuration names no `rust_output` folder"))?;
+    let renderer = render::Renderer::new(&krate);
+    let functions = surface::collect(&krate, &renderer);
+    let type_map = type_map(&krate, configuration);
+    let classifier = classify::Classifier::new(&renderer, &type_map, &configuration.exclude_paths);
+    let (items, _) = manifest::items(&functions, &renderer, &classifier, &manifest.decisions);
+    let fingerprint = |items: &[Item]| items.iter().map(|item| (item.path.clone(), item.signature_hash.clone())).collect::<BTreeSet<_>>();
+    if fingerprint(&items) != fingerprint(&manifest.items) {
+        return Err(EngineError::new(ErrorCode::StaleManifest, "the manifest does not match the current surface; run analyze first"));
+    }
+    let ready: BTreeSet<&str> =
+        items.iter().filter(|item| item.class == Class::Automatic && item.status == Status::Ready).map(|item| item.path.as_str()).collect();
+    let selected: Vec<&surface::Function> = functions.iter().filter(|function| ready.contains(function.path.as_str())).collect();
+    let crate_name = krate.index.get(&krate.root).and_then(|root| root.name.clone()).unwrap_or_default();
+    let provenance = format!(
+        "Generated by interoptopus-rustdoc-gen {} from `{crate_name}` {} (rustdoc format {}). Do not edit.",
+        env!("CARGO_PKG_VERSION"),
+        krate.crate_version.as_deref().unwrap_or("(unversioned)"),
+        krate.format_version
+    );
+    let runtime = configuration.runtime_module.as_deref().unwrap_or("crate::runtime");
+    let context = facade::Context { renderer: &renderer, classifier: &classifier, runtime, provenance: &provenance };
+    let facade = facade::emit(&selected, &context)
+        .map_err(|(path, why)| EngineError::new(ErrorCode::Internal, format!("cannot emit `{path}`: {why}")))?;
+    let rust_module = request.worktree.join(rust_output).join("mod.rs");
+    let written = write_if_changed(&rust_module, &facade.source)?;
+    let pending = items.iter().filter(|item| item.status != Status::Excluded && !ready.contains(item.path.as_str())).count();
+    Ok(GenerateResult {
+        rust_module,
+        written,
+        emitted: facade.emitted.len(),
+        dropped: facade.dropped.into_iter().map(|(path, reason)| Dropped { path, reason }).collect(),
+        pending,
+    })
+}
+
+/// The manifest's type map keyed by canonical paths.
+fn type_map(krate: &Crate, configuration: &Configuration) -> BTreeMap<String, Mapping> {
+    let aliases = surface::public_to_canonical(krate);
+    configuration
+        .type_map
+        .iter()
+        .map(|(path, mapping)| (aliases.get(path).cloned().unwrap_or_else(|| path.clone()), *mapping))
+        .collect()
+}
+
+/// Replaces `path` with `text` through a temporary file, unless it already holds exactly that.
+fn write_if_changed(path: &Path, text: &str) -> Result<bool, EngineError> {
+    if fs::read_to_string(path).is_ok_and(|existing| existing == text) {
+        return Ok(false);
+    }
+    let io = |e: std::io::Error| EngineError::new(ErrorCode::Io, format!("cannot write {}: {e}", path.display()));
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(io)?;
+    }
+    let temporary = path.with_extension("rs.tmp");
+    fs::write(&temporary, text).map_err(io)?;
+    fs::rename(&temporary, path).map_err(io)?;
+    Ok(true)
 }
 
 /// Parses rustdoc JSON after checking that its format version is the one this engine reads.
@@ -281,10 +394,10 @@ mod tests {
     }
 
     #[test]
-    fn unimplemented_commands_report_structured_error() {
+    fn generate_rejects_malformed_request() {
         let response = run(Command::Generate, "{}");
         assert!(!response.is_success());
-        assert_eq!(response.error.map(|error| error.code), Some(ErrorCode::NotImplemented));
+        assert_eq!(response.error.map(|error| error.code), Some(ErrorCode::InvalidRequest));
     }
 
     #[test]
@@ -404,6 +517,115 @@ pub mod schema {
 pub fn open(path: impl AsRef<std::path::Path>) -> Result<Repo, std::io::Error> {
     let _ = path.as_ref();
     Ok(Repo)
+}
+"#;
+
+    #[test]
+    #[ignore = "runs cargo doc with the pinned nightly toolchain and builds the generated facade"]
+    fn generate_emits_a_facade_that_builds_and_registers() {
+        let dir = tempfile::tempdir().expect("temporary directory can be created");
+        let root = dir.path();
+        let core = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../core");
+        let facade_manifest = format!(
+            "[package]\nname = \"facade\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\ndemo = {{ path = \"../demo\" }}\ninteroptopus = {{ package = \"interoptopus_mps\", path = {:?} }}\n",
+            core.display().to_string()
+        );
+        let files = [
+            ("Cargo.toml", "[workspace]\nmembers = [\"demo\", \"facade\"]\nresolver = \"3\"\n".to_owned()),
+            ("demo/Cargo.toml", "[package]\nname = \"demo\"\nversion = \"0.1.0\"\nedition = \"2024\"\n".to_owned()),
+            ("demo/src/lib.rs", DEMO.to_owned()),
+            ("facade/Cargo.toml", facade_manifest),
+            ("facade/src/lib.rs", FACADE_LIB.to_owned()),
+            ("facade/src/runtime.rs", FACADE_RUNTIME.to_owned()),
+        ];
+        for (relative, content) in files {
+            let path = root.join(relative);
+            fs::create_dir_all(path.parent().expect("files have a parent")).expect("directories can be created");
+            fs::write(path, content).expect("files can be written");
+        }
+        let cargo = |args: &[&str]| {
+            std::process::Command::new("cargo")
+                .arg("+nightly-2026-07-18")
+                .args(args)
+                .arg("--manifest-path")
+                .arg(root.join("Cargo.toml"))
+                .status()
+                .expect("cargo runs")
+                .success()
+        };
+        assert!(cargo(&["generate-lockfile", "--offline"]));
+        let extracted = extract(&ExtractRequest {
+            workspace_manifest: root.join("Cargo.toml"),
+            root_crate: "demo".to_owned(),
+            crate_prefix: "demo".to_owned(),
+            features: Vec::new(),
+            toolchain: "nightly-2026-07-18".to_owned(),
+            cache_dir: root.join("cache"),
+        })
+        .expect("the workspace is documented");
+        let manifest_path = root.join("manifest.json");
+        let configuration = r#"{"configuration": {"type_map": {"demo::Repo": "repository"}, "exclude_paths": ["demo::schema"], "rust_output": "facade/src/generated"}}"#;
+        fs::write(&manifest_path, configuration).expect("the manifest can be written");
+        let rustdoc_json = extracted.crates[0].json.clone();
+        analyze(&AnalyzeRequest { rustdoc_json: rustdoc_json.clone(), manifest: Some(manifest_path.clone()) }).expect("the surface is analyzed");
+        let request = GenerateRequest { rustdoc_json, manifest: manifest_path.clone(), worktree: root.to_path_buf() };
+
+        let generated = generate(&request).expect("the facade is generated");
+        assert!(generated.written);
+        assert_eq!((generated.emitted, generated.pending), (2, 3), "demo::open and demo::Repo::name; three items await decisions");
+        assert!(!generate(&request).expect("the facade is generated again").written, "regenerating changes nothing");
+        assert!(cargo(&["test", "--offline", "-p", "facade"]), "the generated facade builds and registers with an inventory");
+
+        let mut manifest = Manifest::read(&manifest_path).expect("the manifest reads back");
+        manifest.items[0].signature_hash = "0".repeat(16);
+        manifest.write(&manifest_path).expect("the manifest can be written");
+        assert_eq!(generate(&request).unwrap_err().code, ErrorCode::StaleManifest);
+    }
+
+    const FACADE_LIB: &str = r#"
+pub mod generated;
+pub mod runtime;
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn inventory_validates() {
+        let mut inventory = interoptopus::inventory::RustInventory::new();
+        crate::generated::register(&mut inventory);
+        let _ = inventory.validate();
+    }
+}
+"#;
+
+    const FACADE_RUNTIME: &str = r#"
+use interoptopus::ffi;
+
+#[ffi]
+#[derive(Debug, PartialOrd, PartialEq, Copy, Clone)]
+pub enum Error {
+    Fail,
+}
+
+pub fn error<E: std::fmt::Display>(_: E) -> Error {
+    Error::Fail
+}
+
+pub struct Repo(demo::Repo);
+
+impl From<demo::Repo> for Repo {
+    fn from(repo: demo::Repo) -> Self {
+        Self(repo)
+    }
+}
+
+impl Repo {
+    pub fn repo(&self) -> &demo::Repo {
+        &self.0
+    }
+}
+
+pub fn path(bytes: &ffi::Slice<u8>) -> Result<std::path::PathBuf, Error> {
+    std::str::from_utf8(bytes.as_slice()).map(std::path::PathBuf::from).map_err(error)
 }
 "#;
 
