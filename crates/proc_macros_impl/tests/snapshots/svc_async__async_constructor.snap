@@ -69,8 +69,10 @@ unsafe fn service_create(
                                         *const Service,
                                     > = ::interoptopus::ffi::Ok(
                                         ::std::sync::Arc::into_raw(
-                                            ::std::sync::Arc::new(service_instance),
-                                        ) as *mut _,
+                                                ::std::sync::Arc::new(service_instance),
+                                            )
+                                            .cast_mut()
+                                            .cast(),
                                     );
                                     callback.call_ok(&raw const _cb_result);
                                     ::std::mem::forget(_cb_result);

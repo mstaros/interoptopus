@@ -1,7 +1,7 @@
 #![allow(clippy::missing_safety_doc)]
 #![allow(clippy::just_underscores_and_digits)]
 #![doc = include_str!("../README.md")]
-
+#![deny(clippy::ptr_cast_constness)]
 use interoptopus::inventory::RustInventory;
 use interoptopus::{builtins_string, builtins_vec, builtins_wire, constant, extra_type, ffi, function, service};
 

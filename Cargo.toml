@@ -27,8 +27,8 @@ version = "0.19.0"
 [workspace.dependencies]
 # Internal
 interoptopus = { path = "crates/core", package = "interoptopus_mps", version = "0.19.0", registry = "local", default-features = false }
-interoptopus_proc = { path = "crates/proc_macros", package = "interoptopus_proc_mps", version = "0.19.0", registry = "local" }
-interoptopus_proc_impl = { path = "crates/proc_macros_impl", package = "interoptopus_proc_impl_mps", version = "0.19.0", registry = "local" }
+interoptopus_proc = { path = "crates/proc_macros", package = "interoptopus_proc_mps", version = "=0.19.0", registry = "local" }
+interoptopus_proc_impl = { path = "crates/proc_macros_impl", package = "interoptopus_proc_impl_mps", version = "=0.19.0", registry = "local" }
 interoptopus_c = { path = "crates/backend_c", package = "interoptopus_c_mps", version = "0.19.0", registry = "local" }
 interoptopus_cpython = { path = "crates/backend_cpython", package = "interoptopus_cpython_mps", version = "0.19.0", registry = "local" }
 interoptopus_csharp = { path = "crates/backend_csharp", package = "interoptopus_csharp_mps", version = "0.19.0", registry = "local" }

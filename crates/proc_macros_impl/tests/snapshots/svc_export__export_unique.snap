@@ -26,7 +26,8 @@ unsafe fn service_create() -> <::interoptopus::ffi::Result<
         ::interoptopus::ffi::Ok(service_instance) => {
             ::interoptopus::ffi::Ok(
                 ::std::sync::Arc::into_raw(::std::sync::Arc::new(service_instance))
-                    as *mut _,
+                    .cast_mut()
+                    .cast(),
             )
         }
         ::interoptopus::ffi::Err(err) => ::interoptopus::ffi::Err(err),
