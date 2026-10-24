@@ -1,8 +1,8 @@
 # Rust interop service
 
 Status: **approved design**, 2026-10-17. R1 to R3 and E1 to E3 are done and E5 has its first
-increment; progress is tracked in the Todo section below. Open decisions marked "Proposed
-(2026-10-24)" await confirmation.
+increment; progress is tracked in the Todo section below. Decisions confirmed on 2026-10-24
+are listed under Decisions (2026-10-24).
 
 ## Goal
 
@@ -79,33 +79,55 @@ One JSON file per target repository.
   the hand-written runtime module; managed and native namespaces; library name; type-map
   overrides.
 - **items**: item path, signature hash, class, status, reason.
-- **decisions**: signature hash plus one kind:
-  - `handle`: key type and a Rust snippet that re-creates the handle from the key;
-  - `record`: owned fields;
-  - `convert`: argument mapping;
-  - `exclude`: with a reason;
-  - `manual`: implemented by hand in a named module.
+- **decisions**, checked against the item's signature hash; a `handle` answer may instead
+  name a type and cover all its `&self` methods, and a per-item decision overrides it.
+  Payloads are structured, and Rust fragments use only the placeholders `{value}`, `{repo}`
+  and `{key}`:
+  - `handle`: the type, its key mapping, `to_key` (such as `{value}.id`) and `from_key` (such
+    as `{repo}.find_commit({key})`);
+  - `record`: field paths, checked against rustdoc;
+  - `convert`: a source mapping and one fragment (such as
+    `gix::refs::FullName::try_from({value})`);
+  - `exclude`: a reason, the only free text, which generation ignores;
+  - `manual`: the module that implements it by hand.
 
 ## Classification (v1)
 
 - **Automatic**: every type is in the type map; borrowed results only for handle types that
-  have a decision; generic arguments only through the conversion table.
-- **Needs a decision**: unmapped borrowed results and other generics; iterator and platform
-  results until a cursor template exists; `&mut self` methods on `Repository`, which need
-  the persistent repository runtime.
+  have a decision; generic arguments only when a mapped type satisfies their bounds (see Type
+  map).
+- **Needs a decision**: unmapped borrowed results and other generics; results implementing
+  `Iterator` until a cursor template exists; `&mut self` methods on the runtime handle, which
+  need the persistent holder. Categories come from trait implementations (`Iterator`, `Fn*`,
+  `Read`/`Write`), not type names.
 - **Excluded**: deprecated items, `doc(hidden)` items, trait-impl methods, and config schema
   keys (by rule).
-- An item can have several blockers. Reasons record the first one found (receiver, then
-  parameters, then the result), so counts by reason are counts of first blockers; how many
-  items an answer unblocks is measured by re-classifying with it applied.
+- An item can have several blockers. Today reasons record the first one found (receiver, then
+  parameters, then the result), so counts by reason are counts of first blockers; E3b reports
+  every blocker. How many items an answer unblocks is measured by re-classifying with it
+  applied.
 
-## Default type map
+## Type map
 
-- Primitives map directly; `&str`/`String` -> `string`; `BStr`/`BString`/`[u8]` -> `byte[]`.
-- `ObjectId` -> hex string, matching GixSharp today.
-- Filesystem paths -> bytes, matching gix-ffi today (still open).
-- `Option`, `Vec` and `Result` -> their interoptopus equivalents.
-- Errors go through the runtime's error mapper.
+The engine knows only std: primitives map directly; `&str`/`String` -> `string`;
+`Path`/`PathBuf` -> `path`; `[u8]`/`Vec<u8>` -> `bytes`; `Option`, `Vec` and `Result` -> their
+interoptopus equivalents; errors go through the runtime's error mapper. Everything else comes
+from the manifest as `string`, `bytes`, `path`, `handle` or `custom`; a custom mapping names its
+FFI type and two runtime conversion functions. A generic bound `AsRef<T>`, `Into<T>`,
+`Borrow<T>` or `TryInto<T>` is satisfied when `T` is mapped, and a custom trait bound when
+rustdoc shows a mapped type implementing it; trait implementations only suggest that a bound
+holds, and E4's build decides. `analyze` therefore also reads the dependency crates' rustdoc
+JSON, which `extract` already produces.
+
+`analyze` proposes entries by scanning types: handle candidates (returned by free
+constructors, many `&self` methods, no lifetime parameter, `Send + Sync`), string-like types
+(`Display` plus `FromStr` or `TryFrom<&str>`) and byte-like types (`AsRef<[u8]>` or `Deref` to
+bytes), ranked by how many blocked items each unblocks when re-classified with it applied. A
+person accepts them. Representation and meaning (hex or binary ids, paths as bytes or text,
+live or snapshot keys) stay human decisions.
+
+For gix the manifest maps `BStr`/`BString` as bytes and `ObjectId` as a custom hex string
+(matching GixSharp today); paths are bytes, matching gix-ffi today (still open).
 
 ## Naming and namespaces
 
@@ -134,8 +156,8 @@ The generated facade calls a runtime module (configuration `runtime_module`, def
 - the repository holder, named like the generated service (a mutex-guarded repository or a
   pool), with `From` for each type mapped to `repository` and one accessor per such type, named
   after it in snake case (`repository()`, `thread_safe_repository()`);
-- `path` and `path_out`, `object_id` and `object_id_out`: the conversions whose representation
-  is still open;
+- `path` and `path_out`, and the two conversion functions each custom mapping names (for gix,
+  object ids);
 - later, the cursor template.
 
 Text and bytes convert inline through interoptopus' own types.
@@ -147,6 +169,13 @@ A handle stands for a Rust object that borrows a runtime handle, such as gix's
 rebuilds it from the key on each call. Accepting a handle decision is the target author's
 promise that rebuilding from the key keeps the behavior callers expect; the engine checks that
 the reconstruction and every wrapped call compile, never that they mean the same.
+
+Every API returning a handle type, including inside `Option` and `Vec`, returns its key, and
+every method of a handle type becomes a facade function taking the runtime handle and the key.
+The public C# layer builds the handle object (`Gix.Commit` holds its `Repository` and id).
+interoptopus returns services only from constructors and never inside `Option` or `Vec`, so
+per-type Rust services could not express these results; the runtime handle stays a service
+because it holds state.
 
 - A per-type answer covers methods taking `&self` only. Methods taking `self` by value or
   `&mut self`, such as builders (gix's `Remote::with_url`) and in-place mutators
@@ -193,43 +222,13 @@ together.
 - Object ID representation (hex or binary).
 - Filesystem path representation.
 - Whether `gix-ffi` moves into GixSharp with its git history.
-- Handle decisions per type instead of per item: 405 of the 598 open items report their
-  receiver (`Reference`, `Object`, `Commit`, `Tree` and about 20 other types) as their first
-  blocker; how many a per-type answer unblocks is measured by re-classifying. Proposed
-  (2026-10-24): one answer per type, covering `&self` methods only, with per-item overrides
-  (see Handles).
-- Proposed (2026-10-24): handles cross the boundary as keys. Every API returning a handle
-  type, including inside `Option` and `Vec`, returns its key; every method of a handle type
-  becomes a facade function taking the repository and the key; the public C# layer builds the
-  handle object (`Gix.Commit` holds its `Repository` and id). interoptopus returns services only
-  from constructors and never inside `Option` or `Vec`, so per-type Rust services cannot
-  express these results. The repository stays a service because it holds state.
-- Proposed (2026-10-24): decision payloads are structured. A `handle` names its type, its key
-  mapping and two Rust fragments, `to_key` (such as `{value}.id`) and `from_key` (such as
-  `{repo}.find_commit({key})`); a `record` lists field paths, checked against rustdoc; a
-  `convert` names a source mapping and one fragment (such as
-  `gix::refs::FullName::try_from({value})`); a `manual` names a module; an `exclude` gives a
-  reason, the only free text, which generation ignores. Only `{value}`, `{repo}` and `{key}` are
-  substituted. E4 checks them by building the generated facade with the target's features, so
-  each fragment is compiled together with argument conversion, the wrapped call and result
-  conversion; compiler errors map back to decisions through each member's generated span.
-- Proposed (2026-10-24): no gix knowledge in the engine, done before E4. Built-in mappings
-  cover only std (primitives, `String`/`str`, `Path`/`PathBuf`, `Vec<u8>`, `Option`, `Result`).
-  `Mapping` becomes `string`, `bytes`, `path`, `handle` and `custom`; a custom mapping names its
-  FFI type and two runtime conversion functions, so gix's `ObjectId` becomes a custom entry in
-  its manifest. A bound `AsRef<T>`, `Into<T>`, `Borrow<T>` or `TryInto<T>` is satisfied when `T`
-  is mapped, and a custom trait bound (gix's `AsBStr`) when rustdoc shows a mapped type
-  implementing it, replacing the hand-written conversion table. Trait implementations only
-  suggest that a bound holds; E4's build decides. Categories come from trait implementations
-  (`Iterator`, `Fn*`, `Read`/`Write`) instead of type names such as `Platform`.
-- Proposed (2026-10-24): `analyze` proposes type-map entries by scanning types, with G3:
-  handle candidates (returned by free constructors, many `&self` methods, no lifetime
-  parameter, `Send + Sync`), string-like types (`Display` plus `FromStr` or `TryFrom<&str>`) and
-  byte-like types (`AsRef<[u8]>` or `Deref` to bytes), ranked by how many blocked items each
-  unblocks when the classifier re-runs with it applied; a person accepts them into the
-  manifest. Representation and meaning (hex or
-  binary ids, paths as bytes or text, live or snapshot keys) stay human decisions. `analyze`
-  must then read the dependency crates' rustdoc JSON, which `extract` already produces.
+
+## Decisions (2026-10-24)
+
+Confirmed after the design review: handle answers per type with per-item overrides; handles
+cross the boundary as keys (see Handles); structured decision payloads, checked by building
+the generated facade (see Manifest and E4); no target knowledge in the engine and scanned
+type-map proposals ranked by impact (see Type map).
 
 ## Todo
 
@@ -244,8 +243,11 @@ together.
 - [x] E1 Pick the `rustdoc-types` release whose `FORMAT_VERSION` is 60; create the engine crate with `extract`, `analyze` and `generate` subcommands and JSON input/output. Integrated at `97c9ffbc`: `rustdoc-types` 0.60.0; `analyze` on `gix.json` reports 682 methods and 22 free functions (704).
 - [x] E2 `extract`: crate list, plus caching. Integrated at `744975c5`: the crate list comes from `cargo metadata --locked` (normal dependencies sharing the root's prefix), rustdoc runs in a target directory owned by the checkout, and results are cached under a content hash of toolchain, features, `Cargo.lock` and crate sources.
 - [x] E3 Model, classifier and signature hashes; `analyze` writes the manifest. Check the result against the 704-function reference count. Done: the non-deprecated gix surface is 704 functions; items carry a canonical signature, its hash, a class and a status (ready, unresolved, resolved, stale, excluded), and `analyze` rewrites the manifest only when it changes.
-- [ ] E4 Decision validation: structured payloads, per-type handle answers covering `&self` methods only, and the check that builds the generated facade with the target's features. Needs a buildable runtime first: G2's minimal runtime or a stub of the runtime contract.
-- [ ] E5 Rust facade emitter (automatic, handle, convert and record kinds) plus inventory registration. Facade types get unique module-qualified names (see Naming and namespaces). First increment, the automatic kind: `generate` emits one service for all types mapped to the runtime handle (functions returning the handle become constructors, including `&self` methods as constructors taking `&Self`; free functions and the handle's own type win name clashes; conversions between handle types are dropped), its `&self` methods, and free functions named after their module path. Every member returns `ffi::Result`. It refuses a stale manifest (provenance or items differ from a fresh analysis) and, unless the request sets `partial`, one that is not ready; it rejects output folders outside the worktree and writes `mod.rs` into `rust_output` only when it changes. An end-to-end test builds the generated facade for a demo crate and validates its inventory.
+- [ ] E3a No target knowledge in the engine: built-in mappings for std only; `string`, `bytes`, `path`, `handle` and `custom` mappings from the manifest; the generic conversion rule over rustdoc trait implementations, reading the dependency crates' JSON; categories from trait implementations. gix's mappings move to its manifest.
+- [ ] E3b Report every blocker per item.
+- [ ] E3c `analyze` proposes type-map entries ranked by how many items each unblocks (with G3).
+- [ ] E4 Decision validation: structured payloads (see Manifest), per-type handle answers covering `&self` methods only with per-item overrides, and the check that builds the generated facade with the target's features. Needs E3a, and a buildable runtime: G2's minimal runtime or a stub of the runtime contract.
+- [ ] E5 Rust facade emitter (automatic, handle, convert and record kinds) plus inventory registration; handles cross the boundary as keys (see Handles). Facade types get unique module-qualified names (see Naming and namespaces). First increment, the automatic kind: `generate` emits one service for all types mapped to the runtime handle (functions returning the handle become constructors, including `&self` methods as constructors taking `&Self`; free functions and the handle's own type win name clashes; conversions between handle types are dropped), its `&self` methods, and free functions named after their module path. Every member returns `ffi::Result`. It refuses a stale manifest (provenance or items differ from a fresh analysis) and, unless the request sets `partial`, one that is not ready; it rejects output folders outside the worktree and writes `mod.rs` into `rust_output` only when it changes. An end-to-end test builds the generated facade for a demo crate and validates its inventory.
 - [ ] E6 Names sidecar in the C# backend.
 - [ ] E7 Emitter for the public C# layer and smoke tests. Namespaces follow rustdoc module paths (see Naming and namespaces).
 - [ ] E8 Release with `publish_localcargo`; package the binary with `package_rust_binary`.
@@ -260,10 +262,11 @@ together.
 
 - [ ] G1 Create the GixSharp repository and move `gix-ffi` and the bindings there.
 - [ ] G2 Runtime: persistent repository holder, error mapper, conversions.
-- [ ] G3 Write the gix manifest, run analyze, review the unresolved queue.
+- [ ] G3 Write the gix manifest (its type map from accepted E3c proposals: bytes for `BStr`/`BString`, a custom hex `ObjectId`), run analyze, review the unresolved queue.
 - [ ] G4 First generated slice: simple `Repository` methods plus `Id`/`Commit` handles; build and smoke-test.
 
 ### Dependencies
 
 - R and E1-E3 can run in parallel.
+- E3a comes before E4, and E4 needs G2's runtime or a stub of the runtime contract.
 - G4 needs E5-E7, S1-S2 and G2.
