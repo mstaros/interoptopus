@@ -34,7 +34,7 @@ mod render;
 mod surface;
 
 pub use cargo_doc::{CrateJson, ExtractRequest, ExtractResult, extract};
-pub use classify::{Category, Class, Mapping};
+pub use classify::{Carrier, Category, Class, Custom, Implementations, Mapping};
 pub use manifest::{Configuration, Decision, DecisionKind, Item, Manifest, Provenance, Status, Summary};
 
 /// An engine subcommand.
@@ -156,6 +156,9 @@ pub struct AnalyzeRequest {
     /// is written.
     #[serde(default)]
     pub manifest: Option<PathBuf>,
+    /// The dependency crates' rustdoc JSON files, read for their trait implementations.
+    #[serde(default)]
+    pub dependency_json: Vec<PathBuf>,
 }
 
 /// Result of `analyze`: the classified public function surface of one crate.
@@ -191,6 +194,9 @@ pub struct GenerateRequest {
     /// Emit the ready items only and report the rest as pending, instead of refusing.
     #[serde(default)]
     pub partial: bool,
+    /// The dependency crates' rustdoc JSON files, read for their trait implementations.
+    #[serde(default)]
+    pub dependency_json: Vec<PathBuf>,
 }
 
 /// An item left out of the facade.
@@ -258,14 +264,15 @@ pub fn analyze(request: &AnalyzeRequest) -> Result<AnalyzeResult, EngineError> {
     let renderer = render::Renderer::new(&krate);
     let functions = surface::collect(&krate, &renderer);
     let type_map = type_map(&krate, &configuration);
-    let classifier = classify::Classifier::new(&renderer, &type_map, &configuration.exclude_paths);
+    let (implementations, digests) = dependencies(&krate, &request.dependency_json)?;
+    let classifier = classify::Classifier::new(&renderer, &type_map, &configuration.exclude_paths, &implementations);
     let decisions = manifest.as_ref().map_or(&[][..], |manifest| manifest.decisions.as_slice());
     let (items, summary) = manifest::items(&functions, &renderer, &classifier, decisions);
     let manifest_updated = match (manifest.as_mut(), request.manifest.as_deref()) {
         (Some(manifest), Some(path)) => {
             manifest.items = items;
             manifest.summary = summary.clone();
-            manifest.provenance = Some(Provenance::of(&json, &configuration)?);
+            manifest.provenance = Some(Provenance::of(&sources(&json, &digests), &configuration)?);
             manifest.write(path)?
         }
         _ => false,
@@ -301,7 +308,8 @@ pub fn generate(request: &GenerateRequest) -> Result<GenerateResult, EngineError
         .as_ref()
         .ok_or_else(|| EngineError::new(ErrorCode::InvalidRequest, "the manifest configuration names no `rust_output` folder"))?;
     let rust_module = contained(&request.worktree, rust_output)?.join("mod.rs");
-    if manifest.provenance.as_ref() != Some(&Provenance::of(&json, configuration)?) {
+    let (implementations, digests) = dependencies(&krate, &request.dependency_json)?;
+    if manifest.provenance.as_ref() != Some(&Provenance::of(&sources(&json, &digests), configuration)?) {
         return Err(EngineError::new(
             ErrorCode::StaleManifest,
             "the manifest was analyzed from other rustdoc JSON or another configuration; run analyze first",
@@ -310,7 +318,7 @@ pub fn generate(request: &GenerateRequest) -> Result<GenerateResult, EngineError
     let renderer = render::Renderer::new(&krate);
     let functions = surface::collect(&krate, &renderer);
     let type_map = type_map(&krate, configuration);
-    let classifier = classify::Classifier::new(&renderer, &type_map, &configuration.exclude_paths);
+    let classifier = classify::Classifier::new(&renderer, &type_map, &configuration.exclude_paths, &implementations);
     let (items, _) = manifest::items(&functions, &renderer, &classifier, &manifest.decisions);
     if items != manifest.items {
         return Err(EngineError::new(ErrorCode::StaleManifest, "the manifest items differ from a fresh analysis; run analyze first"));
@@ -362,8 +370,29 @@ fn type_map(krate: &Crate, configuration: &Configuration) -> BTreeMap<String, Ma
     configuration
         .type_map
         .iter()
-        .map(|(path, mapping)| (aliases.get(path).cloned().unwrap_or_else(|| path.clone()), *mapping))
+        .map(|(path, mapping)| (aliases.get(path).cloned().unwrap_or_else(|| path.clone()), mapping.clone()))
         .collect()
+}
+
+/// The trait implementations of the root crate and of the dependency crates' JSON, with a digest
+/// of each dependency's JSON for provenance.
+fn dependencies(krate: &Crate, dependency_json: &[PathBuf]) -> Result<(classify::Implementations, Vec<String>), EngineError> {
+    let mut implementations = classify::Implementations::default();
+    implementations.add(krate);
+    let mut digests = Vec::with_capacity(dependency_json.len());
+    for path in dependency_json {
+        let text = fs::read_to_string(path).map_err(|e| EngineError::new(ErrorCode::Io, format!("cannot read {}: {e}", path.display())))?;
+        implementations.add(&load_crate(&text)?);
+        let mut digest = hash::Fnv::new();
+        digest.field(text.as_bytes());
+        digests.push(digest.hex());
+    }
+    Ok((implementations, digests))
+}
+
+/// The provenance sources: the root crate's JSON, then each dependency's digest.
+fn sources<'a>(json: &'a str, digests: &'a [String]) -> Vec<&'a str> {
+    std::iter::once(json).chain(digests.iter().map(String::as_str)).collect()
 }
 
 /// Replaces `path` with `text` through a temporary file, unless it already holds exactly that.
@@ -441,11 +470,12 @@ mod tests {
     #[test]
     fn provenance_follows_the_rustdoc_json_and_the_configuration() {
         let configuration = Configuration::default();
-        let first = Provenance::of("{}", &configuration).unwrap();
-        assert_eq!(first, Provenance::of("{}", &configuration).unwrap());
-        assert_ne!(first.rustdoc_json, Provenance::of("{ }", &configuration).unwrap().rustdoc_json);
+        let first = Provenance::of(&["{}"], &configuration).unwrap();
+        assert_eq!(first, Provenance::of(&["{}"], &configuration).unwrap());
+        assert_ne!(first.rustdoc_json, Provenance::of(&["{ }"], &configuration).unwrap().rustdoc_json);
+        assert_ne!(first.rustdoc_json, Provenance::of(&["{}", "dependency"], &configuration).unwrap().rustdoc_json);
         let moved = Configuration { runtime_module: Some("crate::other".to_owned()), ..Configuration::default() };
-        assert_ne!(first.configuration, Provenance::of("{}", &moved).unwrap().configuration);
+        assert_ne!(first.configuration, Provenance::of(&["{}"], &moved).unwrap().configuration);
     }
 
     #[test]
@@ -497,9 +527,10 @@ mod tests {
         })
         .expect("the workspace is documented");
         let manifest_path = root.join("manifest.json");
-        fs::write(&manifest_path, r#"{"configuration": {"type_map": {"demo::Repo": "repository"}, "exclude_paths": ["demo::schema"]}}"#)
+        fs::write(&manifest_path, r#"{"configuration": {"type_map": {"demo::Repo": "handle"}, "exclude_paths": ["demo::schema"]}}"#)
             .expect("the manifest can be written");
-        let request = AnalyzeRequest { rustdoc_json: extracted.crates[0].json.clone(), manifest: Some(manifest_path.clone()) };
+        let request =
+            AnalyzeRequest { rustdoc_json: extracted.crates[0].json.clone(), manifest: Some(manifest_path.clone()), dependency_json: Vec::new() };
 
         let first = analyze(&request).expect("the surface is analyzed");
         assert!(first.manifest_updated);
@@ -612,11 +643,18 @@ pub fn open(path: impl AsRef<std::path::Path>) -> Result<Repo, std::io::Error> {
         })
         .expect("the workspace is documented");
         let manifest_path = root.join("manifest.json");
-        let configuration = r#"{"configuration": {"type_map": {"demo::Repo": "repository"}, "exclude_paths": ["demo::schema"], "rust_output": "facade/src/generated"}}"#;
+        let configuration = r#"{"configuration": {"type_map": {"demo::Repo": "handle"}, "exclude_paths": ["demo::schema"], "rust_output": "facade/src/generated"}}"#;
         fs::write(&manifest_path, configuration).expect("the manifest can be written");
         let rustdoc_json = extracted.crates[0].json.clone();
-        analyze(&AnalyzeRequest { rustdoc_json: rustdoc_json.clone(), manifest: Some(manifest_path.clone()) }).expect("the surface is analyzed");
-        let request = GenerateRequest { rustdoc_json: rustdoc_json.clone(), manifest: manifest_path.clone(), worktree: root.to_path_buf(), partial: true };
+        let analysis = AnalyzeRequest { rustdoc_json: rustdoc_json.clone(), manifest: Some(manifest_path.clone()), dependency_json: Vec::new() };
+        analyze(&analysis).expect("the surface is analyzed");
+        let request = GenerateRequest {
+            rustdoc_json,
+            manifest: manifest_path.clone(),
+            worktree: root.to_path_buf(),
+            partial: true,
+            dependency_json: Vec::new(),
+        };
         let complete = GenerateRequest { partial: false, ..request.clone() };
         assert_eq!(generate(&complete).unwrap_err().code, ErrorCode::NotReady, "three items await decisions");
 
@@ -631,7 +669,7 @@ pub fn open(path: impl AsRef<std::path::Path>) -> Result<Repo, std::io::Error> {
         manifest.write(&manifest_path).expect("the manifest can be written");
         assert_eq!(generate(&request).unwrap_err().code, ErrorCode::StaleManifest, "items must match a fresh analysis");
 
-        analyze(&AnalyzeRequest { rustdoc_json, manifest: Some(manifest_path.clone()) }).expect("the surface is analyzed again");
+        analyze(&analysis).expect("the surface is analyzed again");
         let mut manifest = Manifest::read(&manifest_path).expect("the manifest reads back");
         manifest.configuration.runtime_module = Some("crate::elsewhere".to_owned());
         manifest.write(&manifest_path).expect("the manifest can be written");

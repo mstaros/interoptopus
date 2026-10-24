@@ -1,6 +1,6 @@
 //! Emits the Rust facade (design step 3, "generate"; todo E5) for the ready items of a manifest.
 //!
-//! Types mapped to `repository` become one interoptopus service, named after the shortest of
+//! Types mapped to `handle` become one interoptopus service, named after the shortest of
 //! them. Functions that return the handle become its constructors (a `&self` method that does
 //! becomes a constructor taking `&Self`), `&self` methods become its methods, and everything else
 //! becomes a free function named after its module path. On a name clash a free function wins
@@ -12,18 +12,19 @@
 //! `crate::runtime`), which provides:
 //!
 //! - `Error`, an FFI type, and `error(e) -> Error` for every error a wrapped call returns;
-//! - the handle holder, named like the service, with `From` for each type mapped to `repository`
+//! - the handle holder, named like the service, with `From` for each type mapped to `handle`
 //!   and one accessor per such type, named after it in snake case (for gix `repository()` and
 //!   `thread_safe_repository()`), whose result dereferences to that type;
 //! - `path(&ffi::Slice<u8>) -> Result<PathBuf, Error>` and `path_out(&Path) -> ffi::Vec<u8>`;
-//! - `object_id(&ffi::String) -> Result<ObjectId, Error>` and `object_id_out(&oid) -> ffi::String`.
+//! - for each custom mapping, its `into_rust(&ffi value) -> Result<T, Error>` and
+//!   `into_ffi(&T) -> ffi value` functions.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
 use rustdoc_types::{GenericBound, Type};
 
-use crate::classify::{Classifier, Mapping};
+use crate::classify::{Carrier, Classifier, Conversion, Mapping};
 use crate::render::{Renderer, last_segment, type_args};
 use crate::surface::{Function, Receiver};
 
@@ -97,8 +98,8 @@ enum Conv {
     BytesOwned,
     /// A path through the runtime; `borrowed` passes `&Path`.
     Path { borrowed: bool },
-    /// An object id through the runtime; `borrowed` passes `&oid`.
-    ObjectId { borrowed: bool },
+    /// A custom mapping through the runtime function it names; `borrowed` passes a reference.
+    Custom { function: String, borrowed: bool },
     /// An optional value.
     Option(Box<Self>),
 }
@@ -179,7 +180,7 @@ impl Emitter<'_> {
         [&function.owner, &function.owner_public]
             .into_iter()
             .flatten()
-            .find(|path| self.mapping(path) == Some(Mapping::Repository))
+            .find(|path| self.mapping(path) == Some(Mapping::Handle))
             .map(String::as_str)
     }
 
@@ -191,7 +192,7 @@ impl Emitter<'_> {
                 let canonical = self.context.renderer.path(path);
                 match (canonical.as_str(), type_args(path).as_slice()) {
                     ("core::result::Result", [ok, _]) => self.handle_result(function, ok).filter(|fallible| !fallible).map(|_| true),
-                    _ => (self.mapping(&canonical) == Some(Mapping::Repository)).then_some(false),
+                    _ => (self.mapping(&canonical) == Some(Mapping::Handle)).then_some(false),
                 }
             }
             _ => None,
@@ -292,8 +293,10 @@ impl Emitter<'_> {
                         Some(Mapping::String) => Ok(Input::new("ffi::String", Conv::Text)),
                         Some(Mapping::Bytes) => Ok(Input::new("ffi::Slice<u8>", Conv::BytesInto)),
                         Some(Mapping::Path) => Ok(Input::new("ffi::Slice<u8>", Conv::Path { borrowed: false })),
-                        Some(Mapping::ObjectId) => Ok(Input::new("ffi::String", Conv::ObjectId { borrowed: false })),
-                        Some(Mapping::Repository) | None => Err(self.rendered(ty)),
+                        Some(Mapping::Custom(custom)) => {
+                            Ok(Input::new(carrier_in(custom.ffi), Conv::Custom { function: custom.into_rust, borrowed: false }))
+                        }
+                        Some(Mapping::Handle) | None => Err(self.rendered(ty)),
                     },
                 }
             }
@@ -309,27 +312,25 @@ impl Emitter<'_> {
             Type::ResolvedPath(path) => match self.mapping(&self.context.renderer.path(path)) {
                 Some(Mapping::Bytes) => Ok(Input::new("ffi::Slice<u8>", Conv::BytesInto)),
                 Some(Mapping::Path) => Ok(Input::new("ffi::Slice<u8>", Conv::Path { borrowed: true })),
-                Some(Mapping::ObjectId) => Ok(Input::new("ffi::String", Conv::ObjectId { borrowed: true })),
+                Some(Mapping::Custom(custom)) => {
+                    Ok(Input::new(carrier_in(custom.ffi), Conv::Custom { function: custom.into_rust, borrowed: true }))
+                }
                 _ => Err(format!("&{}", self.rendered(inner))),
             },
             _ => Err(format!("&{}", self.rendered(inner))),
         }
     }
 
-    /// A generic parameter, satisfied through the conversion table.
+    /// A generic parameter, satisfied through a converting bound or a trait implementation.
     fn converted(&self, bounds: &[GenericBound]) -> Result<Input, String> {
-        match self.context.classifier.conversion(bounds) {
-            Some(("AsRef", "str")) => Ok(Input::new("ffi::String", Conv::Str)),
-            Some(("Into", "alloc::string::String")) => Ok(Input::new("ffi::String", Conv::Text)),
-            Some(("AsRef", "bstr::bstr::BStr" | "[u8]") | ("AsBStr", "")) => Ok(Input::new("ffi::Slice<u8>", Conv::Bytes)),
-            Some(("Into", "bstr::bstring::BString")) => Ok(Input::new("ffi::Slice<u8>", Conv::BytesOwned)),
-            Some(("AsRef", "std::path::Path" | "std::ffi::os_str::OsStr") | ("Into", "std::path::PathBuf")) => {
-                Ok(Input::new("ffi::Slice<u8>", Conv::Path { borrowed: false }))
-            }
-            Some(("Into", "gix_hash::object_id::ObjectId") | ("AsRef", "gix_hash::borrowed::oid")) => {
-                Ok(Input::new("ffi::String", Conv::ObjectId { borrowed: false }))
-            }
-            _ => Err(format!("generic parameter `{}`", self.context.renderer.bounds(bounds))),
+        let unsupported = || format!("generic parameter `{}`", self.context.renderer.bounds(bounds));
+        let Some(Conversion { mapping, borrowed }) = self.context.classifier.conversion(bounds) else { return Err(unsupported()) };
+        match mapping {
+            Mapping::String => Ok(Input::new("ffi::String", if borrowed { Conv::Str } else { Conv::Text })),
+            Mapping::Bytes => Ok(Input::new("ffi::Slice<u8>", if borrowed { Conv::Bytes } else { Conv::BytesOwned })),
+            Mapping::Path => Ok(Input::new("ffi::Slice<u8>", Conv::Path { borrowed: false })),
+            Mapping::Custom(custom) => Ok(Input::new(carrier_in(custom.ffi), Conv::Custom { function: custom.into_rust, borrowed: false })),
+            Mapping::Handle => Err(unsupported()),
         }
     }
 
@@ -370,8 +371,10 @@ impl Emitter<'_> {
             Some(Mapping::String) => Ok(text_out(value)),
             Some(Mapping::Bytes) => Ok(bytes_out(value)),
             Some(Mapping::Path) => Ok(("ffi::Vec<u8>".to_owned(), format!("runtime::path_out(&{value})"))),
-            Some(Mapping::ObjectId) => Ok(("ffi::String".to_owned(), format!("runtime::object_id_out(&{value})"))),
-            Some(Mapping::Repository) | None => Err(self.rendered(ty)),
+            Some(Mapping::Custom(custom)) => {
+                Ok((carrier_out(custom.ffi).to_owned(), format!("runtime::{}(&{value})", custom.into_ffi)))
+            }
+            Some(Mapping::Handle) | None => Err(self.rendered(ty)),
         }
     }
 
@@ -457,19 +460,19 @@ fn argument(name: &str, conv: &Conv, setup: &mut Vec<String>) -> String {
         Conv::BytesInto => format!("{name}.as_slice().into()"),
         Conv::BytesOwned => format!("{name}.as_slice().to_vec()"),
         Conv::Path { borrowed } => format!("{}runtime::path(&{name})?", if *borrowed { "&" } else { "" }),
-        Conv::ObjectId { borrowed } => format!("{}runtime::object_id(&{name})?", if *borrowed { "&" } else { "" }),
+        Conv::Custom { function, borrowed } => format!("{}runtime::{function}(&{name})?", if *borrowed { "&" } else { "" }),
         Conv::Option(inner) => {
             setup.push(format!("let {name} = {name}.into_option();"));
             let (body, fallible, borrowed) = match inner.as_ref() {
-                Conv::Same => ("*value", false, false),
-                Conv::Ref => ("value", false, false),
-                Conv::Str => ("value.as_str()", false, false),
-                Conv::Text => ("value.as_str().to_owned()", false, false),
-                Conv::Bytes => ("value.as_slice()", false, false),
-                Conv::BytesInto => ("value.as_slice().into()", false, false),
-                Conv::BytesOwned => ("value.as_slice().to_vec()", false, false),
-                Conv::Path { borrowed } => ("runtime::path(value)", true, *borrowed),
-                Conv::ObjectId { borrowed } => ("runtime::object_id(value)", true, *borrowed),
+                Conv::Same => ("*value".to_owned(), false, false),
+                Conv::Ref => ("value".to_owned(), false, false),
+                Conv::Str => ("value.as_str()".to_owned(), false, false),
+                Conv::Text => ("value.as_str().to_owned()".to_owned(), false, false),
+                Conv::Bytes => ("value.as_slice()".to_owned(), false, false),
+                Conv::BytesInto => ("value.as_slice().into()".to_owned(), false, false),
+                Conv::BytesOwned => ("value.as_slice().to_vec()".to_owned(), false, false),
+                Conv::Path { borrowed } => ("runtime::path(value)".to_owned(), true, *borrowed),
+                Conv::Custom { function, borrowed } => (format!("runtime::{function}(value)"), true, *borrowed),
                 Conv::Option(_) => unreachable!("nested options are rejected when lowering"),
             };
             let mut expression = format!("{name}.as_ref().map(|value| {body})");
@@ -490,6 +493,22 @@ fn text_out(value: &str) -> (String, String) {
 
 fn bytes_out(value: &str) -> (String, String) {
     ("ffi::Vec<u8>".to_owned(), format!("ffi::Vec::from_vec({value}.to_vec())"))
+}
+
+/// The FFI parameter type of a custom carrier.
+const fn carrier_in(carrier: Carrier) -> &'static str {
+    match carrier {
+        Carrier::String => "ffi::String",
+        Carrier::Bytes => "ffi::Slice<u8>",
+    }
+}
+
+/// The FFI result type of a custom carrier.
+const fn carrier_out(carrier: Carrier) -> &'static str {
+    match carrier {
+        Carrier::String => "ffi::String",
+        Carrier::Bytes => "ffi::Vec<u8>",
+    }
 }
 
 fn is_byte(ty: &Type) -> bool {
@@ -532,6 +551,7 @@ fn snake(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::classify::{Custom, Implementations};
     use crate::render::tests::{bound, resolved, shared};
     use rustdoc_types::GenericArg;
 
@@ -547,6 +567,7 @@ mod tests {
             (8, "core::option::Option"),
             (9, "bstr::bstring::BString"),
             (10, "demo::ThreadSafeRepo"),
+            (11, "demo::Oid"),
         ])
     }
 
@@ -574,17 +595,26 @@ mod tests {
         }
     }
 
-    fn handles() -> BTreeMap<String, Mapping> {
-        [("demo::Repo", Mapping::Repository), ("demo::ThreadSafeRepo", Mapping::Repository)]
-            .into_iter()
-            .map(|(path, mapping)| (path.to_owned(), mapping))
-            .collect()
+    /// Two handle types, bstr's byte strings and a custom object id.
+    fn types() -> BTreeMap<String, Mapping> {
+        let oid = Mapping::Custom(Custom { ffi: Carrier::String, into_rust: "oid".to_owned(), into_ffi: "oid_out".to_owned() });
+        [
+            ("demo::Repo", Mapping::Handle),
+            ("demo::ThreadSafeRepo", Mapping::Handle),
+            ("bstr::bstr::BStr", Mapping::Bytes),
+            ("bstr::bstring::BString", Mapping::Bytes),
+            ("demo::Oid", oid),
+        ]
+        .into_iter()
+        .map(|(path, mapping)| (path.to_owned(), mapping))
+        .collect()
     }
 
     fn facade(functions: &[Function]) -> Facade {
         let renderer = renderer();
-        let handles = handles();
-        let classifier = Classifier::new(&renderer, &handles, &[]);
+        let types = types();
+        let implementations = Implementations::default();
+        let classifier = Classifier::new(&renderer, &types, &[], &implementations);
         let context = Context { renderer: &renderer, classifier: &classifier, runtime: "crate::runtime", provenance: "test" };
         let functions: Vec<&Function> = functions.iter().collect();
         emit(&functions, &context).expect("the functions lower")
@@ -673,10 +703,20 @@ mod tests {
     }
 
     #[test]
+    fn custom_mappings_convert_through_their_runtime_functions() {
+        let id = Type::ImplTrait(vec![bound(6, vec![GenericArg::Type(ty(11))])]);
+        let peel = function("demo::Repo::peel", Some("demo::Repo"), Receiver::Shared, vec![("id", id)], Some(ty(11)));
+        let source = facade(&[peel]).source;
+        assert!(source.contains("    pub fn peel(&self, id: ffi::String) -> ffi::Result<ffi::String, runtime::Error> {\n"), "{source}");
+        assert!(source.contains("finish(|| Ok(runtime::oid_out(&self.inner.repo().peel(runtime::oid(&id)?))))"), "{source}");
+    }
+
+    #[test]
     fn unlowerable_items_name_the_parameter() {
         let renderer = renderer();
         let handles = BTreeMap::new();
-        let classifier = Classifier::new(&renderer, &handles, &[]);
+        let implementations = Implementations::default();
+        let classifier = Classifier::new(&renderer, &handles, &[], &implementations);
         let context = Context { renderer: &renderer, classifier: &classifier, runtime: "crate::runtime", provenance: "test" };
         let take = function("demo::take", None, Receiver::None, vec![("repo", ty(4))], None);
         let error = emit(&[&take], &context).unwrap_err();

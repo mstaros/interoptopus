@@ -1,60 +1,78 @@
 //! Sorts each surface function into automatic, needs-a-decision or excluded (design sections
-//! "Classification (v1)" and "Default type map").
+//! "Classification (v1)" and "Type map"). The engine knows only std types: everything else comes
+//! from the manifest's type map, and generic bounds are matched against it and against the trait
+//! implementations rustdoc reports.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-use rustdoc_types::{AssocItemConstraintKind, GenericArgs, GenericBound, Path, Term, Type};
+use rustdoc_types::{AssocItemConstraintKind, Crate, GenericArgs, GenericBound, ItemEnum, Path, Term, Type};
 use serde::{Deserialize, Serialize};
 
-use crate::render::{Renderer, last_segment, type_args};
+use crate::render::{Renderer, type_args};
 use crate::surface::{Function, Receiver};
 
 /// How a mapped Rust type crosses the boundary.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Mapping {
     /// UTF-8 text.
     String,
     /// Bytes.
     Bytes,
-    /// An object id as hexadecimal text.
-    ObjectId,
-    /// A filesystem path as bytes.
+    /// A filesystem path, converted by the runtime's `path` and `path_out`.
     Path,
-    /// The repository handle held by the hand-written runtime.
-    Repository,
+    /// The runtime handle, held by the hand-written runtime.
+    Handle,
+    /// A type the runtime converts with the two functions the mapping names.
+    Custom(Custom),
 }
 
-/// The default type map by canonical path; manifest entries extend and override it.
-const DEFAULT_TYPES: [(&str, Mapping); 7] = [
-    ("alloc::string::String", Mapping::String),
-    ("bstr::bstr::BStr", Mapping::Bytes),
-    ("bstr::bstring::BString", Mapping::Bytes),
-    ("gix_hash::object_id::ObjectId", Mapping::ObjectId),
-    ("gix_hash::borrowed::oid", Mapping::ObjectId),
-    ("std::path::Path", Mapping::Path),
-    ("std::path::PathBuf", Mapping::Path),
-];
+/// A mapping whose conversions the runtime provides.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Custom {
+    /// How the value crosses the boundary.
+    pub ffi: Carrier,
+    /// The runtime function that turns a reference to the FFI value into the Rust value, or
+    /// fails with the runtime error.
+    pub into_rust: String,
+    /// The runtime function that turns a reference to the Rust value into the FFI value.
+    pub into_ffi: String,
+}
+
+/// The FFI form of a custom mapping.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Carrier {
+    /// Text: `ffi::String`.
+    String,
+    /// Bytes: `ffi::Slice<u8>` in, `ffi::Vec<u8>` out.
+    Bytes,
+}
+
+/// How a generic parameter is satisfied.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Conversion {
+    /// The mapping of the value passed.
+    pub mapping: Mapping,
+    /// Whether a reference is passed rather than an owned value.
+    pub borrowed: bool,
+}
+
+/// The std types the engine maps itself; the manifest's type map extends and overrides them.
+const STD_TYPES: [(&str, Mapping); 3] =
+    [("alloc::string::String", Mapping::String), ("std::path::Path", Mapping::Path), ("std::path::PathBuf", Mapping::Path)];
 
 /// Primitives that cross the boundary unchanged.
 const PRIMITIVES: [&str; 13] = ["bool", "u8", "u16", "u32", "u64", "usize", "i8", "i16", "i32", "i64", "isize", "f32", "f64"];
 
-/// Generic parameter bounds the facade satisfies from a mapped value: trait name and its canonical
-/// type argument, empty when the trait has none.
-const CONVERSIONS: [(&str, &str); 11] = [
-    ("AsRef", "str"),
-    ("Into", "alloc::string::String"),
-    ("AsRef", "bstr::bstr::BStr"),
-    ("Into", "bstr::bstring::BString"),
-    ("AsBStr", ""),
-    ("AsRef", "[u8]"),
-    ("AsRef", "std::path::Path"),
-    ("Into", "std::path::PathBuf"),
-    ("AsRef", "std::ffi::os_str::OsStr"),
-    ("Into", "gix_hash::object_id::ObjectId"),
-    ("AsRef", "gix_hash::borrowed::oid"),
-];
+/// Traits satisfied by any value convertible to their type argument; the first two take a
+/// reference.
+const CONVERTING: [&str; 4] = ["core::convert::AsRef", "core::borrow::Borrow", "core::convert::Into", "core::convert::TryInto"];
+
+/// The iterator trait; results implementing it wait for a cursor template.
+const ITERATOR: &str = "core::iter::traits::iterator::Iterator";
 
 /// The class of a surface function.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -78,20 +96,18 @@ pub enum Category {
     ExcludedPath,
     /// The receiver is not a runtime handle.
     Receiver,
-    /// `&mut self` on the runtime repository needs the persistent repository runtime.
-    MutRepository,
+    /// `&mut self` on the runtime handle needs the persistent runtime holder.
+    MutHandle,
     /// A type is not in the type map.
     Unmapped,
     /// A borrowed type that cannot be copied across.
     Borrowed,
     /// A generic parameter or result without a conversion.
     Generic,
-    /// An iterator or platform result, until a cursor template exists.
+    /// A result implementing `Iterator`, until a cursor template exists.
     Iterator,
     /// A callback parameter.
     Callback,
-    /// A progress parameter.
-    Progress,
     /// A cancellation flag.
     Cancellation,
     /// A reader or writer.
@@ -108,13 +124,12 @@ impl Category {
             Self::Deprecated => "deprecated",
             Self::ExcludedPath => "excluded_path",
             Self::Receiver => "receiver",
-            Self::MutRepository => "mut_repository",
+            Self::MutHandle => "mut_handle",
             Self::Unmapped => "unmapped",
             Self::Borrowed => "borrowed",
             Self::Generic => "generic",
             Self::Iterator => "iterator",
             Self::Callback => "callback",
-            Self::Progress => "progress",
             Self::Cancellation => "cancellation",
             Self::Io => "io",
             Self::Unsupported => "unsupported",
@@ -162,20 +177,69 @@ enum Position {
     Output,
 }
 
+/// Trait implementations listed in rustdoc JSON: each trait path with its implementing types, as
+/// the renderer writes them. Blanket implementations are left out.
+#[derive(Debug, Default)]
+pub struct Implementations {
+    by_trait: BTreeMap<String, BTreeSet<String>>,
+}
+
+impl Implementations {
+    /// Adds the trait implementations one crate's JSON lists.
+    pub fn add(&mut self, krate: &Crate) {
+        let renderer = Renderer::new(krate);
+        for item in krate.index.values() {
+            let ItemEnum::Impl(implementation) = &item.inner else { continue };
+            let Some(trait_) = &implementation.trait_ else { continue };
+            if matches!(implementation.for_, Type::Generic(_)) {
+                continue;
+            }
+            self.by_trait.entry(renderer.path(trait_)).or_default().insert(renderer.ty(&implementation.for_));
+        }
+    }
+
+    /// The types implementing a trait.
+    pub fn implementers(&self, trait_path: &str) -> impl Iterator<Item = &str> {
+        self.by_trait.get(trait_path).into_iter().flatten().map(String::as_str)
+    }
+
+    /// Whether the type at `path`, with any generic arguments, implements the trait.
+    #[must_use]
+    pub fn implements(&self, path: &str, trait_path: &str) -> bool {
+        self.implementers(trait_path).any(|implementer| implementer.split('<').next() == Some(path))
+    }
+
+    /// Implementations from (trait, implementing type) pairs.
+    #[cfg(test)]
+    pub(crate) fn from_pairs<'p>(pairs: impl IntoIterator<Item = (&'p str, &'p str)>) -> Self {
+        let mut implementations = Self::default();
+        for (trait_path, implementer) in pairs {
+            implementations.by_trait.entry(trait_path.to_owned()).or_default().insert(implementer.to_owned());
+        }
+        implementations
+    }
+}
+
 /// Classifies surface functions against a type map and exclusion rules.
 pub struct Classifier<'a> {
     renderer: &'a Renderer,
     types: BTreeMap<String, Mapping>,
     exclude_paths: &'a [String],
+    implementations: &'a Implementations,
 }
 
 impl<'a> Classifier<'a> {
-    /// A classifier using the default type map extended by `overrides`.
+    /// A classifier using the std type map extended by `overrides`.
     #[must_use]
-    pub fn new(renderer: &'a Renderer, overrides: &BTreeMap<String, Mapping>, exclude_paths: &'a [String]) -> Self {
-        let mut types: BTreeMap<String, Mapping> = DEFAULT_TYPES.iter().map(|(path, mapping)| ((*path).to_owned(), *mapping)).collect();
-        types.extend(overrides.iter().map(|(path, mapping)| (path.clone(), *mapping)));
-        Self { renderer, types, exclude_paths }
+    pub fn new(
+        renderer: &'a Renderer,
+        overrides: &BTreeMap<String, Mapping>,
+        exclude_paths: &'a [String],
+        implementations: &'a Implementations,
+    ) -> Self {
+        let mut types: BTreeMap<String, Mapping> = STD_TYPES.iter().map(|(path, mapping)| ((*path).to_owned(), mapping.clone())).collect();
+        types.extend(overrides.iter().map(|(path, mapping)| (path.clone(), mapping.clone())));
+        Self { renderer, types, exclude_paths, implementations }
     }
 
     /// The verdict for one function.
@@ -196,25 +260,71 @@ impl<'a> Classifier<'a> {
     /// The mapping of a canonical type path, if any.
     #[must_use]
     pub fn mapping(&self, canonical: &str) -> Option<Mapping> {
-        self.types.get(canonical).copied()
+        self.types.get(canonical).cloned()
     }
 
-    /// Canonical paths of the types mapped to the repository handle.
+    /// Canonical paths of the types mapped to the runtime handle.
     pub fn handles(&self) -> impl Iterator<Item = &str> {
-        self.types.iter().filter(|(_, mapping)| **mapping == Mapping::Repository).map(|(path, _)| path.as_str())
+        self.types.iter().filter(|(_, mapping)| **mapping == Mapping::Handle).map(|(path, _)| path.as_str())
     }
 
-    /// The conversion-table entry a generic parameter's bounds satisfy: the trait name and its
-    /// canonical type argument.
+    /// How a generic parameter's bounds are satisfied: a converting trait whose target is mapped,
+    /// or a trait rustdoc lists a mapped type as implementing.
     #[must_use]
-    pub fn conversion(&self, bounds: &[GenericBound]) -> Option<(&'static str, &'static str)> {
+    pub fn conversion(&self, bounds: &[GenericBound]) -> Option<Conversion> {
         bounds.iter().find_map(|bound| {
             let GenericBound::TraitBound { trait_, .. } = bound else { return None };
             let canonical = self.renderer.path(trait_);
-            let name = last_segment(&canonical);
-            let argument = type_args(trait_).into_iter().map(|ty| self.renderer.ty(ty)).collect::<Vec<_>>().join(", ");
-            CONVERSIONS.iter().find(|(trait_name, expected)| *trait_name == name && *expected == argument).copied()
+            if CONVERTING.contains(&canonical.as_str()) {
+                let arguments = type_args(trait_);
+                let [target] = arguments.as_slice() else { return None };
+                let borrowed = CONVERTING[..2].contains(&canonical.as_str());
+                return self.carrier(target).map(|mapping| Conversion { mapping, borrowed });
+            }
+            self.implemented(&canonical)
         })
+    }
+
+    /// The mapping of the type a converting bound targets.
+    fn carrier(&self, target: &Type) -> Option<Mapping> {
+        match target {
+            Type::Primitive(name) if name == "str" => Some(Mapping::String),
+            Type::Slice(element) if is_byte(element) => Some(Mapping::Bytes),
+            Type::ResolvedPath(path) => {
+                let canonical = self.renderer.path(path);
+                match (canonical.as_str(), type_args(path).as_slice()) {
+                    ("alloc::vec::Vec", [Type::Primitive(byte)]) if byte == "u8" => Some(Mapping::Bytes),
+                    _ => self.types.get(&canonical).filter(|mapping| **mapping != Mapping::Handle).cloned(),
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// The best conversion through a type rustdoc lists as implementing `trait_path`: borrowed std
+    /// carriers first, then owned ones, then mapped types.
+    fn implemented(&self, trait_path: &str) -> Option<Conversion> {
+        self.implementations
+            .implementers(trait_path)
+            .filter_map(|implementer| self.implementer(implementer))
+            .min_by_key(|(rank, _)| *rank)
+            .map(|(_, conversion)| conversion)
+    }
+
+    /// The conversion through one implementing type, with its rank.
+    fn implementer(&self, implementer: &str) -> Option<(u8, Conversion)> {
+        let carrier = |mapping: Mapping, borrowed: bool| Some((u8::from(!borrowed), Conversion { mapping, borrowed }));
+        match implementer {
+            "str" | "&str" => carrier(Mapping::String, true),
+            "[u8]" | "&[u8]" => carrier(Mapping::Bytes, true),
+            "alloc::string::String" => carrier(Mapping::String, false),
+            "alloc::vec::Vec<u8>" => carrier(Mapping::Bytes, false),
+            _ => self
+                .types
+                .get(implementer)
+                .filter(|mapping| **mapping != Mapping::Handle)
+                .map(|mapping| (2, Conversion { mapping: mapping.clone(), borrowed: false })),
+        }
     }
 
     fn check(&self, function: &Function) -> Result<(), Reason> {
@@ -229,17 +339,17 @@ impl<'a> Classifier<'a> {
     }
 
     fn owner_mapping(&self, function: &Function) -> Option<Mapping> {
-        [&function.owner, &function.owner_public].into_iter().flatten().find_map(|path| self.types.get(path).copied())
+        [&function.owner, &function.owner_public].into_iter().flatten().find_map(|path| self.types.get(path).cloned())
     }
 
     fn receiver(&self, function: &Function) -> Result<(), Reason> {
         match (&function.receiver, self.owner_mapping(function)) {
-            (Receiver::None, _) | (Receiver::Shared, Some(Mapping::Repository)) => Ok(()),
-            (Receiver::Exclusive, Some(Mapping::Repository)) => {
-                Err(Reason::new(Category::MutRepository, "&mut self needs the persistent repository runtime"))
+            (Receiver::None, _) | (Receiver::Shared, Some(Mapping::Handle)) => Ok(()),
+            (Receiver::Exclusive, Some(Mapping::Handle)) => {
+                Err(Reason::new(Category::MutHandle, "&mut self needs the persistent runtime holder"))
             }
-            (Receiver::Value | Receiver::Other(_), Some(Mapping::Repository)) => {
-                Err(Reason::new(Category::Receiver, "takes the repository handle by value or wrapped"))
+            (Receiver::Value | Receiver::Other(_), Some(Mapping::Handle)) => {
+                Err(Reason::new(Category::Receiver, "takes the runtime handle by value or wrapped"))
             }
             _ => Err(Reason::new(Category::Receiver, format!("{} is not a handle", function.owner.as_deref().unwrap_or("Self")))),
         }
@@ -281,8 +391,8 @@ impl<'a> Classifier<'a> {
             ("core::result::Result", _) => Err(Reason::new(Category::Unsupported, "Result in a parameter")),
             ("alloc::borrow::Cow", [inner]) => self.borrowed(inner, function),
             _ => match self.types.get(&canonical) {
-                Some(Mapping::Repository) if position == Position::Input => {
-                    Err(Reason::new(Category::Receiver, format!("takes the repository handle `{canonical}` by value")))
+                Some(Mapping::Handle) if position == Position::Input => {
+                    Err(Reason::new(Category::Receiver, format!("takes the runtime handle `{canonical}` by value")))
                 }
                 Some(_) => Ok(()),
                 None => Err(self.unmapped(&canonical, &self.renderer.ty(&Type::ResolvedPath(path.clone())))),
@@ -290,11 +400,11 @@ impl<'a> Classifier<'a> {
         }
     }
 
-    /// A shared borrow is fine when the target is copied across or is the runtime repository.
+    /// A shared borrow is fine when the target is copied across or is the runtime handle.
     fn borrowed(&self, inner: &Type, function: &Function) -> Result<(), Reason> {
         match inner {
             Type::Primitive(name) if name == "str" || PRIMITIVES.contains(&name.as_str()) => Ok(()),
-            Type::Slice(element) if matches!(element.as_ref(), Type::Primitive(byte) if byte == "u8") => Ok(()),
+            Type::Slice(element) if is_byte(element) => Ok(()),
             Type::ResolvedPath(path) if self.types.contains_key(&self.renderer.path(path)) => Ok(()),
             Type::Generic(name) if name == "Self" => self.owner_value(function),
             _ => Err(self.blocked(inner, Category::Borrowed)),
@@ -314,7 +424,9 @@ impl<'a> Classifier<'a> {
         }
         for bound in bounds {
             let GenericBound::TraitBound { trait_, .. } = bound else { continue };
-            if last_segment(&self.renderer.path(trait_)) == "IntoIterator" && iterator_item(trait_).is_some_and(|item| self.input(item, function).is_ok()) {
+            if self.renderer.path(trait_) == "core::iter::traits::collect::IntoIterator"
+                && iterator_item(trait_).is_some_and(|item| self.input(item, function).is_ok())
+            {
                 return Ok(());
             }
         }
@@ -349,12 +461,11 @@ impl<'a> Classifier<'a> {
         Reason::new(category, rendered)
     }
 
-    #[allow(clippy::unused_self, reason = "kept with the other categorizing helpers")]
+    /// An unmapped type, categorized by what it implements rather than by its name.
     fn unmapped(&self, canonical: &str, rendered: &str) -> Reason {
-        let name = last_segment(canonical);
         let category = if canonical == "core::sync::atomic::AtomicBool" {
             Category::Cancellation
-        } else if name.contains("Iter") || name == "Platform" || canonical.contains("::iter::") {
+        } else if self.implementations.implements(canonical, ITERATOR) {
             Category::Iterator
         } else {
             Category::Unmapped
@@ -363,13 +474,14 @@ impl<'a> Classifier<'a> {
     }
 }
 
-/// The specific category of a trait, if it has one.
+/// The specific category of a std trait, if it has one.
 fn trait_category(canonical: &str) -> Option<Category> {
-    match last_segment(canonical) {
-        "Fn" | "FnMut" | "FnOnce" => Some(Category::Callback),
-        "Read" | "Write" | "BufRead" => Some(Category::Io),
-        "Progress" | "DynNestedProgress" | "NestedProgress" | "Count" | "RawProgress" => Some(Category::Progress),
-        "Iterator" | "DoubleEndedIterator" | "ExactSizeIterator" => Some(Category::Iterator),
+    match canonical {
+        "core::ops::function::Fn" | "core::ops::function::FnMut" | "core::ops::function::FnOnce" => Some(Category::Callback),
+        "std::io::Read" | "std::io::Write" | "std::io::BufRead" => Some(Category::Io),
+        ITERATOR | "core::iter::traits::double_ended::DoubleEndedIterator" | "core::iter::traits::exact_size::ExactSizeIterator" => {
+            Some(Category::Iterator)
+        }
         _ => None,
     }
 }
@@ -381,6 +493,10 @@ fn iterator_item(trait_: &Path) -> Option<&Type> {
         AssocItemConstraintKind::Equality(Term::Type(item)) if constraint.name == "Item" => Some(item),
         _ => None,
     })
+}
+
+fn is_byte(ty: &Type) -> bool {
+    matches!(ty, Type::Primitive(name) if name == "u8")
 }
 
 /// Whether `path` is `prefix` or lies below it.
@@ -409,6 +525,8 @@ mod tests {
             (9, "core::ops::function::FnMut"),
             (10, "core::iter::traits::collect::IntoIterator"),
             (11, "core::sync::atomic::AtomicBool"),
+            (12, "demo::AsBytes"),
+            (13, "demo::Platform"),
         ])
     }
 
@@ -428,11 +546,16 @@ mod tests {
         }
     }
 
+    fn implementations() -> Implementations {
+        Implementations::from_pairs([(ITERATOR, "demo::Iter"), ("demo::AsBytes", "[u8]")])
+    }
+
     fn classify(function: &Function) -> Verdict {
         let renderer = renderer();
-        let overrides = BTreeMap::from([("demo::Repo".to_owned(), Mapping::Repository)]);
+        let overrides = BTreeMap::from([("demo::Repo".to_owned(), Mapping::Handle), ("bstr::bstr::BStr".to_owned(), Mapping::Bytes)]);
         let excluded = vec!["demo::schema".to_owned()];
-        Classifier::new(&renderer, &overrides, &excluded).classify(function)
+        let implementations = implementations();
+        Classifier::new(&renderer, &overrides, &excluded, &implementations).classify(function)
     }
 
     fn category(function: &Function) -> Option<Category> {
@@ -444,15 +567,15 @@ mod tests {
     }
 
     #[test]
-    fn mapped_methods_on_the_runtime_repository_are_automatic() {
+    fn mapped_methods_on_the_runtime_handle_are_automatic() {
         let result = resolved(5, vec![GenericArg::Type(resolved(6, vec![GenericArg::Type(shared(resolved(2, Vec::new())))])), GenericArg::Type(resolved(7, Vec::new()))]);
         let function = method(Receiver::Shared, vec![("path", as_ref(resolved(4, Vec::new())))], Some(result));
         assert_eq!(classify(&function), Verdict { class: Class::Automatic, reason: None });
     }
 
     #[test]
-    fn receivers_need_the_runtime_repository_without_mut() {
-        assert_eq!(category(&method(Receiver::Exclusive, Vec::new(), None)), Some(Category::MutRepository));
+    fn receivers_need_the_runtime_handle_without_mut() {
+        assert_eq!(category(&method(Receiver::Exclusive, Vec::new(), None)), Some(Category::MutHandle));
         let mut other_owner = method(Receiver::Shared, Vec::new(), None);
         other_owner.owner = Some("demo::Commit".to_owned());
         other_owner.owner_public = None;
@@ -485,8 +608,24 @@ mod tests {
     }
 
     #[test]
-    fn results_are_categorized() {
+    fn bounds_follow_the_type_map_and_trait_implementations() {
+        let text = as_ref(Type::Primitive("str".to_owned()));
+        assert_eq!(category(&method(Receiver::None, vec![("name", text)], None)), None);
+        let unmapped = as_ref(resolved(7, Vec::new()));
+        assert_eq!(category(&method(Receiver::None, vec![("error", unmapped)], None)), Some(Category::Generic));
+        let bytes_like = vec![bound(12, Vec::new())];
+        let function = method(Receiver::None, vec![("data", Type::ImplTrait(bytes_like.clone()))], None);
+        assert_eq!(category(&function), None, "a trait implemented for [u8] is satisfied by bytes");
+        let renderer = renderer();
+        let implementations = implementations();
+        let classifier = Classifier::new(&renderer, &BTreeMap::new(), &[], &implementations);
+        assert_eq!(classifier.conversion(&bytes_like), Some(Conversion { mapping: Mapping::Bytes, borrowed: true }));
+    }
+
+    #[test]
+    fn results_are_categorized_by_their_traits_not_their_names() {
         assert_eq!(category(&method(Receiver::None, Vec::new(), Some(resolved(8, Vec::new())))), Some(Category::Iterator));
+        assert_eq!(category(&method(Receiver::None, Vec::new(), Some(resolved(13, Vec::new())))), Some(Category::Unmapped));
         assert_eq!(category(&method(Receiver::None, Vec::new(), Some(resolved(7, Vec::new())))), Some(Category::Unmapped));
         assert_eq!(category(&method(Receiver::None, Vec::new(), Some(resolved(1, Vec::new())))), None);
     }
@@ -501,5 +640,14 @@ mod tests {
         assert_eq!(category(&schema), Some(Category::ExcludedPath));
         schema.path = "demo::schemas::name".to_owned();
         assert_ne!(category(&schema), Some(Category::ExcludedPath), "prefixes match whole path segments");
+    }
+
+    #[test]
+    fn custom_mappings_read_from_the_manifest() {
+        let json = r#"{"demo::Oid": {"custom": {"ffi": "string", "into_rust": "object_id", "into_ffi": "object_id_out"}}, "demo::Repo": "handle"}"#;
+        let map: BTreeMap<String, Mapping> = serde_json::from_str(json).expect("the mappings parse");
+        let custom = Custom { ffi: Carrier::String, into_rust: "object_id".to_owned(), into_ffi: "object_id_out".to_owned() };
+        assert_eq!(map["demo::Oid"], Mapping::Custom(custom));
+        assert_eq!(map["demo::Repo"], Mapping::Handle);
     }
 }

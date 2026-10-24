@@ -161,15 +161,18 @@ pub struct Provenance {
 }
 
 impl Provenance {
-    /// The provenance of analyzing `json` under `configuration`.
+    /// The provenance of analyzing the rustdoc JSON texts `sources` (the root crate's first)
+    /// under `configuration`.
     ///
     /// # Errors
     ///
     /// Fails only if the configuration cannot be serialized.
-    pub fn of(json: &str, configuration: &Configuration) -> Result<Self, EngineError> {
+    pub fn of(sources: &[&str], configuration: &Configuration) -> Result<Self, EngineError> {
         let settings = serde_json::to_string(configuration).map_err(|error| EngineError::new(ErrorCode::Internal, error.to_string()))?;
         let mut source = Fnv::new();
-        source.field(json.as_bytes());
+        for json in sources {
+            source.field(json.as_bytes());
+        }
         let mut options = Fnv::new();
         options.field(settings.as_bytes());
         Ok(Self { rustdoc_json: source.hex(), configuration: options.hex() })
@@ -313,8 +316,9 @@ mod tests {
     #[test]
     fn decisions_resolve_by_signature_and_go_stale_when_it_changes() {
         let renderer = Renderer::from_paths([]);
-        let types = BTreeMap::from([("demo::Repo".to_owned(), Mapping::Repository)]);
-        let classifier = Classifier::new(&renderer, &types, &[]);
+        let types = BTreeMap::from([("demo::Repo".to_owned(), Mapping::Handle)]);
+        let implementations = crate::classify::Implementations::default();
+        let classifier = Classifier::new(&renderer, &types, &[], &implementations);
         let functions = vec![
             function("demo::Repo::automatic", Receiver::Shared),
             function("demo::Repo::decided", Receiver::Exclusive),
@@ -334,7 +338,7 @@ mod tests {
         assert_eq!((summary.total, summary.automatic, summary.resolved, summary.stale, summary.unresolved), (4, 1, 1, 1, 1));
         assert_eq!(summary.orphaned_decisions, 1);
         assert!(!summary.ready);
-        assert_eq!(summary.reasons.get("mut_repository"), Some(&2));
+        assert_eq!(summary.reasons.get("mut_handle"), Some(&2));
     }
 
     #[test]
