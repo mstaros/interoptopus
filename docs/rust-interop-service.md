@@ -40,8 +40,9 @@ response; failures exit non-zero with a structured error.
      crate list.
 2. **analyze** loads the JSON with `rustdoc-types` (format 60), classifies every public
    function, hashes each signature, and rewrites the manifest items and counts. It records
-   the provenance it analyzed: the extract cache key (toolchain, features, `Cargo.lock` and
-   crate sources) and a hash of the configuration.
+   the provenance it analyzed: hashes of the rustdoc JSON and of the configuration. The
+   service extracts again before generating, so a changed checkout yields different JSON and
+   a stale manifest.
 3. **generate** emits the Rust facade, builds it and runs interoptopus (producing
    `Interop.cs` and the names sidecar), then emits the public C# layer and smoke tests as a
    deterministic set of files. It refuses a stale manifest, one whose provenance or items
@@ -244,7 +245,7 @@ together.
 - [x] E2 `extract`: crate list, plus caching. Integrated at `744975c5`: the crate list comes from `cargo metadata --locked` (normal dependencies sharing the root's prefix), rustdoc runs in a target directory owned by the checkout, and results are cached under a content hash of toolchain, features, `Cargo.lock` and crate sources.
 - [x] E3 Model, classifier and signature hashes; `analyze` writes the manifest. Check the result against the 704-function reference count. Done: the non-deprecated gix surface is 704 functions; items carry a canonical signature, its hash, a class and a status (ready, unresolved, resolved, stale, excluded), and `analyze` rewrites the manifest only when it changes.
 - [ ] E4 Decision validation: structured payloads, per-type handle answers covering `&self` methods only, and the check that builds the generated facade with the target's features. Needs a buildable runtime first: G2's minimal runtime or a stub of the runtime contract.
-- [ ] E5 Rust facade emitter (automatic, handle, convert and record kinds) plus inventory registration. Facade types get unique module-qualified names (see Naming and namespaces). First increment, the automatic kind: `generate` emits one service for all types mapped to the runtime handle (functions returning the handle become constructors, including `&self` methods as constructors taking `&Self`; free functions and the handle's own type win name clashes; conversions between handle types are dropped), its `&self` methods, and free functions named after their module path. Every member returns `ffi::Result`. It refuses a stale manifest and writes `mod.rs` into `rust_output` only when it changes. An end-to-end test builds the generated facade for a demo crate and validates its inventory.
+- [ ] E5 Rust facade emitter (automatic, handle, convert and record kinds) plus inventory registration. Facade types get unique module-qualified names (see Naming and namespaces). First increment, the automatic kind: `generate` emits one service for all types mapped to the runtime handle (functions returning the handle become constructors, including `&self` methods as constructors taking `&Self`; free functions and the handle's own type win name clashes; conversions between handle types are dropped), its `&self` methods, and free functions named after their module path. Every member returns `ffi::Result`. It refuses a stale manifest (provenance or items differ from a fresh analysis) and, unless the request sets `partial`, one that is not ready; it rejects output folders outside the worktree and writes `mod.rs` into `rust_output` only when it changes. An end-to-end test builds the generated facade for a demo crate and validates its inventory.
 - [ ] E6 Names sidecar in the C# backend.
 - [ ] E7 Emitter for the public C# layer and smoke tests. Namespaces follow rustdoc module paths (see Naming and namespaces).
 - [ ] E8 Release with `publish_localcargo`; package the binary with `package_rust_binary`.

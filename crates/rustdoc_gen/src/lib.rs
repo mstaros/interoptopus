@@ -18,7 +18,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::str::FromStr;
 
 use rustdoc_types::{Crate, FORMAT_VERSION};
@@ -35,7 +35,7 @@ mod surface;
 
 pub use cargo_doc::{CrateJson, ExtractRequest, ExtractResult, extract};
 pub use classify::{Category, Class, Mapping};
-pub use manifest::{Configuration, Decision, DecisionKind, Item, Manifest, Status, Summary};
+pub use manifest::{Configuration, Decision, DecisionKind, Item, Manifest, Provenance, Status, Summary};
 
 /// An engine subcommand.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -90,6 +90,8 @@ pub enum ErrorCode {
     UnsupportedFormat,
     /// The manifest does not match the current surface; run `analyze` first.
     StaleManifest,
+    /// Items still need decisions and the request did not ask for partial generation.
+    NotReady,
     /// The subcommand is not implemented yet.
     NotImplemented,
     /// An external tool such as cargo or rustdoc failed.
@@ -176,7 +178,7 @@ pub struct AnalyzeResult {
 }
 
 /// Request for `generate`.
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct GenerateRequest {
     /// The root crate's rustdoc JSON file.
@@ -186,6 +188,9 @@ pub struct GenerateRequest {
     /// The transaction worktree that receives the generated files; the manifest's output
     /// folders are relative to it.
     pub worktree: PathBuf,
+    /// Emit the ready items only and report the rest as pending, instead of refusing.
+    #[serde(default)]
+    pub partial: bool,
 }
 
 /// An item left out of the facade.
@@ -260,6 +265,7 @@ pub fn analyze(request: &AnalyzeRequest) -> Result<AnalyzeResult, EngineError> {
         (Some(manifest), Some(path)) => {
             manifest.items = items;
             manifest.summary = summary.clone();
+            manifest.provenance = Some(Provenance::of(&json, &configuration)?);
             manifest.write(path)?
         }
         _ => false,
@@ -280,8 +286,10 @@ pub fn analyze(request: &AnalyzeRequest) -> Result<AnalyzeResult, EngineError> {
 ///
 /// # Errors
 ///
-/// Fails when the manifest does not match the current surface (`stale_manifest`), names no Rust
-/// output folder, or holds a ready item the emitter cannot lower.
+/// Fails when the manifest was analyzed from other input or its items differ from a fresh
+/// analysis (`stale_manifest`), when items are not ready and the request does not ask for
+/// partial generation (`not_ready`), when the Rust output folder is missing or leaves the
+/// worktree, or when a ready item cannot be lowered.
 pub fn generate(request: &GenerateRequest) -> Result<GenerateResult, EngineError> {
     let json = fs::read_to_string(&request.rustdoc_json)
         .map_err(|e| EngineError::new(ErrorCode::Io, format!("cannot read {}: {e}", request.rustdoc_json.display())))?;
@@ -292,32 +300,40 @@ pub fn generate(request: &GenerateRequest) -> Result<GenerateResult, EngineError
         .rust_output
         .as_ref()
         .ok_or_else(|| EngineError::new(ErrorCode::InvalidRequest, "the manifest configuration names no `rust_output` folder"))?;
+    let rust_module = contained(&request.worktree, rust_output)?.join("mod.rs");
+    if manifest.provenance.as_ref() != Some(&Provenance::of(&json, configuration)?) {
+        return Err(EngineError::new(
+            ErrorCode::StaleManifest,
+            "the manifest was analyzed from other rustdoc JSON or another configuration; run analyze first",
+        ));
+    }
     let renderer = render::Renderer::new(&krate);
     let functions = surface::collect(&krate, &renderer);
     let type_map = type_map(&krate, configuration);
     let classifier = classify::Classifier::new(&renderer, &type_map, &configuration.exclude_paths);
     let (items, _) = manifest::items(&functions, &renderer, &classifier, &manifest.decisions);
-    let fingerprint = |items: &[Item]| items.iter().map(|item| (item.path.clone(), item.signature_hash.clone())).collect::<BTreeSet<_>>();
-    if fingerprint(&items) != fingerprint(&manifest.items) {
-        return Err(EngineError::new(ErrorCode::StaleManifest, "the manifest does not match the current surface; run analyze first"));
+    if items != manifest.items {
+        return Err(EngineError::new(ErrorCode::StaleManifest, "the manifest items differ from a fresh analysis; run analyze first"));
     }
     let ready: BTreeSet<&str> =
         items.iter().filter(|item| item.class == Class::Automatic && item.status == Status::Ready).map(|item| item.path.as_str()).collect();
+    let pending = items.iter().filter(|item| item.status != Status::Excluded && !ready.contains(item.path.as_str())).count();
+    if pending > 0 && !request.partial {
+        return Err(EngineError::new(ErrorCode::NotReady, format!("{pending} items are not ready; resolve them or request partial generation")));
+    }
     let selected: Vec<&surface::Function> = functions.iter().filter(|function| ready.contains(function.path.as_str())).collect();
     let crate_name = krate.index.get(&krate.root).and_then(|root| root.name.clone()).unwrap_or_default();
-    let provenance = format!(
+    let header = format!(
         "Generated by interoptopus-rustdoc-gen {} from `{crate_name}` {} (rustdoc format {}). Do not edit.",
         env!("CARGO_PKG_VERSION"),
         krate.crate_version.as_deref().unwrap_or("(unversioned)"),
         krate.format_version
     );
     let runtime = configuration.runtime_module.as_deref().unwrap_or("crate::runtime");
-    let context = facade::Context { renderer: &renderer, classifier: &classifier, runtime, provenance: &provenance };
+    let context = facade::Context { renderer: &renderer, classifier: &classifier, runtime, provenance: &header };
     let facade = facade::emit(&selected, &context)
         .map_err(|(path, why)| EngineError::new(ErrorCode::Internal, format!("cannot emit `{path}`: {why}")))?;
-    let rust_module = request.worktree.join(rust_output).join("mod.rs");
     let written = write_if_changed(&rust_module, &facade.source)?;
-    let pending = items.iter().filter(|item| item.status != Status::Excluded && !ready.contains(item.path.as_str())).count();
     Ok(GenerateResult {
         rust_module,
         written,
@@ -325,6 +341,19 @@ pub fn generate(request: &GenerateRequest) -> Result<GenerateResult, EngineError
         dropped: facade.dropped.into_iter().map(|(path, reason)| Dropped { path, reason }).collect(),
         pending,
     })
+}
+
+/// `worktree` joined with `folder`, which must be relative and stay inside it.
+fn contained(worktree: &Path, folder: &Path) -> Result<PathBuf, EngineError> {
+    let inside = folder.components().all(|component| matches!(component, Component::Normal(_) | Component::CurDir))
+        && folder.components().any(|component| matches!(component, Component::Normal(_)));
+    if !inside {
+        return Err(EngineError::new(
+            ErrorCode::InvalidRequest,
+            format!("the output folder `{}` must be relative and stay inside the worktree", folder.display()),
+        ));
+    }
+    Ok(worktree.join(folder))
 }
 
 /// The manifest's type map keyed by canonical paths.
@@ -398,6 +427,25 @@ mod tests {
         let response = run(Command::Generate, "{}");
         assert!(!response.is_success());
         assert_eq!(response.error.map(|error| error.code), Some(ErrorCode::InvalidRequest));
+    }
+
+    #[test]
+    fn output_folders_must_stay_inside_the_worktree() {
+        let worktree = Path::new("worktree");
+        assert_eq!(contained(worktree, Path::new("facade/src/generated")).unwrap(), worktree.join("facade/src/generated"));
+        for escaping in ["../outside", "facade/../../outside", "", ".", "/absolute"] {
+            assert_eq!(contained(worktree, Path::new(escaping)).unwrap_err().code, ErrorCode::InvalidRequest, "{escaping}");
+        }
+    }
+
+    #[test]
+    fn provenance_follows_the_rustdoc_json_and_the_configuration() {
+        let configuration = Configuration::default();
+        let first = Provenance::of("{}", &configuration).unwrap();
+        assert_eq!(first, Provenance::of("{}", &configuration).unwrap());
+        assert_ne!(first.rustdoc_json, Provenance::of("{ }", &configuration).unwrap().rustdoc_json);
+        let moved = Configuration { runtime_module: Some("crate::other".to_owned()), ..Configuration::default() };
+        assert_ne!(first.configuration, Provenance::of("{}", &moved).unwrap().configuration);
     }
 
     #[test]
@@ -568,7 +616,9 @@ pub fn open(path: impl AsRef<std::path::Path>) -> Result<Repo, std::io::Error> {
         fs::write(&manifest_path, configuration).expect("the manifest can be written");
         let rustdoc_json = extracted.crates[0].json.clone();
         analyze(&AnalyzeRequest { rustdoc_json: rustdoc_json.clone(), manifest: Some(manifest_path.clone()) }).expect("the surface is analyzed");
-        let request = GenerateRequest { rustdoc_json, manifest: manifest_path.clone(), worktree: root.to_path_buf() };
+        let request = GenerateRequest { rustdoc_json: rustdoc_json.clone(), manifest: manifest_path.clone(), worktree: root.to_path_buf(), partial: true };
+        let complete = GenerateRequest { partial: false, ..request.clone() };
+        assert_eq!(generate(&complete).unwrap_err().code, ErrorCode::NotReady, "three items await decisions");
 
         let generated = generate(&request).expect("the facade is generated");
         assert!(generated.written);
@@ -577,9 +627,15 @@ pub fn open(path: impl AsRef<std::path::Path>) -> Result<Repo, std::io::Error> {
         assert!(cargo(&["test", "--offline", "-p", "facade"]), "the generated facade builds and registers with an inventory");
 
         let mut manifest = Manifest::read(&manifest_path).expect("the manifest reads back");
-        manifest.items[0].signature_hash = "0".repeat(16);
+        manifest.items[0].status = Status::Excluded;
         manifest.write(&manifest_path).expect("the manifest can be written");
-        assert_eq!(generate(&request).unwrap_err().code, ErrorCode::StaleManifest);
+        assert_eq!(generate(&request).unwrap_err().code, ErrorCode::StaleManifest, "items must match a fresh analysis");
+
+        analyze(&AnalyzeRequest { rustdoc_json, manifest: Some(manifest_path.clone()) }).expect("the surface is analyzed again");
+        let mut manifest = Manifest::read(&manifest_path).expect("the manifest reads back");
+        manifest.configuration.runtime_module = Some("crate::elsewhere".to_owned());
+        manifest.write(&manifest_path).expect("the manifest can be written");
+        assert_eq!(generate(&request).unwrap_err().code, ErrorCode::StaleManifest, "a changed configuration needs a new analysis");
     }
 
     const FACADE_LIB: &str = r#"

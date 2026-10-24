@@ -25,6 +25,10 @@ pub struct Manifest {
     /// Counts from the last `analyze`.
     #[serde(default)]
     pub summary: Summary,
+    /// What the last `analyze` read, so `generate` can refuse a manifest analyzed from other
+    /// input.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<Provenance>,
     /// Every surface function from the last `analyze`, sorted by path.
     #[serde(default)]
     pub items: Vec<Item>,
@@ -144,6 +148,32 @@ pub struct Item {
     /// Why the item is not automatic.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+}
+
+/// Hashes of the input an `analyze` read.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Provenance {
+    /// Hash of the rustdoc JSON text.
+    pub rustdoc_json: String,
+    /// Hash of the configuration.
+    pub configuration: String,
+}
+
+impl Provenance {
+    /// The provenance of analyzing `json` under `configuration`.
+    ///
+    /// # Errors
+    ///
+    /// Fails only if the configuration cannot be serialized.
+    pub fn of(json: &str, configuration: &Configuration) -> Result<Self, EngineError> {
+        let settings = serde_json::to_string(configuration).map_err(|error| EngineError::new(ErrorCode::Internal, error.to_string()))?;
+        let mut source = Fnv::new();
+        source.field(json.as_bytes());
+        let mut options = Fnv::new();
+        options.field(settings.as_bytes());
+        Ok(Self { rustdoc_json: source.hex(), configuration: options.hex() })
+    }
 }
 
 /// Counts over the items.
