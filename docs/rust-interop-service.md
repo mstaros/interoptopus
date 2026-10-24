@@ -1,7 +1,8 @@
 # Rust interop service
 
-Status: **approved design**, 2026-10-17. R1 to R3 and E1 to E3 are done; progress is tracked
-in the Todo section below.
+Status: **approved design**, 2026-10-17. R1 to R3 and E1 to E3 are done and E5 has its first
+increment; progress is tracked in the Todo section below. Open decisions marked "Proposed
+(2026-10-24)" await confirmation.
 
 ## Goal
 
@@ -128,6 +129,29 @@ The generated facade calls a runtime module (configuration `runtime_module`, def
 
 Text and bytes convert inline through interoptopus' own types.
 
+## Handles
+
+A handle stands for a Rust object that borrows the repository, such as `Commit<'repo>`. It
+cannot cross the boundary itself, so it crosses as a key and the facade rebuilds it from the
+key on each call. One answer per handle type is sound only when:
+
+- The key travels with its repository. A handle is the pair (repository, key), and a result
+  belongs to its receiver's repository; submodules and worktrees open their own repository
+  first, so this composes.
+- The object can be found again. Objects written to an in-memory overlay
+  (`with_object_memory`) live in one `Repository` instance and are lost when the facade
+  rebuilds through a fresh thread-local one; such APIs need the persistent repository holder
+  or stay manual.
+- The key means what callers expect. For content-addressed types (`Commit`, `Tree`, `Blob`,
+  `Tag`, `Object`) an id is a complete, immutable identity. For mutable or derived types the key
+  chooses the semantics: a `Reference` keyed by name follows it, keyed by its target id it is a
+  snapshot; `Head` is always live; an anonymous `Remote` from `remote_at(url)` has no name to
+  key by. These types need a per-type default with per-item overrides.
+
+Every call rebuilds the object, so bulk reads, such as a 10,000-commit log reading five fields
+each (50,000 lookups), should use a per-item `record` override that returns the fields
+together.
+
 ## Determinism and safety
 
 - Stable ordering; generated file headers record the engine version, rustdoc format version
@@ -157,7 +181,36 @@ Text and bytes convert inline through interoptopus' own types.
 - Whether `gix-ffi` moves into GixSharp with its git history.
 - Handle decisions per type instead of per item: 405 of the 598 open items wait only on
   their receiver (`Reference`, `Object`, `Commit`, `Tree` and about 20 other types) being a
-  handle.
+  handle. Proposed (2026-10-24): one answer per type, with per-item overrides (see Handles).
+- Proposed (2026-10-24): handles cross the boundary as keys. Every API returning a handle
+  type, including inside `Option` and `Vec`, returns its key; every method of a handle type
+  becomes a facade function taking the repository and the key; the public C# layer builds the
+  handle object (`Gix.Commit` holds its `Repository` and id). interoptopus returns services only
+  from constructors and never inside `Option` or `Vec`, so per-type Rust services cannot
+  express these results. The repository stays a service because it holds state.
+- Proposed (2026-10-24): decision payloads are structured. A `handle` names its type, its key
+  mapping and two Rust fragments, `to_key` (such as `{value}.id`) and `from_key` (such as
+  `{repo}.find_commit({key})`); a `record` lists field paths, checked against rustdoc; a
+  `convert` names a source mapping and one fragment (such as
+  `gix::refs::FullName::try_from({value})`); a `manual` names a module; an `exclude` gives a
+  reason, the only free text, which generation ignores. Only `{value}`, `{repo}` and `{key}` are
+  substituted. E4 compiles each fragment in a scratch crate, inside a function whose parameter
+  and result types come from the decision, and rejects the answer with the compiler's message.
+- Proposed (2026-10-24): no gix knowledge in the engine, done before E4. Built-in mappings
+  cover only std (primitives, `String`/`str`, `Path`/`PathBuf`, `Vec<u8>`, `Option`, `Result`).
+  `Mapping` becomes `string`, `bytes`, `path`, `handle` and `custom`; a custom mapping names its
+  FFI type and two runtime conversion functions, so gix's `ObjectId` becomes a custom entry in
+  its manifest. A bound `AsRef<T>`, `Into<T>`, `Borrow<T>` or `TryInto<T>` is satisfied when `T`
+  is mapped, and a custom trait bound (gix's `AsBStr`) when rustdoc shows a mapped type
+  implementing it, replacing the hand-written conversion table. Categories come from trait
+  implementations (`Iterator`, `Fn*`, `Read`/`Write`) instead of type names such as `Platform`.
+- Proposed (2026-10-24): `analyze` proposes type-map entries by scanning types, with G3:
+  handle candidates (returned by free constructors, many `&self` methods, no lifetime
+  parameter, `Send + Sync`), string-like types (`Display` plus `FromStr` or `TryFrom<&str>`) and
+  byte-like types (`AsRef<[u8]>` or `Deref` to bytes), ranked by how many blocked items each
+  unblocks; a person accepts them into the manifest. Representation and meaning (hex or
+  binary ids, paths as bytes or text, live or snapshot keys) stay human decisions. `analyze`
+  must then read the dependency crates' rustdoc JSON, which `extract` already produces.
 
 ## Todo
 
