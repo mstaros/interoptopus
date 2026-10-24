@@ -39,11 +39,16 @@ response; failures exit non-zero with a structured error.
    - the output cache lives outside the repository, keyed by commit, features, toolchain and
      crate list.
 2. **analyze** loads the JSON with `rustdoc-types` (format 60), classifies every public
-   function, hashes each signature, and writes the manifest items and counts. Decision
-   snippets are compile-checked in a scratch build.
+   function, hashes each signature, and rewrites the manifest items and counts. It records
+   the provenance it analyzed: the extract cache key (toolchain, features, `Cargo.lock` and
+   crate sources) and a hash of the configuration.
 3. **generate** emits the Rust facade, builds it and runs interoptopus (producing
    `Interop.cs` and the names sidecar), then emits the public C# layer and smoke tests as a
-   deterministic set of files.
+   deterministic set of files. It refuses a stale manifest, one whose provenance or items
+   differ from a fresh analysis of the given JSON and configuration. By default it also
+   refuses a manifest that is not ready; a request may ask for partial generation, which
+   emits the ready items only and reports the rest as pending. Decisions are checked by
+   building the generated facade (see E4).
 
 ## Service contract
 
@@ -51,13 +56,15 @@ The lifecycle mirrors CppMcp's interop tools (`configure_interop`, `analyze_inte
 `get_unresolved_interop_methods`, `resolve_interop_methods`, `generate_interop`).
 
 - `ConfigureAsync(manifestPath, configuration)`: any change invalidates readiness.
-- `AnalyzeAsync(manifestPath)`: writes no outputs; returns total, automatic, unresolved and
-  excluded counts and whether generation is ready.
+- `AnalyzeAsync(manifestPath)`: rewrites only the manifest (items, counts and provenance);
+  returns total, automatic, unresolved and excluded counts and whether generation is ready.
 - `GetUnresolvedAsync(manifestPath)`: returns the same next batch until the manifest changes.
 - `ResolveAsync(manifestPath, decisions)`: each decision is checked against the item's
   signature hash.
-- `GenerateAsync(manifestPath, worktreePath)`: refuses a manifest that is not ready or is
-  stale; writes atomically, and only into the given transaction worktree.
+- `GenerateAsync(manifestPath, worktreePath)`: refuses a stale manifest and, unless partial
+  generation is requested, one that is not ready; writes atomically. The service checks that
+  `worktreePath` is a transaction worktree it owns; the engine rejects output folders that are
+  absolute or lead outside the worktree.
 
 Options: `EnginePath` (override) and `CacheDirectory`. The calls are long-running, so
 scripts should run them asynchronously.
@@ -87,6 +94,9 @@ One JSON file per target repository.
   the persistent repository runtime.
 - **Excluded**: deprecated items, `doc(hidden)` items, trait-impl methods, and config schema
   keys (by rule).
+- An item can have several blockers. Reasons record the first one found (receiver, then
+  parameters, then the result), so counts by reason are counts of first blockers; how many
+  items an answer unblocks is measured by re-classifying with it applied.
 
 ## Default type map
 
@@ -131,22 +141,25 @@ Text and bytes convert inline through interoptopus' own types.
 
 ## Handles
 
-A handle stands for a Rust object that borrows the repository, such as `Commit<'repo>`. It
-cannot cross the boundary itself, so it crosses as a key and the facade rebuilds it from the
-key on each call. One answer per handle type is sound only when:
+A handle stands for a Rust object that borrows a runtime handle, such as gix's
+`Commit<'repo>`. It cannot cross the boundary itself, so it crosses as a key, and the facade
+rebuilds it from the key on each call. Accepting a handle decision is the target author's
+promise that rebuilding from the key keeps the behavior callers expect; the engine checks that
+the reconstruction and every wrapped call compile, never that they mean the same.
 
-- The key travels with its repository. A handle is the pair (repository, key), and a result
-  belongs to its receiver's repository; submodules and worktrees open their own repository
-  first, so this composes.
-- The object can be found again. Objects written to an in-memory overlay
-  (`with_object_memory`) live in one `Repository` instance and are lost when the facade
-  rebuilds through a fresh thread-local one; such APIs need the persistent repository holder
-  or stay manual.
-- The key means what callers expect. For content-addressed types (`Commit`, `Tree`, `Blob`,
-  `Tag`, `Object`) an id is a complete, immutable identity. For mutable or derived types the key
-  chooses the semantics: a `Reference` keyed by name follows it, keyed by its target id it is a
-  snapshot; `Head` is always live; an anonymous `Remote` from `remote_at(url)` has no name to
-  key by. These types need a per-type default with per-item overrides.
+- A per-type answer covers methods taking `&self` only. Methods taking `self` by value or
+  `&mut self`, such as builders (gix's `Remote::with_url`) and in-place mutators
+  (`Reference::peel_to_id`), produce state the key does not hold, so each needs its own
+  decision.
+- The key travels with its runtime handle: a handle is the pair (runtime handle, key), and a
+  result belongs to its receiver's runtime handle.
+- Rebuilding refreshes state. A type the library documents as a snapshot loses that behavior:
+  gix's `Reference::delete` fails if the reference changed since it was observed, and
+  rebuilding by name replaces the observed target. Where the public API cannot rebuild the
+  observed state, such methods stay manual or return a `record`.
+- State held only in memory, such as gix's in-memory object overlay (`with_object_memory`),
+  lives in one instance and is lost when the facade rebuilds through another; such APIs need
+  the persistent runtime holder or stay manual.
 
 Every call rebuilds the object, so bulk reads, such as a 10,000-commit log reading five fields
 each (50,000 lookups), should use a per-item `record` override that returns the fields
@@ -170,7 +183,7 @@ together.
   excluding 202 re-exports of the plumbing crates.
 - First classification (E3, 2026-10-23), with `Repository` and `ThreadSafeRepository` as
   runtime handles and `gix::config::tree` excluded: 712 items (the 704 plus 8 deprecated):
-  39 automatic, 75 excluded, 598 needing a decision. Reasons: receiver not a handle 405,
+  39 automatic, 75 excluded, 598 needing a decision. First blockers: receiver not a handle 405,
   unmapped type 113, borrowed 28, generic 26, `&mut self` on the repository 13,
   iterator or platform 7, other 6.
 
@@ -179,9 +192,11 @@ together.
 - Object ID representation (hex or binary).
 - Filesystem path representation.
 - Whether `gix-ffi` moves into GixSharp with its git history.
-- Handle decisions per type instead of per item: 405 of the 598 open items wait only on
-  their receiver (`Reference`, `Object`, `Commit`, `Tree` and about 20 other types) being a
-  handle. Proposed (2026-10-24): one answer per type, with per-item overrides (see Handles).
+- Handle decisions per type instead of per item: 405 of the 598 open items report their
+  receiver (`Reference`, `Object`, `Commit`, `Tree` and about 20 other types) as their first
+  blocker; how many a per-type answer unblocks is measured by re-classifying. Proposed
+  (2026-10-24): one answer per type, covering `&self` methods only, with per-item overrides
+  (see Handles).
 - Proposed (2026-10-24): handles cross the boundary as keys. Every API returning a handle
   type, including inside `Option` and `Vec`, returns its key; every method of a handle type
   becomes a facade function taking the repository and the key; the public C# layer builds the
@@ -194,21 +209,24 @@ together.
   `convert` names a source mapping and one fragment (such as
   `gix::refs::FullName::try_from({value})`); a `manual` names a module; an `exclude` gives a
   reason, the only free text, which generation ignores. Only `{value}`, `{repo}` and `{key}` are
-  substituted. E4 compiles each fragment in a scratch crate, inside a function whose parameter
-  and result types come from the decision, and rejects the answer with the compiler's message.
+  substituted. E4 checks them by building the generated facade with the target's features, so
+  each fragment is compiled together with argument conversion, the wrapped call and result
+  conversion; compiler errors map back to decisions through each member's generated span.
 - Proposed (2026-10-24): no gix knowledge in the engine, done before E4. Built-in mappings
   cover only std (primitives, `String`/`str`, `Path`/`PathBuf`, `Vec<u8>`, `Option`, `Result`).
   `Mapping` becomes `string`, `bytes`, `path`, `handle` and `custom`; a custom mapping names its
   FFI type and two runtime conversion functions, so gix's `ObjectId` becomes a custom entry in
   its manifest. A bound `AsRef<T>`, `Into<T>`, `Borrow<T>` or `TryInto<T>` is satisfied when `T`
   is mapped, and a custom trait bound (gix's `AsBStr`) when rustdoc shows a mapped type
-  implementing it, replacing the hand-written conversion table. Categories come from trait
-  implementations (`Iterator`, `Fn*`, `Read`/`Write`) instead of type names such as `Platform`.
+  implementing it, replacing the hand-written conversion table. Trait implementations only
+  suggest that a bound holds; E4's build decides. Categories come from trait implementations
+  (`Iterator`, `Fn*`, `Read`/`Write`) instead of type names such as `Platform`.
 - Proposed (2026-10-24): `analyze` proposes type-map entries by scanning types, with G3:
   handle candidates (returned by free constructors, many `&self` methods, no lifetime
   parameter, `Send + Sync`), string-like types (`Display` plus `FromStr` or `TryFrom<&str>`) and
   byte-like types (`AsRef<[u8]>` or `Deref` to bytes), ranked by how many blocked items each
-  unblocks; a person accepts them into the manifest. Representation and meaning (hex or
+  unblocks when the classifier re-runs with it applied; a person accepts them into the
+  manifest. Representation and meaning (hex or
   binary ids, paths as bytes or text, live or snapshot keys) stay human decisions. `analyze`
   must then read the dependency crates' rustdoc JSON, which `extract` already produces.
 
@@ -225,8 +243,8 @@ together.
 - [x] E1 Pick the `rustdoc-types` release whose `FORMAT_VERSION` is 60; create the engine crate with `extract`, `analyze` and `generate` subcommands and JSON input/output. Integrated at `97c9ffbc`: `rustdoc-types` 0.60.0; `analyze` on `gix.json` reports 682 methods and 22 free functions (704).
 - [x] E2 `extract`: crate list, plus caching. Integrated at `744975c5`: the crate list comes from `cargo metadata --locked` (normal dependencies sharing the root's prefix), rustdoc runs in a target directory owned by the checkout, and results are cached under a content hash of toolchain, features, `Cargo.lock` and crate sources.
 - [x] E3 Model, classifier and signature hashes; `analyze` writes the manifest. Check the result against the 704-function reference count. Done: the non-deprecated gix surface is 704 functions; items carry a canonical signature, its hash, a class and a status (ready, unresolved, resolved, stale, excluded), and `analyze` rewrites the manifest only when it changes.
-- [ ] E4 Decision validation and the compile check for snippets.
-- [ ] E5 Rust facade emitter (automatic, handle, convert and record kinds) plus inventory registration. Facade types get unique module-qualified names (see Naming and namespaces). First increment, the automatic kind: `generate` emits one service per runtime handle (functions returning the handle become constructors, including `&self` methods as constructors taking `&Self`; free functions and the handle's own type win name clashes; conversions between handle types are dropped), its `&self` methods, and free functions named after their module path. Every member returns `ffi::Result`. It refuses a stale manifest and writes `mod.rs` into `rust_output` only when it changes. An end-to-end test builds the generated facade for a demo crate and validates its inventory.
+- [ ] E4 Decision validation: structured payloads, per-type handle answers covering `&self` methods only, and the check that builds the generated facade with the target's features. Needs a buildable runtime first: G2's minimal runtime or a stub of the runtime contract.
+- [ ] E5 Rust facade emitter (automatic, handle, convert and record kinds) plus inventory registration. Facade types get unique module-qualified names (see Naming and namespaces). First increment, the automatic kind: `generate` emits one service for all types mapped to the runtime handle (functions returning the handle become constructors, including `&self` methods as constructors taking `&Self`; free functions and the handle's own type win name clashes; conversions between handle types are dropped), its `&self` methods, and free functions named after their module path. Every member returns `ffi::Result`. It refuses a stale manifest and writes `mod.rs` into `rust_output` only when it changes. An end-to-end test builds the generated facade for a demo crate and validates its inventory.
 - [ ] E6 Names sidecar in the C# backend.
 - [ ] E7 Emitter for the public C# layer and smoke tests. Namespaces follow rustdoc module paths (see Naming and namespaces).
 - [ ] E8 Release with `publish_localcargo`; package the binary with `package_rust_binary`.
