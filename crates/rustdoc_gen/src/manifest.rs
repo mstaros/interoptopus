@@ -131,9 +131,9 @@ pub enum Status {
     Excluded,
 }
 
-/// One surface function in the manifest.
+/// One surface function in the manifest. Items are rewritten by `analyze`, so fields that older
+/// engine versions wrote are ignored.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Item {
     /// Public path.
     pub path: String,
@@ -145,9 +145,9 @@ pub struct Item {
     pub class: Class,
     /// Where the item stands.
     pub status: Status,
-    /// Why the item is not automatic.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub reason: Option<String>,
+    /// Why the item is not automatic: every blocker, the receiver first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reasons: Vec<String>,
 }
 
 /// Hashes of the input an `analyze` read.
@@ -199,9 +199,13 @@ pub struct Summary {
     pub orphaned_decisions: usize,
     /// Whether generation may run: nothing unresolved, stale or orphaned.
     pub ready: bool,
-    /// Unresolved, stale and excluded items per reason category.
+    /// Unresolved, stale and excluded items per category of their first blocker.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub reasons: BTreeMap<String, usize>,
+    /// Unresolved and stale items whose blockers all share one category, per category: the items
+    /// one kind of answer can unblock.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub sole_blockers: BTreeMap<String, usize>,
 }
 
 impl Manifest {
@@ -269,8 +273,14 @@ pub fn items(functions: &[Function], renderer: &Renderer, classifier: &Classifie
             Status::Unresolved => summary.unresolved += 1,
             Status::Stale => summary.stale += 1,
         }
-        if let Some(reason) = verdict.reason.as_ref().filter(|_| matches!(status, Status::Unresolved | Status::Stale | Status::Excluded)) {
-            *summary.reasons.entry(reason.category.name().to_owned()).or_default() += 1;
+        if let Some(first) = verdict.reasons.first() {
+            if matches!(status, Status::Unresolved | Status::Stale | Status::Excluded) {
+                *summary.reasons.entry(first.category.name().to_owned()).or_default() += 1;
+            }
+            let sole = verdict.reasons.iter().all(|reason| reason.category == first.category);
+            if sole && matches!(status, Status::Unresolved | Status::Stale) {
+                *summary.sole_blockers.entry(first.category.name().to_owned()).or_default() += 1;
+            }
         }
         items.push(Item {
             path: function.path.clone(),
@@ -278,7 +288,7 @@ pub fn items(functions: &[Function], renderer: &Renderer, classifier: &Classifie
             signature_hash,
             class: verdict.class,
             status,
-            reason: verdict.reason.map(|reason| reason.to_string()),
+            reasons: verdict.reasons.iter().map(ToString::to_string).collect(),
         });
     }
     let paths: HashSet<&str> = functions.iter().map(|function| function.path.as_str()).collect();
@@ -339,6 +349,7 @@ mod tests {
         assert_eq!(summary.orphaned_decisions, 1);
         assert!(!summary.ready);
         assert_eq!(summary.reasons.get("mut_handle"), Some(&2));
+        assert_eq!(summary.sole_blockers.get("mut_handle"), Some(&2));
     }
 
     #[test]

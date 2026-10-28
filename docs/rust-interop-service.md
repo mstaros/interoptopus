@@ -102,10 +102,10 @@ One JSON file per target repository.
   `Read`/`Write`), not type names.
 - **Excluded**: deprecated items, `doc(hidden)` items, trait-impl methods, and config schema
   keys (by rule).
-- An item can have several blockers. Today reasons record the first one found (receiver, then
-  parameters, then the result), so counts by reason are counts of first blockers; E3b reports
-  every blocker. How many items an answer unblocks is measured by re-classifying with it
-  applied.
+- An item can have several blockers, and lists all of them: the receiver first, then the
+  parameters, then the result. The summary counts first blockers per category (`reasons`) and
+  the items whose blockers all share one category (`sole_blockers`), which one kind of answer
+  can unblock. How many items an answer unblocks is measured by re-classifying with it applied.
 
 ## Type map
 
@@ -216,6 +216,12 @@ together.
   39 automatic, 75 excluded, 598 needing a decision. First blockers: receiver not a handle 405,
   unmapped type 113, borrowed 28, generic 26, `&mut self` on the repository 13,
   iterator or platform 7, other 6.
+- Every blocker (E3b, 2026-10-28), with gix's mappings in its manifest (E3a) and default
+  features: 713 items, 39 automatic, 75 excluded, 599 needing a decision. First blockers:
+  receiver 405, unmapped 119, borrowed 28, generic 26, `&mut self` on the handle 13, iterator 3,
+  other 5. Only blocker: receiver 70, unmapped 118, borrowed 7, `&mut self` on the handle 3,
+  iterator 3, unsupported 3. The other 335 receiver-first items also have an unmapped,
+  borrowed or generic parameter or result, so per-type handle answers alone unblock about 70.
 
 ## Open decisions
 
@@ -244,7 +250,7 @@ type-map proposals ranked by impact (see Type map).
 - [x] E2 `extract`: crate list, plus caching. Integrated at `744975c5`: the crate list comes from `cargo metadata --locked` (normal dependencies sharing the root's prefix), rustdoc runs in a target directory owned by the checkout, and results are cached under a content hash of toolchain, features, `Cargo.lock` and crate sources.
 - [x] E3 Model, classifier and signature hashes; `analyze` writes the manifest. Check the result against the 704-function reference count. Done: the non-deprecated gix surface is 704 functions; items carry a canonical signature, its hash, a class and a status (ready, unresolved, resolved, stale, excluded), and `analyze` rewrites the manifest only when it changes.
 - [x] E3a No target knowledge in the engine: built-in mappings for std only; `string`, `bytes`, `path`, `handle` and `custom` mappings from the manifest; the generic conversion rule over rustdoc trait implementations, reading the dependency crates' JSON; categories from trait implementations. gix's mappings move to its manifest (G3). Done: a custom mapping names its carrier (`string` or `bytes`) and the runtime functions `into_rust` and `into_ffi`; `AsRef`, `Borrow`, `Into` and `TryInto` bounds follow their target's mapping, other traits the implementations rustdoc lists (std carriers first); `Iterator` comes from implementations, not names; `analyze` and `generate` take `dependency_json`, which provenance covers; the reason `mut_repository` is now `mut_handle`.
-- [ ] E3b Report every blocker per item.
+- [x] E3b Report every blocker per item. Done: items list `reasons` in order (receiver, parameters, result), the summary adds `sole_blockers`, and items ignore fields that older engine versions wrote. On gix only 70 of the 405 receiver-first items are blocked by the receiver alone (see Reference measurements).
 - [ ] E3c `analyze` proposes type-map entries ranked by how many items each unblocks (with G3).
 - [ ] E4 Decision validation: structured payloads (see Manifest), per-type handle answers covering `&self` methods only with per-item overrides, and the check that builds the generated facade with the target's features. Needs E3a, and a buildable runtime: G2's minimal runtime or a stub of the runtime contract.
 - [ ] E5 Rust facade emitter (automatic, handle, convert and record kinds) plus inventory registration; handles cross the boundary as keys (see Handles). Facade types get unique module-qualified names (see Naming and namespaces). First increment, the automatic kind: `generate` emits one service for all types mapped to the runtime handle (functions returning the handle become constructors, including `&self` methods as constructors taking `&Self`; free functions and the handle's own type win name clashes; conversions between handle types are dropped), its `&self` methods, and free functions named after their module path. Every member returns `ffi::Result`. It refuses a stale manifest (provenance or items differ from a fresh analysis) and, unless the request sets `partial`, one that is not ready; it rejects output folders outside the worktree and writes `mod.rs` into `rust_output` only when it changes. An end-to-end test builds the generated facade for a demo crate and validates its inventory.

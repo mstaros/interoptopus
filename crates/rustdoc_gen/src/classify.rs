@@ -167,8 +167,9 @@ impl fmt::Display for Reason {
 pub struct Verdict {
     /// The class.
     pub class: Class,
-    /// Why the function is not automatic.
-    pub reason: Option<Reason>,
+    /// Why the function is not automatic: every blocker, the receiver first, then the parameters
+    /// in order, then the result.
+    pub reasons: Vec<Reason>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -246,15 +247,14 @@ impl<'a> Classifier<'a> {
     #[must_use]
     pub fn classify(&self, function: &Function) -> Verdict {
         if function.deprecated {
-            return Verdict { class: Class::Excluded, reason: Some(Reason::new(Category::Deprecated, "deprecated")) };
+            return Verdict { class: Class::Excluded, reasons: vec![Reason::new(Category::Deprecated, "deprecated")] };
         }
         if let Some(prefix) = self.exclude_paths.iter().find(|prefix| is_under(&function.path, prefix)) {
-            return Verdict { class: Class::Excluded, reason: Some(Reason::new(Category::ExcludedPath, prefix.clone())) };
+            return Verdict { class: Class::Excluded, reasons: vec![Reason::new(Category::ExcludedPath, prefix.clone())] };
         }
-        match self.check(function) {
-            Ok(()) => Verdict { class: Class::Automatic, reason: None },
-            Err(reason) => Verdict { class: Class::Decision, reason: Some(reason) },
-        }
+        let reasons = self.blockers(function);
+        let class = if reasons.is_empty() { Class::Automatic } else { Class::Decision };
+        Verdict { class, reasons }
     }
 
     /// The mapping of a canonical type path, if any.
@@ -327,15 +327,16 @@ impl<'a> Classifier<'a> {
         }
     }
 
-    fn check(&self, function: &Function) -> Result<(), Reason> {
+    /// Every blocker: the receiver, then each parameter in order, then the result.
+    fn blockers(&self, function: &Function) -> Vec<Reason> {
         if function.is_async || function.is_unsafe {
-            return Err(Reason::new(Category::Unsupported, if function.is_async { "async" } else { "unsafe" }));
+            return vec![Reason::new(Category::Unsupported, if function.is_async { "async" } else { "unsafe" })];
         }
-        self.receiver(function)?;
-        for (name, ty) in &function.params {
-            self.input(ty, function).map_err(|reason| reason.in_parameter(name))?;
-        }
-        function.output.as_ref().map_or(Ok(()), |output| self.value(output, function, Position::Output))
+        let receiver = self.receiver(function).err();
+        let parameters =
+            function.params.iter().filter_map(|(name, ty)| self.input(ty, function).err().map(|reason| reason.in_parameter(name)));
+        let result = function.output.as_ref().and_then(|output| self.value(output, function, Position::Output).err());
+        receiver.into_iter().chain(parameters).chain(result).collect()
     }
 
     fn owner_mapping(&self, function: &Function) -> Option<Mapping> {
@@ -559,7 +560,7 @@ mod tests {
     }
 
     fn category(function: &Function) -> Option<Category> {
-        classify(function).reason.map(|reason| reason.category)
+        classify(function).reasons.first().map(|reason| reason.category)
     }
 
     fn as_ref(target: Type) -> Type {
@@ -570,7 +571,7 @@ mod tests {
     fn mapped_methods_on_the_runtime_handle_are_automatic() {
         let result = resolved(5, vec![GenericArg::Type(resolved(6, vec![GenericArg::Type(shared(resolved(2, Vec::new())))])), GenericArg::Type(resolved(7, Vec::new()))]);
         let function = method(Receiver::Shared, vec![("path", as_ref(resolved(4, Vec::new())))], Some(result));
-        assert_eq!(classify(&function), Verdict { class: Class::Automatic, reason: None });
+        assert_eq!(classify(&function), Verdict { class: Class::Automatic, reasons: Vec::new() });
     }
 
     #[test]
@@ -580,6 +581,13 @@ mod tests {
         other_owner.owner = Some("demo::Commit".to_owned());
         other_owner.owner_public = None;
         assert_eq!(category(&other_owner), Some(Category::Receiver));
+    }
+
+    #[test]
+    fn every_blocker_is_reported_in_order() {
+        let function = method(Receiver::Exclusive, vec![("error", resolved(7, Vec::new()))], Some(resolved(8, Vec::new())));
+        let categories: Vec<Category> = classify(&function).reasons.iter().map(|reason| reason.category).collect();
+        assert_eq!(categories, [Category::MutHandle, Category::Unmapped, Category::Iterator]);
     }
 
     #[test]
