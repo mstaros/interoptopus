@@ -278,6 +278,7 @@ pub fn analyze(request: &AnalyzeRequest) -> Result<AnalyzeResult, EngineError> {
     let type_map = type_map(&krate, &configuration);
     let (implementations, digests) = dependencies(&krate, &request.dependency_json)?;
     let classifier = classify::Classifier::new(&renderer, &type_map, &configuration.exclude_paths, &implementations);
+    classifier.validate().map_err(|why| EngineError::new(ErrorCode::InvalidRequest, why))?;
     let decisions = manifest.as_ref().map_or(&[][..], |manifest| manifest.decisions.as_slice());
     let (items, summary) = manifest::items(&functions, &renderer, &classifier, decisions);
     let proposals = {
@@ -343,6 +344,7 @@ pub fn generate(request: &GenerateRequest) -> Result<GenerateResult, EngineError
     let functions = surface::collect(&krate, &renderer);
     let type_map = type_map(&krate, configuration);
     let classifier = classify::Classifier::new(&renderer, &type_map, &configuration.exclude_paths, &implementations);
+    classifier.validate().map_err(|why| EngineError::new(ErrorCode::InvalidRequest, why))?;
     let (items, _) = manifest::items(&functions, &renderer, &classifier, &manifest.decisions);
     if items != manifest.items {
         return Err(EngineError::new(ErrorCode::StaleManifest, "the manifest items differ from a fresh analysis; run analyze first"));
@@ -429,10 +431,22 @@ fn contained(worktree: &Path, folder: &Path) -> Result<PathBuf, EngineError> {
 /// The manifest's type map keyed by canonical paths.
 fn type_map(krate: &Crate, configuration: &Configuration) -> BTreeMap<String, Mapping> {
     let aliases = surface::public_to_canonical(krate);
+    let canonical = |path: &String| aliases.get(path).cloned().unwrap_or_else(|| path.clone());
     configuration
         .type_map
         .iter()
-        .map(|(path, mapping)| (aliases.get(path).cloned().unwrap_or_else(|| path.clone()), mapping.clone()))
+        .map(|(path, mapping)| {
+            let mapping = match mapping {
+                Mapping::Keyed(keyed) => Mapping::Keyed(classify::Keyed {
+                    repo: canonical(&keyed.repo),
+                    key: canonical(&keyed.key),
+                    name: path.clone(),
+                    ..keyed.clone()
+                }),
+                other => other.clone(),
+            };
+            (canonical(path), mapping)
+        })
         .collect()
 }
 

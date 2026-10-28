@@ -103,6 +103,7 @@ fn ranked(
         Mapping::Path => "path",
         Mapping::Handle => "handle",
         Mapping::Custom(_) => "custom",
+        Mapping::Keyed(_) => "keyed",
     };
     let applied = context.classifier.with(ty, mapping);
     let (mut unblocks, mut reduces) = (0, 0);

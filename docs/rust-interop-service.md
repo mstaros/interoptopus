@@ -181,10 +181,27 @@ interoptopus returns services only from constructors and never inside `Option` o
 per-type Rust services could not express these results; the runtime handle stays a service
 because it holds state.
 
-- A per-type answer covers methods taking `&self` only. Methods taking `self` by value or
-  `&mut self`, such as builders (gix's `Remote::with_url`) and in-place mutators
-  (`Reference::peel_to_id`), produce state the key does not hold, so each needs its own
-  decision.
+A handle decision is a type-map entry of kind `keyed`; `analyze` and `generate` check its
+payload (E4), and the target's build of the generated facade checks the rest:
+
+    "gix::Commit": {"keyed": {"repo": "gix::Repository", "key": "gix_hash::object_id::ObjectId",
+                              "rebuild": "{repo}.find_commit({key})", "fallible": true,
+                              "key_of": "{value}.id", "key_name": "hex"}}
+
+`{repo}` is a reference to the handle `repo` names, through its runtime accessor; `{key}` is the
+key after its own mapping (a primitive, or a mapping that is neither a handle nor keyed);
+`{value}` is the handle value. A fallible rebuild maps its error through the runtime. Facade
+methods of a keyed type are named `{type}_{method}` and take the key first; its associated
+functions without a receiver are free functions, and functions taking a keyed handle without a
+receiver to rebuild from are dropped. In C#, each keyed type is a class holding its `Repository`
+and its key (`key_name`, with a `Key` suffix when it would repeat the class or a member); a
+keyed parameter from another repository throws `ArgumentException`.
+
+- A per-type answer covers methods taking `&self`, and `self` by value, since every call
+  rebuilds the value it consumes. Methods taking `&mut self`, such as in-place mutators
+  (`Reference::peel_to_id`), and by-value methods returning the type itself, such as builders
+  (gix's `Remote::with_url`), produce state the key does not hold; the classifier reports them
+  as `mut_handle` and `builder`, and each needs its own decision.
 - The key travels with its runtime handle: a handle is the pair (runtime handle, key), and a
   result belongs to its receiver's runtime handle.
 - Rebuilding refreshes state. A type the library documents as a snapshot loses that behavior:
@@ -233,6 +250,9 @@ together.
   `config::Snapshot` 7 and 11, `Id` 6 and 48, `Commit` 6 and 29, `Reference` 5 and 19, `Tree`
   4 and 25). Per-type handles, not type-map entries, are the lever; the option and value structs
   among the candidates (`open::Options`, `dirwalk::Options`, `open::Permissions`) are records.
+- Keyed handles (2026-10-28), gix with `Commit`, `Tree` and `Id` keyed by the hex object id:
+  57 automatic items (from 39) and 51 generated members (from 33); the receiver is the first
+  blocker of 365 items (from 405).
 
 ## Open decisions
 
@@ -263,8 +283,8 @@ type-map proposals ranked by impact (see Type map).
 - [x] E3a No target knowledge in the engine: built-in mappings for std only; `string`, `bytes`, `path`, `handle` and `custom` mappings from the manifest; the generic conversion rule over rustdoc trait implementations, reading the dependency crates' JSON; categories from trait implementations. gix's mappings move to its manifest (G3). Done: a custom mapping names its carrier (`string` or `bytes`) and the runtime functions `into_rust` and `into_ffi`; `AsRef`, `Borrow`, `Into` and `TryInto` bounds follow their target's mapping, other traits the implementations rustdoc lists (std carriers first); `Iterator` comes from implementations, not names; `analyze` and `generate` take `dependency_json`, which provenance covers; the reason `mut_repository` is now `mut_handle`.
 - [x] E3b Report every blocker per item. Done: items list `reasons` in order (receiver, parameters, result), the summary adds `sole_blockers`, and items ignore fields that older engine versions wrote. On gix only 70 of the 405 receiver-first items are blocked by the receiver alone (see Reference measurements).
 - [ ] E3c `analyze` proposes type-map entries ranked by how many items each unblocks (with G3). First increment (report only): the manifest carries `proposals` and `handle_candidates`, ranked by unblocks and reduces (see Type map; gix numbers under Reference measurements). Open: accepted string and bytes mappings need the emitter's convert kind (E5).
-- [ ] E4 Decision validation: structured payloads (see Manifest), per-type handle answers covering `&self` methods only with per-item overrides, and the check that builds the generated facade with the target's features. Needs E3a, and a buildable runtime: G2's minimal runtime or a stub of the runtime contract.
-- [ ] E5 Rust facade emitter (automatic, handle, convert and record kinds) plus inventory registration; handles cross the boundary as keys (see Handles). Facade types get unique module-qualified names (see Naming and namespaces). First increment, the automatic kind: `generate` emits one service for all types mapped to the runtime handle (functions returning the handle become constructors, including `&self` methods as constructors taking `&Self`; free functions and the handle's own type win name clashes; conversions between handle types are dropped), its `&self` methods, and free functions named after their module path. Every member returns `ffi::Result`. It refuses a stale manifest (provenance or items differ from a fresh analysis) and, unless the request sets `partial`, one that is not ready; it rejects output folders outside the worktree and writes `mod.rs` into `rust_output` only when it changes. An end-to-end test builds the generated facade for a demo crate and validates its inventory. The first real generation (gix, `dfe25025`) added two fixes: names interoptopus forbids get a trailing underscore (`init` becomes `init_`), and constructors taking the service name its type, because interoptopus copies their parameters into a free function where `Self` is unknown.
+- [ ] E4 Decision validation: structured payloads (see Manifest), per-type handle answers covering `&self` methods only with per-item overrides, and the check that builds the generated facade with the target's features. Needs E3a, and a buildable runtime: G2's minimal runtime or a stub of the runtime contract. First part (2026-10-28): `analyze` and `generate` check keyed payloads (placeholders, `repo` mapped as a handle, a primitive key or one with a data mapping); the build check is the target's build of the generated facade. Open: per-item decision payloads, and running the build from the service.
+- [ ] E5 Rust facade emitter (automatic, handle, convert and record kinds) plus inventory registration; handles cross the boundary as keys (see Handles). Facade types get unique module-qualified names (see Naming and namespaces). First increment, the automatic kind: `generate` emits one service for all types mapped to the runtime handle (functions returning the handle become constructors, including `&self` methods as constructors taking `&Self`; free functions and the handle's own type win name clashes; conversions between handle types are dropped), its `&self` methods, and free functions named after their module path. Every member returns `ffi::Result`. It refuses a stale manifest (provenance or items differ from a fresh analysis) and, unless the request sets `partial`, one that is not ready; it rejects output folders outside the worktree and writes `mod.rs` into `rust_output` only when it changes. An end-to-end test builds the generated facade for a demo crate and validates its inventory. Keyed handles (2026-10-28) are the handle kind: see Handles. The first keyed generation for gix moved two cases from automatic to blocked, since the emitter cannot lower them yet: parameters `impl IntoIterator<Item = …>` ("waits for slice parameters") and parameters borrowing the runtime handle ("takes the runtime handle as a parameter"). The first real generation (gix, `dfe25025`) added two fixes: names interoptopus forbids get a trailing underscore (`init` becomes `init_`), and constructors taking the service name its type, because interoptopus copies their parameters into a free function where `Self` is unknown.
 - [x] E6 Names sidecar in the C# backend. Dropped (2026-10-28): native member names come from `interoptopus_backends::casing`, and the public layer converts native values through overloaded runtime helpers instead of naming native types, so there is nothing to keep in sync.
 - [ ] E7 Emitter for the public C# layer and smoke tests. Namespaces follow rustdoc module paths (see Naming and namespaces). First increment: the service becomes a sealed, disposable class with static factories and methods; free functions become static methods of a class per module (`gix::env::agent` is `Gix.Env.Agent()`); conversions and error translation go through the hand-written C# runtime class named by `csharp_runtime` (its contract is in `csharp.rs`); the layer is written to `{csharp_output}/{ManagedNamespace}.g.cs`. Members with optional parameters are skipped and reported. Open: optional parameters, free functions returning options, generated smoke tests.
 - [ ] E8 Release with `publish_localcargo`; package the binary with `package_rust_binary`.
@@ -280,7 +300,7 @@ type-map proposals ranked by impact (see Type map).
 - [ ] G1 Create the GixSharp repository and move `gix-ffi` and the bindings there.
 - [ ] G2 Runtime: persistent repository holder, error mapper, conversions. First increment at gitoxide `e9113fd9`: `gix-ffi/src/runtime.rs` implements the runtime contract over gix-ffi's helpers; the holder rebuilds a thread-local repository per call, and `error()` maps every error, including gix's `Exn`, to `GixError::Other` with its display text. Open: the persistent holder for `&mut self` methods and the error mapper that keeps specific variants.
 - [ ] G3 Write the gix manifest (its type map from accepted E3c proposals: bytes for `BStr`/`BString`, a custom hex `ObjectId`), run analyze, review the unresolved queue. The manifest is `gix-ffi/rustdoc-gen.manifest.json` (gitoxide `e9113fd9`), written by hand with gix-ffi's feature set; E3c proposals and the queue review are open.
-- [ ] G4 First generated slice: simple `Repository` methods plus `Id`/`Commit` handles; build and smoke-test. The `Repository` part is done at gitoxide `e9113fd9`: the 33 automatic members (7 constructors, 20 methods, 6 free functions; 6 duplicates dropped) generate into `gix-ffi/src/generated`, build, register in `ffi_inventory()` and the regenerated `Interop.cs`; native 119/119 (3 new) and managed 119/119 pass. The `Id`/`Commit` handles wait for the handle kind (E4, E5).
+- [ ] G4 First generated slice: simple `Repository` methods plus `Id`/`Commit` handles; build and smoke-test. The `Repository` part is done at gitoxide `e9113fd9`: the 33 automatic members (7 constructors, 20 methods, 6 free functions; 6 duplicates dropped) generate into `gix-ffi/src/generated`, build, register in `ffi_inventory()` and the regenerated `Interop.cs`; native 119/119 (3 new) and managed 119/119 pass. `Commit`, `Tree` and `Id` are keyed handles since 2026-10-28: 51 generated members, with managed tests for the keyed layer.
 
 ### Dependencies
 

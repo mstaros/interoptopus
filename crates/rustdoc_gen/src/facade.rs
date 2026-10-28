@@ -7,6 +7,12 @@
 //! over a method of the service's own type, which wins over the other handle types; methods of
 //! the other handle types that only convert between handle types are dropped.
 //!
+//! A keyed type crosses as its key: its members become service methods named `{type}_{method}`
+//! that take the key first and rebuild the value from the handle and the key (`rebuild`); keyed
+//! parameters are rebuilt the same way, and keyed results return their key (`key_of`). Free
+//! functions and constructors taking a keyed handle are dropped, since they have no handle to
+//! rebuild from.
+//!
 //! Every member returns `ffi::Result<T, runtime::Error>`. Text and bytes convert inline; the
 //! rest goes through the hand-written runtime module (configuration `runtime_module`, default
 //! `crate::runtime`), which provides:
@@ -24,7 +30,7 @@ use std::fmt::Write as _;
 
 use rustdoc_types::{GenericBound, Type};
 
-use crate::classify::{Carrier, Classifier, Conversion, Mapping};
+use crate::classify::{Carrier, Classifier, Conversion, KEY_PLACEHOLDER, Keyed, Mapping, REPO_PLACEHOLDER, VALUE_PLACEHOLDER};
 use crate::forbidden::escaped;
 use crate::render::{Renderer, last_segment, type_args};
 use crate::surface::{Function, Receiver};
@@ -78,6 +84,19 @@ pub enum Shape {
     Option(Box<Self>),
     /// The service: a constructor's result, or the service a constructor takes.
     Service,
+    /// A keyed handle, crossing as its key.
+    Keyed(KeyedType),
+}
+
+/// A keyed handle type, as the C# layer needs it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct KeyedType {
+    /// The type's path as the type map writes it, such as `gix::Commit`.
+    pub name: String,
+    /// The key's name in the public layer.
+    pub key_name: String,
+    /// The key's shape.
+    pub key: Box<Shape>,
 }
 
 /// What a generated member is.
@@ -104,6 +123,8 @@ pub struct GeneratedMember {
     pub params: Vec<(String, Shape)>,
     /// The result.
     pub output: Shape,
+    /// The keyed type a method belongs to; its key is the first native argument.
+    pub keyed_owner: Option<KeyedType>,
 }
 
 /// Where a member goes.
@@ -128,7 +149,7 @@ struct Member {
 
 /// A function's fate.
 enum Planned {
-    Member(Member),
+    Member(Box<Member>),
     Dropped(String),
 }
 
@@ -155,6 +176,9 @@ enum Conv {
     Custom { function: String, borrowed: bool },
     /// An optional value.
     Option(Box<Self>),
+    /// A keyed handle rebuilt from its key: `key` converts the FFI key, `accessor` names the
+    /// holder accessor of the handle it is rebuilt from; `borrowed` passes a reference.
+    Keyed { keyed: Box<Keyed>, key: Box<Self>, accessor: String, borrowed: bool },
 }
 
 /// A lowered parameter: the FFI type and how it converts.
@@ -181,6 +205,7 @@ pub fn emit(functions: &[&Function], context: &Context<'_>) -> Result<Facade, (S
     for function in functions {
         match emitter.member(function).map_err(|why| (function.path.clone(), why))? {
             Planned::Member(member) => {
+                let member = *member;
                 let key = (member.place, member.name.clone());
                 match kept.get(&key) {
                     Some(existing) if existing.rank <= member.rank => {
@@ -255,17 +280,23 @@ impl Emitter<'_> {
 
     fn member(&self, function: &Function) -> Result<Planned, String> {
         let owner = self.handle_owner(function);
-        let rank = match owner {
-            None => 0,
-            Some(owner) if last_segment(owner) == self.service => 1,
-            Some(_) => 2,
+        // Associated functions of a keyed type have no key to rebuild from; they are free functions.
+        let keyed_owner = self.keyed_owner(function).filter(|_| function.receiver != Receiver::None);
+        let rank = match (owner, &keyed_owner) {
+            (_, Some(_)) => 3,
+            (None, None) => 0,
+            (Some(owner), None) if last_segment(owner) == self.service => 1,
+            (Some(_), None) => 2,
         };
         let constructor = function.output.as_ref().and_then(|output| self.handle_result(function, output));
-        let method = function.receiver == Receiver::Shared;
+        let method = function.receiver == Receiver::Shared || (keyed_owner.is_some() && function.receiver == Receiver::Value);
         if method && constructor.is_some() && rank == 2 {
             return Ok(Planned::Dropped("converts between handle types".to_owned()));
         }
-        if !matches!(function.receiver, Receiver::None | Receiver::Shared) {
+        if keyed_owner.is_some() && constructor.is_some() {
+            return Ok(Planned::Dropped("returns the handle it is rebuilt from".to_owned()));
+        }
+        if !method && function.receiver != Receiver::None {
             return Err(format!("receiver {:?}", function.receiver));
         }
         let accessor = owner.map(|owner| snake(last_segment(owner)));
@@ -281,7 +312,19 @@ impl Emitter<'_> {
             declarations.push(format!("{name}: {}", input.ffi));
             arguments.push(argument(&name, &input.conv, &mut setup));
         }
-        let call = match (method, &accessor) {
+        if shapes.iter().any(|(_, shape)| matches!(shape, Shape::Keyed(_))) && (!method || constructor.is_some()) {
+            return Ok(Planned::Dropped("takes a keyed handle, which needs the handle to rebuild from".to_owned()));
+        }
+        let member_name = keyed_owner.as_ref().map_or_else(|| function.name.clone(), |(path, _)| format!("{}_{}", snake(last_segment(path)), function.name));
+        let call = if let Some((path, keyed)) = &keyed_owner {
+            let parameter = format!("{}_key", snake(last_segment(path)));
+            let key = self.key_input(keyed).map_err(|why| format!("receiver: {why}"))?;
+            declarations.insert(0, format!("{parameter}: {}", key.ffi));
+            let conv = Conv::Keyed { keyed: Box::new(keyed.clone()), key: Box::new(key.conv), accessor: snake(last_segment(&keyed.repo)), borrowed: false };
+            let receiver = argument(&parameter, &conv, &mut setup);
+            format!("{receiver}.{}({})", function.name, arguments.join(", "))
+        } else {
+            match (method, &accessor) {
             (true, Some(accessor)) if constructor.is_some() => {
                 // interoptopus copies constructor parameters into a free function, where `Self` is unknown.
                 declarations.insert(0, format!("{handle_parameter}: &{}", self.service));
@@ -291,6 +334,7 @@ impl Emitter<'_> {
             (true, Some(accessor)) => format!("self.inner.{accessor}().{}({})", function.name, arguments.join(", ")),
             (true, None) => return Err("a method of a type that is not a handle".to_owned()),
             (false, _) => format!("{}({})", item_path(&function.path), arguments.join(", ")),
+            }
         };
         let (place, name, receiver, returns, value) = if let Some(fallible) = constructor {
             let value = if fallible { format!("{call}.map_err(runtime::error)?") } else { call };
@@ -300,7 +344,7 @@ impl Emitter<'_> {
             let unit = Type::Tuple(Vec::new());
             let (returns, value) = self.output(function.output.as_ref().unwrap_or(&unit), &call)?;
             if method {
-                (Place::Service, escaped(&function.name), "&self", returns, value)
+                (Place::Service, escaped(&member_name), "&self", returns, value)
             } else {
                 (Place::Free, escaped(&free_name(&function.path)), "", returns, value)
             }
@@ -312,7 +356,8 @@ impl Emitter<'_> {
             let kind = if method { MemberKind::Method } else { MemberKind::Function };
             (kind, self.shape(function.output.as_ref().unwrap_or(&output_type)))
         };
-        let generated = GeneratedMember { path: function.path.clone(), kind, name: name.clone(), params: shapes, output };
+        let keyed_owner = keyed_owner.map(|(_, keyed)| self.keyed_type(&keyed));
+        let generated = GeneratedMember { path: function.path.clone(), kind, name: name.clone(), params: shapes, output, keyed_owner };
         let mut parameters = declarations;
         if !receiver.is_empty() {
             parameters.insert(0, receiver.to_owned());
@@ -335,7 +380,7 @@ impl Emitter<'_> {
             let _ = writeln!(source, "{indent}    }})");
         }
         let _ = writeln!(source, "{indent}}}");
-        Ok(Planned::Member(Member { place, name, rank, path: function.path.clone(), source, generated }))
+        Ok(Planned::Member(Box::new(Member { place, name, rank, path: function.path.clone(), source, generated })))
     }
 
     fn input(&self, function: &Function, ty: &Type) -> Result<Input, String> {
@@ -352,6 +397,9 @@ impl Emitter<'_> {
                         if matches!(inner.conv, Conv::Option(_)) {
                             return Err("a nested Option".to_owned());
                         }
+                        if matches!(inner.conv, Conv::Keyed { .. }) {
+                            return Err("an optional keyed handle".to_owned());
+                        }
                         Ok(Input { ffi: format!("ffi::Option<{}>", inner.ffi), conv: Conv::Option(Box::new(inner.conv)) })
                     }
                     ("alloc::vec::Vec", [Type::Primitive(byte)]) if byte == "u8" => Ok(Input::new("ffi::Slice<u8>", Conv::BytesOwned)),
@@ -362,6 +410,7 @@ impl Emitter<'_> {
                         Some(Mapping::Custom(custom)) => {
                             Ok(Input::new(carrier_in(custom.ffi), Conv::Custom { function: custom.into_rust, borrowed: false }))
                         }
+                        Some(Mapping::Keyed(keyed)) => self.keyed_input(&keyed, false),
                         Some(Mapping::Handle) | None => Err(self.rendered(ty)),
                     },
                 }
@@ -381,6 +430,7 @@ impl Emitter<'_> {
                 Some(Mapping::Custom(custom)) => {
                     Ok(Input::new(carrier_in(custom.ffi), Conv::Custom { function: custom.into_rust, borrowed: true }))
                 }
+                Some(Mapping::Keyed(keyed)) => self.keyed_input(&keyed, true),
                 _ => Err(format!("&{}", self.rendered(inner))),
             },
             _ => Err(format!("&{}", self.rendered(inner))),
@@ -396,7 +446,7 @@ impl Emitter<'_> {
             Mapping::Bytes => Ok(Input::new("ffi::Slice<u8>", if borrowed { Conv::Bytes } else { Conv::BytesOwned })),
             Mapping::Path => Ok(Input::new("ffi::Slice<u8>", Conv::Path { borrowed: false })),
             Mapping::Custom(custom) => Ok(Input::new(carrier_in(custom.ffi), Conv::Custom { function: custom.into_rust, borrowed: false })),
-            Mapping::Handle => Err(unsupported()),
+            Mapping::Handle | Mapping::Keyed(_) => Err(unsupported()),
         }
     }
 
@@ -463,6 +513,7 @@ impl Emitter<'_> {
             Some(Mapping::Path) => Shape::Path,
             Some(Mapping::Custom(custom)) => Shape::Custom(custom.ffi),
             Some(Mapping::Handle) => Shape::Service,
+            Some(Mapping::Keyed(keyed)) => Shape::Keyed(self.keyed_type(&keyed)),
             None => Shape::Unit,
         }
     }
@@ -475,8 +526,58 @@ impl Emitter<'_> {
             Some(Mapping::Custom(custom)) => {
                 Ok((carrier_out(custom.ffi).to_owned(), format!("runtime::{}(&{value})", custom.into_ffi)))
             }
+            Some(Mapping::Keyed(keyed)) => self.key_output(&keyed, &keyed.key_of.replace(VALUE_PLACEHOLDER, &format!("({value})"))),
             Some(Mapping::Handle) | None => Err(self.rendered(ty)),
         }
+    }
+
+    /// The owning keyed type and its mapping, if the function belongs to one.
+    fn keyed_owner<'f>(&self, function: &'f Function) -> Option<(&'f str, Keyed)> {
+        [&function.owner, &function.owner_public].into_iter().flatten().find_map(|path| match self.mapping(path) {
+            Some(Mapping::Keyed(keyed)) => Some((path.as_str(), keyed)),
+            _ => None,
+        })
+    }
+
+    /// A keyed handle parameter: its key's FFI form, rebuilt in the body.
+    fn keyed_input(&self, keyed: &Keyed, borrowed: bool) -> Result<Input, String> {
+        let key = self.key_input(keyed)?;
+        let accessor = snake(last_segment(&keyed.repo));
+        Ok(Input { ffi: key.ffi, conv: Conv::Keyed { keyed: Box::new(keyed.clone()), key: Box::new(key.conv), accessor, borrowed } })
+    }
+
+    /// How a keyed handle's key crosses into Rust.
+    fn key_input(&self, keyed: &Keyed) -> Result<Input, String> {
+        if PRIMITIVES.contains(&keyed.key.as_str()) {
+            return Ok(Input::new(&keyed.key, Conv::Same));
+        }
+        match self.mapping(&keyed.key) {
+            Some(Mapping::String) => Ok(Input::new("ffi::String", Conv::Text)),
+            Some(Mapping::Bytes) => Ok(Input::new("ffi::Slice<u8>", Conv::BytesInto)),
+            Some(Mapping::Path) => Ok(Input::new("ffi::Slice<u8>", Conv::Path { borrowed: false })),
+            Some(Mapping::Custom(custom)) => Ok(Input::new(carrier_in(custom.ffi), Conv::Custom { function: custom.into_rust, borrowed: false })),
+            _ => Err(format!("the key `{}` of `{}`", keyed.key, keyed.name)),
+        }
+    }
+
+    /// The FFI form of a keyed handle's key; `value` is the key expression.
+    fn key_output(&self, keyed: &Keyed, value: &str) -> Result<(String, String), String> {
+        if PRIMITIVES.contains(&keyed.key.as_str()) {
+            return Ok((keyed.key.clone(), value.to_owned()));
+        }
+        match self.mapping(&keyed.key) {
+            Some(Mapping::String) => Ok(text_out(value)),
+            Some(Mapping::Bytes) => Ok(bytes_out(value)),
+            Some(Mapping::Path) => Ok(("ffi::Vec<u8>".to_owned(), format!("runtime::path_out(&{value})"))),
+            Some(Mapping::Custom(custom)) => Ok((carrier_out(custom.ffi).to_owned(), format!("runtime::{}(&{value})", custom.into_ffi))),
+            _ => Err(format!("the key `{}` of `{}`", keyed.key, keyed.name)),
+        }
+    }
+
+    /// A keyed type as the C# layer needs it.
+    fn keyed_type(&self, keyed: &Keyed) -> KeyedType {
+        let key = if PRIMITIVES.contains(&keyed.key.as_str()) { Shape::Primitive(keyed.key.clone()) } else { self.mapped_shape(&keyed.key) };
+        KeyedType { name: keyed.name.clone(), key_name: keyed.key_name.clone(), key: Box::new(key) }
     }
 
     /// The whole module.
@@ -562,6 +663,18 @@ fn argument(name: &str, conv: &Conv, setup: &mut Vec<String>) -> String {
         Conv::BytesOwned => format!("{name}.as_slice().to_vec()"),
         Conv::Path { borrowed } => format!("{}runtime::path(&{name})?", if *borrowed { "&" } else { "" }),
         Conv::Custom { function, borrowed } => format!("{}runtime::{function}(&{name})?", if *borrowed { "&" } else { "" }),
+        Conv::Keyed { keyed, key, accessor, borrowed } => {
+            let key = argument(name, key, setup);
+            // A reference to the holder's temporary, kept alive for the body; `{repo}` names it.
+            let holder = format!("let {accessor} = &self.inner.{accessor}();");
+            if !setup.contains(&holder) {
+                setup.push(holder);
+            }
+            let rebuilt = keyed.rebuild.replace(REPO_PLACEHOLDER, accessor).replace(KEY_PLACEHOLDER, &key);
+            let fallible = if keyed.fallible { ".map_err(runtime::error)?" } else { "" };
+            setup.push(format!("let {name} = {rebuilt}{fallible};"));
+            if *borrowed { format!("&{name}") } else { name.to_owned() }
+        }
         Conv::Option(inner) => {
             setup.push(format!("let {name} = {name}.into_option();"));
             let (body, fallible, borrowed) = match inner.as_ref() {
@@ -575,6 +688,7 @@ fn argument(name: &str, conv: &Conv, setup: &mut Vec<String>) -> String {
                 Conv::Path { borrowed } => ("runtime::path(value)".to_owned(), true, *borrowed),
                 Conv::Custom { function, borrowed } => (format!("runtime::{function}(value)"), true, *borrowed),
                 Conv::Option(_) => unreachable!("nested options are rejected when lowering"),
+                Conv::Keyed { .. } => unreachable!("optional keyed handles are rejected when lowering"),
             };
             let mut expression = format!("{name}.as_ref().map(|value| {body})");
             if fallible {
@@ -596,6 +710,9 @@ fn conv_shape(conv: &Conv, ffi: &str) -> Shape {
         Conv::Bytes | Conv::BytesInto | Conv::BytesOwned => Shape::Bytes,
         Conv::Path { .. } => Shape::Path,
         Conv::Custom { .. } => Shape::Custom(if ffi == "ffi::String" { Carrier::String } else { Carrier::Bytes }),
+        Conv::Keyed { keyed, key, .. } => {
+            Shape::Keyed(KeyedType { name: keyed.name.clone(), key_name: keyed.key_name.clone(), key: Box::new(conv_shape(key, ffi)) })
+        }
         Conv::Option(inner) => {
             let inner_ffi = ffi.strip_prefix("ffi::Option<").and_then(|rest| rest.strip_suffix('>')).unwrap_or(ffi);
             Shape::Option(Box::new(conv_shape(inner, inner_ffi)))
@@ -684,6 +801,7 @@ mod tests {
             (9, "bstr::bstring::BString"),
             (10, "demo::ThreadSafeRepo"),
             (11, "demo::Oid"),
+            (12, "demo::Commit"),
         ])
     }
 
@@ -711,10 +829,20 @@ mod tests {
         }
     }
 
-    /// Two handle types, bstr's byte strings and a custom object id.
+    /// Two handle types, bstr's byte strings, a custom object id and a commit keyed by it.
     fn types() -> BTreeMap<String, Mapping> {
         let oid = Mapping::Custom(Custom { ffi: Carrier::String, into_rust: "oid".to_owned(), into_ffi: "oid_out".to_owned() });
+        let commit = Mapping::Keyed(Keyed {
+            repo: "demo::Repo".to_owned(),
+            key: "demo::Oid".to_owned(),
+            rebuild: "{repo}.find_commit({key})".to_owned(),
+            fallible: true,
+            key_of: "{value}.id".to_owned(),
+            key_name: "id".to_owned(),
+            name: "demo::Commit".to_owned(),
+        });
         [
+            ("demo::Commit", commit),
             ("demo::Repo", Mapping::Handle),
             ("demo::ThreadSafeRepo", Mapping::Handle),
             ("bstr::bstr::BStr", Mapping::Bytes),
@@ -734,6 +862,25 @@ mod tests {
         let context = Context { renderer: &renderer, classifier: &classifier, runtime: "crate::runtime", provenance: "test" };
         let functions: Vec<&Function> = functions.iter().collect();
         emit(&functions, &context).expect("the functions lower")
+    }
+
+    #[test]
+    fn keyed_handles_cross_as_keys_and_are_rebuilt_per_call() {
+        let tree = function("demo::Commit::tree", Some("demo::Commit"), Receiver::Shared, Vec::new(), Some(generic(3, vec![ty(12), ty(5)])));
+        let detach = function("demo::Commit::detach", Some("demo::Commit"), Receiver::Value, Vec::new(), Some(ty(11)));
+        let head = function("demo::Repo::head_commit", Some("demo::Repo"), Receiver::Shared, Vec::new(), Some(generic(8, vec![ty(12)])));
+        let describe = function("demo::Repo::describe", Some("demo::Repo"), Receiver::Shared, vec![("commit", shared(ty(12)))], Some(ty(1)));
+        let free = function("demo::describe", None, Receiver::None, vec![("commit", shared(ty(12)))], Some(ty(1)));
+        let facade = facade(&[tree, detach, head, describe, free]);
+        let source = &facade.source;
+        assert!(source.contains("    pub fn commit_tree(&self, commit_key: ffi::String) -> ffi::Result<ffi::String, runtime::Error> {\n        finish(|| {\n            let repo = &self.inner.repo();\n            let commit_key = repo.find_commit(runtime::oid(&commit_key)?).map_err(runtime::error)?;\n            Ok(runtime::oid_out(&(commit_key.tree().map_err(runtime::error)?).id))\n"), "{source}");
+        assert!(source.contains("Ok(runtime::oid_out(&commit_key.detach()))"), "by-value methods consume the rebuilt value: {source}");
+        assert!(source.contains("Ok(ffi::Option::from(self.inner.repo().head_commit().map(|value| runtime::oid_out(&(value).id))))"), "{source}");
+        assert!(source.contains("            let commit = repo.find_commit(runtime::oid(&commit)?).map_err(runtime::error)?;\n            Ok(ffi::String::from_string(self.inner.repo().describe(&commit).to_string()))\n"), "{source}");
+        assert!(facade.dropped.iter().any(|(path, why)| path == "demo::describe" && why.starts_with("takes a keyed handle")), "{:?}", facade.dropped);
+        let tree = facade.members.iter().find(|member| member.path == "demo::Commit::tree").expect("emitted");
+        assert_eq!(tree.keyed_owner.as_ref().map(|owner| owner.name.as_str()), Some("demo::Commit"));
+        assert!(matches!(&tree.output, Shape::Keyed(owner) if owner.key_name == "id"));
     }
 
     #[test]

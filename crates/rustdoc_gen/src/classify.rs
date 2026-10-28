@@ -28,6 +28,17 @@ pub enum Mapping {
     Handle,
     /// A type the runtime converts with the two functions the mapping names.
     Custom(Custom),
+    /// A type that crosses as its key and is rebuilt from a handle on every call.
+    Keyed(Keyed),
+}
+
+impl Mapping {
+    /// Whether values of the type cross as data (text, bytes, a path or a custom value) rather than
+    /// as a handle.
+    #[must_use]
+    pub const fn is_data(&self) -> bool {
+        !matches!(self, Self::Handle | Self::Keyed(_))
+    }
 }
 
 /// A mapping whose conversions the runtime provides.
@@ -41,6 +52,41 @@ pub struct Custom {
     pub into_rust: String,
     /// The runtime function that turns a reference to the Rust value into the FFI value.
     pub into_ffi: String,
+}
+
+/// A type that crosses as its key: every call rebuilds it from the handle `repo` names and the
+/// key (see the design doc's Handles section).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Keyed {
+    /// The handle type `{repo}` refers to; it must be mapped as `handle`.
+    pub repo: String,
+    /// The key's type: a primitive, or a type with a mapping that is neither a handle nor keyed.
+    pub key: String,
+    /// Rust expression rebuilding the value from `{repo}`, a reference to the handle, and `{key}`.
+    pub rebuild: String,
+    /// Whether `rebuild` returns a `Result`.
+    #[serde(default)]
+    pub fallible: bool,
+    /// Rust expression producing the key from `{value}`.
+    pub key_of: String,
+    /// The key's name in the public layer, such as `id`.
+    #[serde(default = "default_key_name")]
+    pub key_name: String,
+    /// The type's path as the type map writes it; set when the type map is resolved.
+    #[serde(skip)]
+    pub name: String,
+}
+
+/// The placeholders of a keyed payload: the handle reference, the key and the value.
+pub const REPO_PLACEHOLDER: &str = "{repo}";
+/// See [`REPO_PLACEHOLDER`].
+pub const KEY_PLACEHOLDER: &str = "{key}";
+/// See [`REPO_PLACEHOLDER`].
+pub const VALUE_PLACEHOLDER: &str = "{value}";
+
+fn default_key_name() -> String {
+    "key".to_owned()
 }
 
 /// The FFI form of a custom mapping.
@@ -101,6 +147,8 @@ pub enum Category {
     Receiver,
     /// `&mut self` on the runtime handle needs the persistent runtime holder.
     MutHandle,
+    /// A by-value method of a keyed type that returns the type: its key cannot carry the change.
+    Builder,
     /// A type is not in the type map.
     Unmapped,
     /// A borrowed type that cannot be copied across.
@@ -128,6 +176,7 @@ impl Category {
             Self::ExcludedPath => "excluded_path",
             Self::Receiver => "receiver",
             Self::MutHandle => "mut_handle",
+            Self::Builder => "builder",
             Self::Unmapped => "unmapped",
             Self::Borrowed => "borrowed",
             Self::Generic => "generic",
@@ -343,6 +392,33 @@ impl<'a> Classifier<'a> {
         self.types.get(canonical).cloned()
     }
 
+    /// Checks the type map's keyed mappings: their placeholders, a handle behind `repo`, and a
+    /// primitive key or one with a mapping that is neither a handle nor keyed (E4).
+    ///
+    /// # Errors
+    ///
+    /// The first malformed entry, with the reason.
+    pub fn validate(&self) -> Result<(), String> {
+        for (path, mapping) in &self.types {
+            let Mapping::Keyed(keyed) = mapping else { continue };
+            let problem = if !keyed.rebuild.contains(REPO_PLACEHOLDER) || !keyed.rebuild.contains(KEY_PLACEHOLDER) {
+                Some("`rebuild` needs `{repo}` and `{key}`".to_owned())
+            } else if !keyed.key_of.contains(VALUE_PLACEHOLDER) {
+                Some("`key_of` needs `{value}`".to_owned())
+            } else if self.types.get(&keyed.repo) != Some(&Mapping::Handle) {
+                Some(format!("`repo` names `{}`, which is not mapped as `handle`", keyed.repo))
+            } else if !PRIMITIVES.contains(&keyed.key.as_str()) && !self.types.get(&keyed.key).is_some_and(Mapping::is_data) {
+                Some(format!("`key` names `{}`, which needs a primitive type or a mapping that is neither a handle nor keyed", keyed.key))
+            } else {
+                None
+            };
+            if let Some(problem) = problem {
+                return Err(format!("type map entry `{path}`: {problem}"));
+            }
+        }
+        Ok(())
+    }
+
     /// Canonical paths of the types mapped to the runtime handle.
     pub fn handles(&self) -> impl Iterator<Item = &str> {
         self.types.iter().filter(|(_, mapping)| **mapping == Mapping::Handle).map(|(path, _)| path.as_str())
@@ -374,7 +450,7 @@ impl<'a> Classifier<'a> {
                 let canonical = self.renderer.path(path);
                 match (canonical.as_str(), type_args(path).as_slice()) {
                     ("alloc::vec::Vec", [Type::Primitive(byte)]) if byte == "u8" => Some(Mapping::Bytes),
-                    _ => self.types.get(&canonical).filter(|mapping| **mapping != Mapping::Handle).cloned(),
+                    _ => self.types.get(&canonical).filter(|mapping| mapping.is_data()).cloned(),
                 }
             }
             _ => None,
@@ -402,7 +478,7 @@ impl<'a> Classifier<'a> {
             _ => self
                 .types
                 .get(implementer)
-                .filter(|mapping| **mapping != Mapping::Handle)
+                .filter(|mapping| mapping.is_data())
                 .map(|mapping| (2, Conversion { mapping: mapping.clone(), borrowed: false })),
         }
     }
@@ -412,11 +488,33 @@ impl<'a> Classifier<'a> {
         if function.is_async || function.is_unsafe {
             return vec![Reason::new(Category::Unsupported, if function.is_async { "async" } else { "unsafe" })];
         }
-        let receiver = self.receiver(function).err();
+        let receiver = self.receiver(function).err().or_else(|| self.builder(function));
         let parameters =
             function.params.iter().filter_map(|(name, ty)| self.input(ty, function).err().map(|reason| reason.in_parameter(name)));
         let result = function.output.as_ref().and_then(|output| self.value(output, function, Position::Output).err());
         receiver.into_iter().chain(parameters).chain(result).collect()
+    }
+
+    /// A by-value method of a keyed type that returns the type would lose its change.
+    fn builder(&self, function: &Function) -> Option<Reason> {
+        let owner = function.owner.as_deref()?;
+        let keyed = matches!(self.owner_mapping(function), Some(Mapping::Keyed(_)));
+        (keyed && function.receiver == Receiver::Value && function.output.as_ref().is_some_and(|output| self.returns_type(output, owner)))
+            .then(|| Reason::new(Category::Builder, "returns a modified copy its key cannot carry").about(Some(owner)))
+    }
+
+    /// Whether `ty`, through `Result` and `Option`, is `Self` or the type at `path`.
+    fn returns_type(&self, ty: &Type, path: &str) -> bool {
+        match ty {
+            Type::Generic(name) => name == "Self",
+            Type::ResolvedPath(resolved) => {
+                let canonical = self.renderer.path(resolved);
+                canonical == path
+                    || (matches!(canonical.as_str(), "core::result::Result" | "core::option::Option")
+                        && type_args(resolved).first().is_some_and(|inner| self.returns_type(inner, path)))
+            }
+            _ => false,
+        }
     }
 
     fn owner_mapping(&self, function: &Function) -> Option<Mapping> {
@@ -432,6 +530,11 @@ impl<'a> Classifier<'a> {
             (Receiver::Value | Receiver::Other(_), Some(Mapping::Handle)) => {
                 Err(Reason::new(Category::Receiver, "takes the runtime handle by value or wrapped"))
             }
+            (Receiver::Shared | Receiver::Value, Some(Mapping::Keyed(_))) => Ok(()),
+            (Receiver::Exclusive, Some(Mapping::Keyed(_))) => {
+                Err(Reason::new(Category::MutHandle, "&mut self on a keyed handle loses its changes"))
+            }
+            (Receiver::Other(_), Some(Mapping::Keyed(_))) => Err(Reason::new(Category::Receiver, "takes the keyed handle wrapped")),
             _ => Err(Reason::new(Category::Receiver, format!("{} is not a handle", function.owner.as_deref().unwrap_or("Self")))
                 .about(function.owner.as_deref())),
         }
@@ -453,7 +556,7 @@ impl<'a> Classifier<'a> {
             Type::Tuple(types) if types.is_empty() => Ok(()),
             Type::Generic(name) if name == "Self" => self.owner_value(function),
             Type::ResolvedPath(path) => self.resolved(path, function, position),
-            Type::BorrowedRef { is_mutable: false, type_, .. } => self.borrowed(type_, function),
+            Type::BorrowedRef { is_mutable: false, type_, .. } => self.borrowed(type_, function, position),
             Type::BorrowedRef { type_, .. } => Err(self.blocked(type_, Category::Borrowed)),
             Type::ImplTrait(bounds) => Err(Reason::new(self.bounds_category(bounds, Category::Generic), self.renderer.ty(ty))),
             Type::DynTrait(_) => Err(self.blocked(ty, Category::Unsupported)),
@@ -471,7 +574,7 @@ impl<'a> Classifier<'a> {
             ("alloc::vec::Vec", [inner]) => self.value(inner, function, position),
             ("core::result::Result", [ok, _]) if position == Position::Output => self.value(ok, function, position),
             ("core::result::Result", _) => Err(Reason::new(Category::Unsupported, "Result in a parameter")),
-            ("alloc::borrow::Cow", [inner]) => self.borrowed(inner, function),
+            ("alloc::borrow::Cow", [inner]) => self.borrowed(inner, function, position),
             _ => match self.types.get(&canonical) {
                 Some(Mapping::Handle) if position == Position::Input => {
                     Err(Reason::new(Category::Receiver, format!("takes the runtime handle `{canonical}` by value")))
@@ -482,12 +585,18 @@ impl<'a> Classifier<'a> {
         }
     }
 
-    /// A shared borrow is fine when the target is copied across or is the runtime handle.
-    fn borrowed(&self, inner: &Type, function: &Function) -> Result<(), Reason> {
+    /// A shared borrow is fine when the target is copied across, or is the runtime handle as a
+    /// result; a parameter borrowing the handle waits until the emitter passes the service.
+    fn borrowed(&self, inner: &Type, function: &Function, position: Position) -> Result<(), Reason> {
         match inner {
             Type::Primitive(name) if name == "str" || PRIMITIVES.contains(&name.as_str()) => Ok(()),
             Type::Slice(element) if is_byte(element) => Ok(()),
-            Type::ResolvedPath(path) if self.types.contains_key(&self.renderer.path(path)) => Ok(()),
+            Type::ResolvedPath(path) if self.types.contains_key(&self.renderer.path(path)) => match self.types.get(&self.renderer.path(path)) {
+                Some(Mapping::Handle) if position == Position::Input => {
+                    Err(Reason::new(Category::Receiver, "takes the runtime handle as a parameter"))
+                }
+                _ => Ok(()),
+            },
             Type::Generic(name) if name == "Self" => self.owner_value(function),
             _ => Err(self.blocked(inner, Category::Borrowed)),
         }
@@ -509,7 +618,8 @@ impl<'a> Classifier<'a> {
             if self.renderer.path(trait_) == "core::iter::traits::collect::IntoIterator"
                 && iterator_item(trait_).is_some_and(|item| self.input(item, function).is_ok())
             {
-                return Ok(());
+                // The emitter has no slice parameters yet, so the item converting is not enough.
+                return Err(Reason::new(Category::Generic, format!("{label}: an iterable of convertible items waits for slice parameters")));
             }
         }
         let rendered = self.renderer.bounds(bounds);
@@ -616,6 +726,7 @@ mod tests {
             (11, "core::sync::atomic::AtomicBool"),
             (12, "demo::AsBytes"),
             (13, "demo::Platform"),
+            (14, "demo::Repo"),
         ])
     }
 
@@ -699,6 +810,58 @@ mod tests {
         assert!(implementations.implements("demo::Blob", "core::convert::AsRef"));
     }
 
+    fn keyed_classifier<'a>(renderer: &'a Renderer, implementations: &'a Implementations, rebuild: &str) -> Classifier<'a> {
+        let keyed = Keyed {
+            repo: "demo::Repo".to_owned(),
+            key: "u64".to_owned(),
+            rebuild: rebuild.to_owned(),
+            fallible: true,
+            key_of: "{value}.id".to_owned(),
+            key_name: "id".to_owned(),
+            name: "demo::Commit".to_owned(),
+        };
+        let overrides = BTreeMap::from([("demo::Repo".to_owned(), Mapping::Handle), ("demo::Commit".to_owned(), Mapping::Keyed(keyed))]);
+        Classifier::new(renderer, &overrides, &[], implementations)
+    }
+
+    #[test]
+    fn keyed_types_take_self_by_reference_or_value_but_not_mut() {
+        let renderer = renderer();
+        let implementations = implementations();
+        let classifier = keyed_classifier(&renderer, &implementations, "{repo}.find({key})");
+        let on_commit = |receiver: Receiver, output: Option<Type>| {
+            let mut function = method(receiver, Vec::new(), output);
+            function.owner = Some("demo::Commit".to_owned());
+            function.owner_public = None;
+            classifier.classify(&function).reasons.first().map(|reason| reason.category)
+        };
+        assert_eq!(on_commit(Receiver::Shared, None), None);
+        assert_eq!(on_commit(Receiver::Value, Some(Type::Primitive("u64".to_owned()))), None);
+        assert_eq!(on_commit(Receiver::Exclusive, None), Some(Category::MutHandle));
+        assert_eq!(on_commit(Receiver::Value, Some(Type::Generic("Self".to_owned()))), Some(Category::Builder));
+        assert_eq!(on_commit(Receiver::Shared, Some(Type::Generic("Self".to_owned()))), None);
+    }
+
+    #[test]
+    fn parameters_borrowing_the_handle_wait_for_the_emitter() {
+        let repo = shared(resolved(14, Vec::new()));
+        assert_eq!(category(&method(Receiver::None, vec![("repo", repo.clone())], None)), Some(Category::Receiver));
+        assert_eq!(category(&method(Receiver::Shared, Vec::new(), Some(repo))), None, "results may borrow the handle");
+    }
+
+    #[test]
+    fn keyed_payloads_are_checked() {
+        let renderer = renderer();
+        let implementations = implementations();
+        assert_eq!(keyed_classifier(&renderer, &implementations, "{repo}.find({key})").validate(), Ok(()));
+        let missing = keyed_classifier(&renderer, &implementations, "{repo}.find(7)").validate();
+        assert!(missing.is_err_and(|why| why.contains("`rebuild` needs")));
+        let mut overrides = BTreeMap::from([("demo::Commit".to_owned(), keyed_classifier(&renderer, &implementations, "{repo}.find({key})").mapping("demo::Commit").expect("keyed"))]);
+        overrides.insert("demo::Repo".to_owned(), Mapping::Bytes);
+        let wrong_repo = Classifier::new(&renderer, &overrides, &[], &implementations).validate();
+        assert!(wrong_repo.is_err_and(|why| why.contains("not mapped as `handle`")));
+    }
+
     #[test]
     fn parameters_are_categorized() {
         let callback = Type::ImplTrait(vec![bound(9, Vec::new())]);
@@ -721,7 +884,9 @@ mod tests {
             generic_params: Vec::new(),
             modifier: rustdoc_types::TraitBoundModifier::None,
         }]);
-        assert_eq!(category(&method(Receiver::None, vec![("names", names)], None)), None, "iterables of convertible items are mapped");
+        let verdict = classify(&method(Receiver::None, vec![("names", names)], None));
+        assert_eq!(verdict.reasons.first().map(|reason| reason.category), Some(Category::Generic));
+        assert!(verdict.reasons[0].detail.ends_with("waits for slice parameters"), "{:?}", verdict.reasons);
     }
 
     #[test]
