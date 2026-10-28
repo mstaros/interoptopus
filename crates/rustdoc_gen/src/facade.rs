@@ -2,7 +2,7 @@
 //!
 //! Types mapped to `handle` become one interoptopus service, named after the shortest of
 //! them. Functions that return the handle become its constructors (a `&self` method that does
-//! becomes a constructor taking `&Self`), `&self` methods become its methods, and everything else
+//! becomes a constructor taking the service by reference), `&self` methods become its methods, and everything else
 //! becomes a free function named after its module path. On a name clash a free function wins
 //! over a method of the service's own type, which wins over the other handle types; methods of
 //! the other handle types that only convert between handle types are dropped.
@@ -25,6 +25,7 @@ use std::fmt::Write as _;
 use rustdoc_types::{GenericBound, Type};
 
 use crate::classify::{Carrier, Classifier, Conversion, Mapping};
+use crate::forbidden::escaped;
 use crate::render::{Renderer, last_segment, type_args};
 use crate::surface::{Function, Receiver};
 
@@ -227,7 +228,8 @@ impl Emitter<'_> {
         }
         let call = match (method, &accessor) {
             (true, Some(accessor)) if constructor.is_some() => {
-                declarations.insert(0, format!("{handle_parameter}: &Self"));
+                // interoptopus copies constructor parameters into a free function, where `Self` is unknown.
+                declarations.insert(0, format!("{handle_parameter}: &{}", self.service));
                 format!("{handle_parameter}.inner.{accessor}().{}({})", function.name, arguments.join(", "))
             }
             (true, Some(accessor)) => format!("self.inner.{accessor}().{}({})", function.name, arguments.join(", ")),
@@ -237,14 +239,14 @@ impl Emitter<'_> {
         let (place, name, receiver, returns, value) = if let Some(fallible) = constructor {
             let value = if fallible { format!("{call}.map_err(runtime::error)?") } else { call };
             let holder = format!("Self {{ inner: runtime::{}::from({value}) }}", self.service);
-            (Place::Service, function.name.clone(), "", "Self".to_owned(), holder)
+            (Place::Service, escaped(&function.name), "", "Self".to_owned(), holder)
         } else {
             let unit = Type::Tuple(Vec::new());
             let (returns, value) = self.output(function.output.as_ref().unwrap_or(&unit), &call)?;
             if method {
-                (Place::Service, function.name.clone(), "&self", returns, value)
+                (Place::Service, escaped(&function.name), "&self", returns, value)
             } else {
-                (Place::Free, free_name(&function.path), "", returns, value)
+                (Place::Free, escaped(&free_name(&function.path)), "", returns, value)
             }
         };
         let mut parameters = declarations;
@@ -529,7 +531,7 @@ fn free_name(path: &str) -> String {
 /// A usable parameter name.
 fn parameter_name(name: &str, index: usize) -> String {
     let valid = !name.is_empty() && name != "_" && name.chars().all(|c| c.is_alphanumeric() || c == '_');
-    if valid { name.to_owned() } else { format!("arg{index}") }
+    if valid { escaped(name) } else { format!("arg{index}") }
 }
 
 /// `ThreadSafeRepository` becomes `thread_safe_repository`.
@@ -646,7 +648,7 @@ mod tests {
     fn methods_returning_the_handle_become_constructors_taking_it() {
         let main = function("demo::Repo::main", Some("demo::Repo"), Receiver::Shared, Vec::new(), Some(generic(3, vec![ty(4), ty(5)])));
         let source = facade(&[main]).source;
-        assert!(source.contains("    pub fn main(repo: &Self) -> ffi::Result<Self, runtime::Error> {\n"), "{source}");
+        assert!(source.contains("    pub fn main(repo: &Repo) -> ffi::Result<Self, runtime::Error> {\n"), "{source}");
         assert!(source.contains("runtime::Repo::from(repo.inner.repo().main().map_err(runtime::error)?)"), "{source}");
     }
 
@@ -674,7 +676,7 @@ mod tests {
         let lock = function("demo::Repo::lock", Some("demo::Repo"), Receiver::Shared, vec![("reason", reason)], Some(output));
         let source = facade(&[lock]).source;
         assert!(
-            source.contains("    pub fn lock(&self, reason: ffi::Option<ffi::Slice<u8>>) -> ffi::Result<ffi::Option<bool>, runtime::Error> {\n"),
+            source.contains("    pub fn lock_(&self, reason: ffi::Option<ffi::Slice<u8>>) -> ffi::Result<ffi::Option<bool>, runtime::Error> {\n"),
             "{source}"
         );
         assert!(source.contains("            let reason = reason.into_option();\n"), "{source}");
@@ -722,6 +724,14 @@ mod tests {
         let error = emit(&[&take], &context).unwrap_err();
         assert_eq!(error.0, "demo::take");
         assert!(error.1.starts_with("parameter `repo`"), "{}", error.1);
+    }
+
+    #[test]
+    fn forbidden_names_are_escaped() {
+        let init = function("demo::init", None, Receiver::None, vec![("value", Type::Primitive("bool".to_owned()))], Some(generic(3, vec![ty(4), ty(5)])));
+        let source = facade(&[init]).source;
+        assert!(source.contains("    pub fn init_(value_: bool) -> ffi::Result<Self, runtime::Error> {\n"), "{source}");
+        assert!(source.contains("runtime::Repo::from(demo::init(value_).map_err(runtime::error)?)"), "{source}");
     }
 
     #[test]

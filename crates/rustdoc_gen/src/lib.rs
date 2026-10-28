@@ -28,6 +28,7 @@ use serde::{Deserialize, Serialize};
 mod cargo_doc;
 mod classify;
 mod facade;
+mod forbidden;
 mod hash;
 mod manifest;
 mod render;
