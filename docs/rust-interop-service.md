@@ -119,12 +119,16 @@ rustdoc shows a mapped type implementing it; trait implementations only suggest 
 holds, and E4's build decides. `analyze` therefore also reads the dependency crates' rustdoc
 JSON, which `extract` already produces.
 
-`analyze` proposes entries by scanning types: handle candidates (returned by free
-constructors, many `&self` methods, no lifetime parameter, `Send + Sync`), string-like types
-(`Display` plus `FromStr` or `TryFrom<&str>`) and byte-like types (`AsRef<[u8]>` or `Deref` to
-bytes), ranked by how many blocked items each unblocks when re-classified with it applied. A
-person accepts them. Representation and meaning (hex or binary ids, paths as bytes or text,
-live or snapshot keys) stay human decisions.
+`analyze` proposes entries for the types that block pending items: string-like types
+(`Display` plus `FromStr` or `TryFrom<&str>`) and byte-like types (`From<&[u8]>` or
+`From<Vec<u8>>` in; `AsRef<[u8]>` or a `Deref` to bytes out), each with its evidence and
+directions. Owners blocked as receivers are listed apart as handle candidates, with their
+`&self` methods, how many functions return them, whether they borrow a lifetime (and so need a
+key) and whether they are `Send + Sync`; they become acceptable with the per-type handle kind
+(E4, E5). Every proposal is ranked by the items it unblocks and the items it removes a blocker
+from, when re-classified with it applied. A person accepts them; whether the emitter can lower
+an accepted mapping is E5's convert kind. Representation and meaning (hex or binary ids, paths
+as bytes or text, live or snapshot keys) stay human decisions.
 
 For gix the manifest maps `BStr`/`BString` as bytes and `ObjectId` as a custom hex string
 (matching GixSharp today); paths are bytes, matching gix-ffi today (still open).
@@ -222,6 +226,13 @@ together.
   other 5. Only blocker: receiver 70, unmapped 118, borrowed 7, `&mut self` on the handle 3,
   iterator 3, unsupported 3. The other 335 receiver-first items also have an unmapped,
   borrowed or generic parameter or result, so per-type handle answers alone unblock about 70.
+- Proposals (E3c, 2026-10-28), gix with its manifest's type map: 10 type-map proposals that
+  unblock 4 items in total (best: `gix::Object` as bytes, out only, 2 unblocked and 14 reduced;
+  `gix_ref::FullName` as string, 1 and 5) and 66 handle candidates, nearly all borrowing
+  `'repo` (best: `Submodule` 11 unblocked and 19 reduced, `Worktree` 7 and 13,
+  `config::Snapshot` 7 and 11, `Id` 6 and 48, `Commit` 6 and 29, `Reference` 5 and 19, `Tree`
+  4 and 25). Per-type handles, not type-map entries, are the lever; the option and value structs
+  among the candidates (`open::Options`, `dirwalk::Options`, `open::Permissions`) are records.
 
 ## Open decisions
 
@@ -251,7 +262,7 @@ type-map proposals ranked by impact (see Type map).
 - [x] E3 Model, classifier and signature hashes; `analyze` writes the manifest. Check the result against the 704-function reference count. Done: the non-deprecated gix surface is 704 functions; items carry a canonical signature, its hash, a class and a status (ready, unresolved, resolved, stale, excluded), and `analyze` rewrites the manifest only when it changes.
 - [x] E3a No target knowledge in the engine: built-in mappings for std only; `string`, `bytes`, `path`, `handle` and `custom` mappings from the manifest; the generic conversion rule over rustdoc trait implementations, reading the dependency crates' JSON; categories from trait implementations. gix's mappings move to its manifest (G3). Done: a custom mapping names its carrier (`string` or `bytes`) and the runtime functions `into_rust` and `into_ffi`; `AsRef`, `Borrow`, `Into` and `TryInto` bounds follow their target's mapping, other traits the implementations rustdoc lists (std carriers first); `Iterator` comes from implementations, not names; `analyze` and `generate` take `dependency_json`, which provenance covers; the reason `mut_repository` is now `mut_handle`.
 - [x] E3b Report every blocker per item. Done: items list `reasons` in order (receiver, parameters, result), the summary adds `sole_blockers`, and items ignore fields that older engine versions wrote. On gix only 70 of the 405 receiver-first items are blocked by the receiver alone (see Reference measurements).
-- [ ] E3c `analyze` proposes type-map entries ranked by how many items each unblocks (with G3).
+- [ ] E3c `analyze` proposes type-map entries ranked by how many items each unblocks (with G3). First increment (report only): the manifest carries `proposals` and `handle_candidates`, ranked by unblocks and reduces (see Type map; gix numbers under Reference measurements). Open: accepted string and bytes mappings need the emitter's convert kind (E5).
 - [ ] E4 Decision validation: structured payloads (see Manifest), per-type handle answers covering `&self` methods only with per-item overrides, and the check that builds the generated facade with the target's features. Needs E3a, and a buildable runtime: G2's minimal runtime or a stub of the runtime contract.
 - [ ] E5 Rust facade emitter (automatic, handle, convert and record kinds) plus inventory registration; handles cross the boundary as keys (see Handles). Facade types get unique module-qualified names (see Naming and namespaces). First increment, the automatic kind: `generate` emits one service for all types mapped to the runtime handle (functions returning the handle become constructors, including `&self` methods as constructors taking `&Self`; free functions and the handle's own type win name clashes; conversions between handle types are dropped), its `&self` methods, and free functions named after their module path. Every member returns `ffi::Result`. It refuses a stale manifest (provenance or items differ from a fresh analysis) and, unless the request sets `partial`, one that is not ready; it rejects output folders outside the worktree and writes `mod.rs` into `rust_output` only when it changes. An end-to-end test builds the generated facade for a demo crate and validates its inventory. The first real generation (gix, `dfe25025`) added two fixes: names interoptopus forbids get a trailing underscore (`init` becomes `init_`), and constructors taking the service name its type, because interoptopus copies their parameters into a free function where `Self` is unknown.
 - [x] E6 Names sidecar in the C# backend. Dropped (2026-10-28): native member names come from `interoptopus_backends::casing`, and the public layer converts native values through overloaded runtime helpers instead of naming native types, so there is nothing to keep in sync.

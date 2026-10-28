@@ -29,9 +29,36 @@ pub struct Manifest {
     /// input.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provenance: Option<Provenance>,
+    /// Proposed type-map entries from the last `analyze`, ranked.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub proposals: Vec<Proposal>,
+    /// Types that could become handles once the per-type handle kind exists, ranked.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub handle_candidates: Vec<Proposal>,
     /// Every surface function from the last `analyze`, sorted by path.
     #[serde(default)]
     pub items: Vec<Item>,
+}
+
+/// A type-map entry `analyze` proposes, or a handle candidate. A person accepts an entry by moving
+/// it into the type map.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Proposal {
+    /// The type, by its shortest public path where it has one.
+    #[serde(rename = "type")]
+    pub ty: String,
+    /// The proposed mapping: `string`, `bytes` or `handle`.
+    pub mapping: String,
+    /// The directions the type converts in: `in` (into Rust) and `out` (out of Rust).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub directions: Vec<String>,
+    /// What matched.
+    pub evidence: Vec<String>,
+    /// Blocked items that become automatic with the proposal applied.
+    pub unblocks: usize,
+    /// Blocked items that lose at least one blocker with the proposal applied.
+    pub reduces: usize,
 }
 
 /// Manifest settings; generation settings are carried for later stages and unused by `analyze`.

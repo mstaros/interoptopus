@@ -33,12 +33,13 @@ mod facade;
 mod forbidden;
 mod hash;
 mod manifest;
+mod propose;
 mod render;
 mod surface;
 
 pub use cargo_doc::{CrateJson, ExtractRequest, ExtractResult, extract};
 pub use classify::{Carrier, Category, Class, Custom, Implementations, Mapping};
-pub use manifest::{Configuration, Decision, DecisionKind, Item, Manifest, Provenance, Status, Summary};
+pub use manifest::{Configuration, Decision, DecisionKind, Item, Manifest, Proposal, Provenance, Status, Summary};
 
 /// An engine subcommand.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -279,8 +280,20 @@ pub fn analyze(request: &AnalyzeRequest) -> Result<AnalyzeResult, EngineError> {
     let classifier = classify::Classifier::new(&renderer, &type_map, &configuration.exclude_paths, &implementations);
     let decisions = manifest.as_ref().map_or(&[][..], |manifest| manifest.decisions.as_slice());
     let (items, summary) = manifest::items(&functions, &renderer, &classifier, decisions);
+    let proposals = {
+        let pending: std::collections::HashSet<&str> = items
+            .iter()
+            .filter(|item| matches!(item.status, manifest::Status::Unresolved | manifest::Status::Stale))
+            .map(|item| item.path.as_str())
+            .collect();
+        let public = surface::public_to_canonical(&krate);
+        let context = propose::Context { renderer: &renderer, classifier: &classifier, implementations: &implementations, public: &public };
+        propose::propose(&functions, &pending, &context)
+    };
     let manifest_updated = match (manifest.as_mut(), request.manifest.as_deref()) {
         (Some(manifest), Some(path)) => {
+            manifest.proposals = proposals.entries;
+            manifest.handle_candidates = proposals.handles;
             manifest.items = items;
             manifest.summary = summary.clone();
             manifest.provenance = Some(Provenance::of(&sources(&json, &digests), &configuration)?);

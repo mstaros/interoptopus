@@ -6,7 +6,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-use rustdoc_types::{AssocItemConstraintKind, Crate, GenericArgs, GenericBound, ItemEnum, Path, Term, Type};
+use rustdoc_types::{
+    AssocItemConstraintKind, Crate, Enum, GenericArgs, GenericBound, GenericParamDefKind, Impl, ItemEnum, Path, Struct, Term, Type, Union,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::render::{Renderer, type_args};
@@ -73,6 +75,7 @@ const CONVERTING: [&str; 4] = ["core::convert::AsRef", "core::borrow::Borrow", "
 
 /// The iterator trait; results implementing it wait for a cursor template.
 const ITERATOR: &str = "core::iter::traits::iterator::Iterator";
+const DEREF: &str = "core::ops::deref::Deref";
 
 /// The class of a surface function.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -144,11 +147,18 @@ pub struct Reason {
     pub category: Category,
     /// The offending type, parameter or rule.
     pub detail: String,
+    /// The canonical path of the type the obstacle is about, when it is one; proposals start
+    /// from it.
+    pub ty: Option<String>,
 }
 
 impl Reason {
     fn new(category: Category, detail: impl Into<String>) -> Self {
-        Self { category, detail: detail.into() }
+        Self { category, detail: detail.into(), ty: None }
+    }
+
+    fn about(self, ty: Option<&str>) -> Self {
+        Self { ty: ty.map(str::to_owned), ..self }
     }
 
     fn in_parameter(self, name: &str) -> Self {
@@ -178,25 +188,58 @@ enum Position {
     Output,
 }
 
-/// Trait implementations listed in rustdoc JSON: each trait path with its implementing types, as
-/// the renderer writes them. Blanket implementations are left out.
+/// Trait implementations listed in rustdoc JSON, plus the type facts proposals need.
+///
+/// Each trait keeps its implementing types as the renderer writes them. Blanket and negative
+/// implementations are left out.
 #[derive(Debug, Default)]
 pub struct Implementations {
     by_trait: BTreeMap<String, BTreeSet<String>>,
+    /// Trait references with their arguments, such as `core::convert::AsRef<[u8]>`.
+    by_reference: BTreeMap<String, BTreeSet<String>>,
+    /// `Deref` targets by implementing type.
+    deref_targets: BTreeMap<String, String>,
+    /// Types declared with a lifetime parameter.
+    with_lifetime: BTreeSet<String>,
 }
 
 impl Implementations {
-    /// Adds the trait implementations one crate's JSON lists.
+    /// Adds the trait implementations and lifetime-generic types one crate's JSON lists.
     pub fn add(&mut self, krate: &Crate) {
         let renderer = Renderer::new(krate);
         for item in krate.index.values() {
-            let ItemEnum::Impl(implementation) = &item.inner else { continue };
-            let Some(trait_) = &implementation.trait_ else { continue };
-            if matches!(implementation.for_, Type::Generic(_)) {
-                continue;
+            match &item.inner {
+                ItemEnum::Impl(implementation) => self.implementation(krate, &renderer, implementation),
+                ItemEnum::Struct(Struct { generics, .. }) | ItemEnum::Enum(Enum { generics, .. }) | ItemEnum::Union(Union { generics, .. }) => {
+                    if generics.params.iter().any(|param| matches!(param.kind, GenericParamDefKind::Lifetime { .. }))
+                        && let Some(summary) = krate.paths.get(&item.id)
+                    {
+                        self.with_lifetime.insert(summary.path.join("::"));
+                    }
+                }
+                _ => {}
             }
-            self.by_trait.entry(renderer.path(trait_)).or_default().insert(renderer.ty(&implementation.for_));
         }
+    }
+
+    fn implementation(&mut self, krate: &Crate, renderer: &Renderer, implementation: &Impl) {
+        let Some(trait_) = &implementation.trait_ else { return };
+        if implementation.is_negative || matches!(implementation.for_, Type::Generic(_)) {
+            return;
+        }
+        let implementer = renderer.ty(&implementation.for_);
+        let trait_path = renderer.path(trait_);
+        if trait_path == DEREF {
+            let target = implementation.items.iter().filter_map(|id| krate.index.get(id)).find_map(|item| match &item.inner {
+                ItemEnum::AssocType { type_: Some(target), .. } if item.name.as_deref() == Some("Target") => Some(renderer.ty(target)),
+                _ => None,
+            });
+            if let Some(target) = target {
+                self.deref_targets.insert(base(&implementer).to_owned(), target);
+            }
+        }
+        self.by_reference.entry(renderer.ty(&Type::ResolvedPath(trait_.clone()))).or_default().insert(implementer.clone());
+        self.by_trait.entry(trait_path).or_default().insert(implementer);
     }
 
     /// The types implementing a trait.
@@ -207,17 +250,46 @@ impl Implementations {
     /// Whether the type at `path`, with any generic arguments, implements the trait.
     #[must_use]
     pub fn implements(&self, path: &str, trait_path: &str) -> bool {
-        self.implementers(trait_path).any(|implementer| implementer.split('<').next() == Some(path))
+        self.implementers(trait_path).any(|implementer| base(implementer) == path)
+    }
+
+    /// Whether the type at `path`, or a borrow of it, implements a trait reference with its
+    /// arguments, such as `core::convert::AsRef<[u8]>`.
+    #[must_use]
+    pub fn implements_reference(&self, path: &str, reference: &str) -> bool {
+        self.by_reference.get(reference).into_iter().flatten().any(|implementer| base(implementer) == path)
+    }
+
+    /// The `Deref` target of the type at `path`, as the renderer writes it.
+    #[must_use]
+    pub fn deref_target(&self, path: &str) -> Option<&str> {
+        self.deref_targets.get(path).map(String::as_str)
+    }
+
+    /// Whether the type at `path` is declared with a lifetime parameter.
+    #[must_use]
+    pub fn has_lifetime(&self, path: &str) -> bool {
+        self.with_lifetime.contains(path)
     }
 
     /// Implementations from (trait, implementing type) pairs.
     #[cfg(test)]
     pub(crate) fn from_pairs<'p>(pairs: impl IntoIterator<Item = (&'p str, &'p str)>) -> Self {
         let mut implementations = Self::default();
-        for (trait_path, implementer) in pairs {
+        for (reference, implementer) in pairs {
+            let trait_path = reference.split('<').next().unwrap_or(reference);
             implementations.by_trait.entry(trait_path.to_owned()).or_default().insert(implementer.to_owned());
+            implementations.by_reference.entry(reference.to_owned()).or_default().insert(implementer.to_owned());
         }
         implementations
+    }
+
+    /// Records a `Deref` target and the types declared with a lifetime.
+    #[cfg(test)]
+    pub(crate) fn with_facts<'p>(mut self, derefs: impl IntoIterator<Item = (&'p str, &'p str)>, lifetimes: &[&str]) -> Self {
+        self.deref_targets.extend(derefs.into_iter().map(|(path, target)| (path.to_owned(), target.to_owned())));
+        self.with_lifetime.extend(lifetimes.iter().map(|path| (*path).to_owned()));
+        self
     }
 }
 
@@ -241,6 +313,14 @@ impl<'a> Classifier<'a> {
         let mut types: BTreeMap<String, Mapping> = STD_TYPES.iter().map(|(path, mapping)| ((*path).to_owned(), mapping.clone())).collect();
         types.extend(overrides.iter().map(|(path, mapping)| (path.clone(), mapping.clone())));
         Self { renderer, types, exclude_paths, implementations }
+    }
+
+    /// This classifier with one more type-map entry, for measuring a proposal.
+    #[must_use]
+    pub fn with(&self, canonical: &str, mapping: Mapping) -> Self {
+        let mut types = self.types.clone();
+        types.insert(canonical.to_owned(), mapping);
+        Self { renderer: self.renderer, types, exclude_paths: self.exclude_paths, implementations: self.implementations }
     }
 
     /// The verdict for one function.
@@ -352,7 +432,8 @@ impl<'a> Classifier<'a> {
             (Receiver::Value | Receiver::Other(_), Some(Mapping::Handle)) => {
                 Err(Reason::new(Category::Receiver, "takes the runtime handle by value or wrapped"))
             }
-            _ => Err(Reason::new(Category::Receiver, format!("{} is not a handle", function.owner.as_deref().unwrap_or("Self")))),
+            _ => Err(Reason::new(Category::Receiver, format!("{} is not a handle", function.owner.as_deref().unwrap_or("Self")))
+                .about(function.owner.as_deref())),
         }
     }
 
@@ -414,7 +495,7 @@ impl<'a> Classifier<'a> {
 
     fn owner_value(&self, function: &Function) -> Result<(), Reason> {
         self.owner_mapping(function).map(|_| ()).ok_or_else(|| {
-            Reason::new(Category::Unmapped, format!("Self ({})", function.owner.as_deref().unwrap_or("no owner")))
+            Reason::new(Category::Unmapped, format!("Self ({})", function.owner.as_deref().unwrap_or("no owner"))).about(function.owner.as_deref())
         })
     }
 
@@ -449,17 +530,18 @@ impl<'a> Classifier<'a> {
     /// The reason for a type that cannot cross as written, with the most specific category.
     fn blocked(&self, ty: &Type, fallback: Category) -> Reason {
         let rendered = self.renderer.ty(ty);
-        let category = match ty {
+        let (category, about) = match ty {
             Type::DynTrait(dyn_trait) => {
-                dyn_trait.traits.iter().find_map(|poly| trait_category(&self.renderer.path(&poly.trait_))).unwrap_or(fallback)
+                (dyn_trait.traits.iter().find_map(|poly| trait_category(&self.renderer.path(&poly.trait_))).unwrap_or(fallback), None)
             }
             Type::ResolvedPath(path) => {
-                let category = self.unmapped(&self.renderer.path(path), &rendered).category;
-                if category == Category::Unmapped { fallback } else { category }
+                let canonical = self.renderer.path(path);
+                let category = self.unmapped(&canonical, &rendered).category;
+                (if category == Category::Unmapped { fallback } else { category }, Some(canonical))
             }
-            _ => fallback,
+            _ => (fallback, None),
         };
-        Reason::new(category, rendered)
+        Reason::new(category, rendered).about(about.as_deref())
     }
 
     /// An unmapped type, categorized by what it implements rather than by its name.
@@ -471,8 +553,14 @@ impl<'a> Classifier<'a> {
         } else {
             Category::Unmapped
         };
-        Reason::new(category, rendered)
+        Reason::new(category, rendered).about(Some(canonical))
     }
+}
+
+/// A rendered type without borrow or generic arguments: `&demo::Name<u8>` becomes `demo::Name`.
+fn base(rendered: &str) -> &str {
+    let unborrowed = rendered.trim_start_matches('&').trim_start_matches("mut ");
+    unborrowed.split('<').next().unwrap_or(unborrowed)
 }
 
 /// The specific category of a std trait, if it has one.
@@ -588,6 +676,27 @@ mod tests {
         let function = method(Receiver::Exclusive, vec![("error", resolved(7, Vec::new()))], Some(resolved(8, Vec::new())));
         let categories: Vec<Category> = classify(&function).reasons.iter().map(|reason| reason.category).collect();
         assert_eq!(categories, [Category::MutHandle, Category::Unmapped, Category::Iterator]);
+    }
+
+    #[test]
+    fn blockers_name_the_type_they_are_about() {
+        let function = method(Receiver::Exclusive, vec![("error", resolved(7, Vec::new()))], None);
+        let verdict = classify(&function);
+        let types: Vec<Option<&str>> = verdict.reasons.iter().map(|reason| reason.ty.as_deref()).collect();
+        assert_eq!(types, [None, Some("demo::Error")]);
+        let mut elsewhere = method(Receiver::Shared, Vec::new(), None);
+        elsewhere.owner = Some("demo::Other".to_owned());
+        elsewhere.owner_public = None;
+        assert_eq!(classify(&elsewhere).reasons[0].ty.as_deref(), Some("demo::Other"));
+    }
+
+    #[test]
+    fn references_keep_their_arguments_and_borrowed_implementers_count() {
+        let implementations = Implementations::from_pairs([("core::convert::AsRef<[u8]>", "demo::Blob"), ("core::convert::From<&[u8]>", "&demo::Name")]);
+        assert!(implementations.implements_reference("demo::Blob", "core::convert::AsRef<[u8]>"));
+        assert!(!implementations.implements_reference("demo::Blob", "core::convert::AsRef<str>"));
+        assert!(implementations.implements_reference("demo::Name", "core::convert::From<&[u8]>"));
+        assert!(implementations.implements("demo::Blob", "core::convert::AsRef"));
     }
 
     #[test]
