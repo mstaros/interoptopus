@@ -280,7 +280,9 @@ pub fn analyze(request: &AnalyzeRequest) -> Result<AnalyzeResult, EngineError> {
     let classifier = classify::Classifier::new(&renderer, &type_map, &configuration.exclude_paths, &implementations);
     classifier.validate().map_err(|why| EngineError::new(ErrorCode::InvalidRequest, why))?;
     let decisions = manifest.as_ref().map_or(&[][..], |manifest| manifest.decisions.as_slice());
-    let (items, summary) = manifest::items(&functions, &renderer, &classifier, decisions);
+    let runtime = configuration.runtime_module.as_deref().unwrap_or("crate::runtime");
+    let lowering = facade::Context { renderer: &renderer, classifier: &classifier, runtime, provenance: "" };
+    let (items, summary) = manifest::items(&functions, &renderer, |function| facade::verdict(function, &lowering), decisions);
     let proposals = {
         let pending: std::collections::HashSet<&str> = items
             .iter()
@@ -345,7 +347,9 @@ pub fn generate(request: &GenerateRequest) -> Result<GenerateResult, EngineError
     let type_map = type_map(&krate, configuration);
     let classifier = classify::Classifier::new(&renderer, &type_map, &configuration.exclude_paths, &implementations);
     classifier.validate().map_err(|why| EngineError::new(ErrorCode::InvalidRequest, why))?;
-    let (items, _) = manifest::items(&functions, &renderer, &classifier, &manifest.decisions);
+    let runtime = configuration.runtime_module.as_deref().unwrap_or("crate::runtime");
+    let lowering = facade::Context { renderer: &renderer, classifier: &classifier, runtime, provenance: "" };
+    let (items, _) = manifest::items(&functions, &renderer, |function| facade::verdict(function, &lowering), &manifest.decisions);
     if items != manifest.items {
         return Err(EngineError::new(ErrorCode::StaleManifest, "the manifest items differ from a fresh analysis; run analyze first"));
     }
@@ -363,7 +367,6 @@ pub fn generate(request: &GenerateRequest) -> Result<GenerateResult, EngineError
         krate.crate_version.as_deref().unwrap_or("(unversioned)"),
         krate.format_version
     );
-    let runtime = configuration.runtime_module.as_deref().unwrap_or("crate::runtime");
     let context = facade::Context { renderer: &renderer, classifier: &classifier, runtime, provenance: &header };
     let facade = facade::emit(&selected, &context)
         .map_err(|(path, why)| EngineError::new(ErrorCode::Internal, format!("cannot emit `{path}`: {why}")))?;
@@ -738,7 +741,7 @@ pub fn open(path: impl AsRef<std::path::Path>) -> Result<Repo, std::io::Error> {
         assert!(generated.written);
         let csharp = fs::read_to_string(generated.csharp_file.as_ref().expect("the C# layer is written")).expect("the C# layer reads back");
         assert!(csharp.contains("namespace Demo\n") && csharp.contains("public sealed class Repo : IDisposable"), "{csharp}");
-        assert!(csharp.contains("public static Repo Open(string directory)"), "{csharp}");
+        assert!(csharp.contains("public static Repo Open(string path)"), "{csharp}");
         assert_eq!((generated.emitted, generated.pending), (2, 3), "demo::open and demo::Repo::name; three items await decisions");
         assert!(!generate(&request).expect("the facade is generated again").written, "regenerating changes nothing");
         assert!(cargo(&["test", "--offline", "-p", "facade"]), "the generated facade builds and registers with an inventory");

@@ -165,6 +165,8 @@ pub enum Category {
     Io,
     /// A construct the engine does not support, such as `async` or raw pointers.
     Unsupported,
+    /// The classifier passes the item, but the emitter does not generate it yet.
+    Lowering,
 }
 
 impl Category {
@@ -185,6 +187,7 @@ impl Category {
             Self::Cancellation => "cancellation",
             Self::Io => "io",
             Self::Unsupported => "unsupported",
+            Self::Lowering => "lowering",
         }
     }
 }
@@ -204,6 +207,12 @@ pub struct Reason {
 impl Reason {
     fn new(category: Category, detail: impl Into<String>) -> Self {
         Self { category, detail: detail.into(), ty: None }
+    }
+
+    /// An item the emitter does not generate, with the emitter's reason.
+    #[must_use]
+    pub fn lowering(detail: impl Into<String>) -> Self {
+        Self::new(Category::Lowering, detail)
     }
 
     fn about(self, ty: Option<&str>) -> Self {

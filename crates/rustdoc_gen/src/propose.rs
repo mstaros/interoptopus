@@ -1,9 +1,10 @@
 //! Type-map proposals (todo E3c). `analyze` collects the types that block pending items and
 //! proposes a mapping for each from what it implements: `string` for `Display` plus `FromStr` or
 //! `TryFrom<&str>`; `bytes` for `From<&[u8]>` or `From<Vec<u8>>` (in) and `AsRef<[u8]>` or a
-//! `Deref` to bytes (out). Owners blocked as receivers become handle candidates, listed apart
-//! until the per-type handle kind exists (E4, E5). Each proposal is ranked by the blocked items
-//! it unblocks, and the items it removes a blocker from, when re-classified with it applied. A
+//! `Deref` to bytes (out). Owners blocked as receivers become handle candidates, measured as keyed
+//! handles and listed apart, since accepting one needs its rebuild and key. Each proposal is ranked
+//! by the blocked items it unblocks, and the items it removes a blocker from, when classified and
+//! lowered (`facade::verdict`) with it applied. A
 //! person accepts a proposal by moving it into the type map; whether the emitter can lower the
 //! accepted mapping is a separate question (E5's convert kind).
 
@@ -11,7 +12,8 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use rustdoc_types::Type;
 
-use crate::classify::{Category, Classifier, Implementations, Mapping, Reason};
+use crate::classify::{Category, Classifier, Implementations, KEY_PLACEHOLDER, Keyed, Mapping, REPO_PLACEHOLDER, Reason, VALUE_PLACEHOLDER};
+use crate::facade;
 use crate::manifest::Proposal;
 use crate::render::{Renderer, type_args};
 use crate::surface::{Function, Receiver};
@@ -52,7 +54,7 @@ pub fn propose(functions: &[Function], pending: &HashSet<&str>, context: &Contex
     let blocked: Vec<(&Function, Vec<Reason>)> = functions
         .iter()
         .filter(|function| pending.contains(function.path.as_str()))
-        .map(|function| (function, context.classifier.classify(function).reasons))
+        .map(|function| (function, facade::verdict(function, &lowering(context.classifier, context)).reasons))
         .filter(|(_, reasons)| !reasons.is_empty())
         .collect();
     let mut types: BTreeMap<&str, bool> = BTreeMap::new();
@@ -75,7 +77,7 @@ pub fn propose(functions: &[Function], pending: &HashSet<&str>, context: &Contex
             proposals.entries.push(measure(Mapping::Bytes, directions, evidence));
         }
         if receiver {
-            proposals.handles.push(measure(Mapping::Handle, Vec::new(), handle_evidence(ty, functions, context)));
+            proposals.handles.push(measure(keyed_probe(ty, context), Vec::new(), handle_evidence(ty, functions, context)));
         }
     }
     for list in [&mut proposals.entries, &mut proposals.handles] {
@@ -108,7 +110,7 @@ fn ranked(
     let applied = context.classifier.with(ty, mapping);
     let (mut unblocks, mut reduces) = (0, 0);
     for (function, reasons) in blocked.iter().filter(|(_, reasons)| reasons.iter().any(|reason| reason.ty.as_deref() == Some(ty))) {
-        let remaining = applied.classify(function).reasons.len();
+        let remaining = facade::verdict(function, &lowering(&applied, context)).reasons.len();
         if remaining == 0 {
             unblocks += 1;
         }
@@ -124,6 +126,25 @@ fn ranked(
         unblocks,
         reduces,
     }
+}
+
+/// The emitter's context for classifying and lowering with `classifier`.
+fn lowering<'a>(classifier: &'a Classifier<'a>, context: &'a Context<'a>) -> facade::Context<'a> {
+    facade::Context { renderer: context.renderer, classifier, runtime: "crate::runtime", provenance: "" }
+}
+
+/// A keyed mapping for `ty` that classifies and lowers like any keyed handle; it measures a handle
+/// candidate, whose real rebuild and key a person supplies on acceptance.
+fn keyed_probe(ty: &str, context: &Context<'_>) -> Mapping {
+    Mapping::Keyed(Keyed {
+        repo: context.classifier.handles().next().unwrap_or_default().to_owned(),
+        key: "u64".to_owned(),
+        rebuild: [REPO_PLACEHOLDER, KEY_PLACEHOLDER].concat(),
+        fallible: false,
+        key_of: VALUE_PLACEHOLDER.to_owned(),
+        key_name: "key".to_owned(),
+        name: ty.to_owned(),
+    })
 }
 
 /// `Display` plus a way to parse: crosses as text both ways.
@@ -260,7 +281,7 @@ mod tests {
         assert_eq!(proposals.entries[1].directions, ["out"]);
 
         let [commit] = proposals.handles.as_slice() else { panic!("one handle candidate: {:?}", proposals.handles) };
-        assert_eq!((commit.ty.as_str(), commit.mapping.as_str(), commit.unblocks, commit.reduces), ("demo::Commit", "handle", 1, 2));
+        assert_eq!((commit.ty.as_str(), commit.mapping.as_str(), commit.unblocks, commit.reduces), ("demo::Commit", "keyed", 1, 2));
         assert_eq!(commit.evidence, ["&self methods: 1", "returned by: 1", "borrows a lifetime: needs a key", "Send + Sync"]);
     }
 

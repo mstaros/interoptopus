@@ -16,6 +16,9 @@
 //! - `Text`, `Bytes`, `Path` and `Flag` over owned native values and options (`Text` also over
 //!   optional text, for optional keys), and `Text`, `Bytes`, `Flag`, `Value` and `Done` over
 //!   free-function results (`IResult<T, TError>`).
+//!
+//! The runtime's overloads follow the native types the generated code uses: a native type exists
+//! only once a generated member needs it, and a missing overload is a compile error naming it.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;

@@ -13,6 +13,9 @@
 //! functions and constructors taking a keyed handle are dropped, since they have no handle to
 //! rebuild from.
 //!
+//! `verdict` runs the emitter on every function the classifier passes and turns what it does not
+//! generate into a decision, so an automatic item is a generated one by construction.
+//!
 //! Every member returns `ffi::Result<T, runtime::Error>`. Text and bytes convert inline; the
 //! rest goes through the hand-written runtime module (configuration `runtime_module`, default
 //! `crate::runtime`), which provides:
@@ -30,7 +33,9 @@ use std::fmt::Write as _;
 
 use rustdoc_types::{GenericBound, Type};
 
-use crate::classify::{Carrier, Classifier, Conversion, KEY_PLACEHOLDER, Keyed, Mapping, REPO_PLACEHOLDER, VALUE_PLACEHOLDER};
+use crate::classify::{
+    Carrier, Class, Classifier, Conversion, KEY_PLACEHOLDER, Keyed, Mapping, REPO_PLACEHOLDER, Reason, VALUE_PLACEHOLDER, Verdict,
+};
 use crate::forbidden::escaped;
 use crate::render::{Renderer, last_segment, type_args};
 use crate::surface::{Function, Receiver};
@@ -164,6 +169,8 @@ enum Conv {
     Str,
     /// `String` from text.
     Text,
+    /// `&String` from text.
+    TextRef,
     /// `&[u8]` from bytes.
     Bytes,
     /// A byte-string type converted from `&[u8]` with `Into`.
@@ -179,6 +186,10 @@ enum Conv {
     /// A keyed handle rebuilt from its key: `key` converts the FFI key, `accessor` names the
     /// holder accessor of the handle it is rebuilt from; `borrowed` passes a reference.
     Keyed { keyed: Box<Keyed>, key: Box<Self>, accessor: String, borrowed: bool },
+    /// A boxed value.
+    Boxed(Box<Self>),
+    /// A `Cow` borrowing the value.
+    Cow(Box<Self>),
 }
 
 /// A lowered parameter: the FFI type and how it converts.
@@ -228,6 +239,21 @@ pub fn emit(functions: &[&Function], context: &Context<'_>) -> Result<Facade, (S
     let members: Vec<&Member> = kept.values().collect();
     let generated = members.iter().map(|member| member.generated.clone()).collect();
     Ok(Facade { source: emitter.module(&members), emitted: paths, dropped, members: generated, service: emitter.service })
+}
+
+/// The classifier's verdict, with an automatic function the emitter does not generate turned
+/// into a decision (category `lowering`, with the emitter's reason).
+#[must_use]
+pub fn verdict(function: &Function, context: &Context<'_>) -> Verdict {
+    let verdict = context.classifier.classify(function);
+    if verdict.class != Class::Automatic {
+        return verdict;
+    }
+    let emitter = Emitter { context, service: service_name(context.classifier) };
+    match emitter.member(function) {
+        Ok(Planned::Member(_)) => verdict,
+        Ok(Planned::Dropped(why)) | Err(why) => Verdict { class: Class::Decision, reasons: vec![Reason::lowering(why)] },
+    }
 }
 
 /// The service is named after the shortest type mapped to the repository handle.
@@ -331,7 +357,11 @@ impl Emitter<'_> {
                 shapes.insert(0, (handle_parameter.clone(), Shape::Service));
                 format!("{handle_parameter}.inner.{accessor}().{}({})", function.name, arguments.join(", "))
             }
-            (true, Some(accessor)) => format!("self.inner.{accessor}().{}({})", function.name, arguments.join(", ")),
+            (true, Some(accessor)) => {
+                let holder = format!("let {accessor} = &self.inner.{accessor}();");
+                let receiver = if setup.contains(&holder) { accessor.clone() } else { format!("self.inner.{accessor}()") };
+                format!("{receiver}.{}({})", function.name, arguments.join(", "))
+            }
             (true, None) => return Err("a method of a type that is not a handle".to_owned()),
             (false, _) => format!("{}({})", item_path(&function.path), arguments.join(", ")),
             }
@@ -342,7 +372,7 @@ impl Emitter<'_> {
             (Place::Service, escaped(&function.name), "", "Self".to_owned(), holder)
         } else {
             let unit = Type::Tuple(Vec::new());
-            let (returns, value) = self.output(function.output.as_ref().unwrap_or(&unit), &call)?;
+            let (returns, value) = self.output(function, function.output.as_ref().unwrap_or(&unit), &call)?;
             if method {
                 (Place::Service, escaped(&member_name), "&self", returns, value)
             } else {
@@ -354,7 +384,7 @@ impl Emitter<'_> {
             (MemberKind::Constructor, Shape::Service)
         } else {
             let kind = if method { MemberKind::Method } else { MemberKind::Function };
-            (kind, self.shape(function.output.as_ref().unwrap_or(&output_type)))
+            (kind, self.shape(function, function.output.as_ref().unwrap_or(&output_type)))
         };
         let keyed_owner = keyed_owner.map(|(_, keyed)| self.keyed_type(&keyed));
         let generated = GeneratedMember { path: function.path.clone(), kind, name: name.clone(), params: shapes, output, keyed_owner };
@@ -362,24 +392,7 @@ impl Emitter<'_> {
         if !receiver.is_empty() {
             parameters.insert(0, receiver.to_owned());
         }
-        let indent = if place == Place::Service { "    " } else { "" };
-        let mut source = String::new();
-        let _ = writeln!(source, "{indent}/// Wraps `{}`.", item_path(&function.path));
-        if place == Place::Free {
-            let _ = writeln!(source, "#[ffi]");
-        }
-        let _ = writeln!(source, "{indent}pub fn {name}({}) -> ffi::Result<{returns}, runtime::Error> {{", parameters.join(", "));
-        if setup.is_empty() {
-            let _ = writeln!(source, "{indent}    finish(|| Ok({value}))");
-        } else {
-            let _ = writeln!(source, "{indent}    finish(|| {{");
-            for line in &setup {
-                let _ = writeln!(source, "{indent}        {line}");
-            }
-            let _ = writeln!(source, "{indent}        Ok({value})");
-            let _ = writeln!(source, "{indent}    }})");
-        }
-        let _ = writeln!(source, "{indent}}}");
+        let source = wrapper(place, &function.path, &name, &parameters, &returns, &setup, &value);
         Ok(Planned::Member(Box::new(Member { place, name, rank, path: function.path.clone(), source, generated })))
     }
 
@@ -387,52 +400,48 @@ impl Emitter<'_> {
         match ty {
             Type::ImplTrait(bounds) => self.converted(bounds),
             Type::Generic(name) if name != "Self" => self.converted(function.generics.get(name).map_or(&[][..], Vec::as_slice)),
+            Type::Generic(_) => self.owner_input(function, false),
             Type::Primitive(name) if PRIMITIVES.contains(&name.as_str()) => Ok(Input::new(name, Conv::Same)),
-            Type::BorrowedRef { is_mutable: false, type_, .. } => self.borrowed_input(type_),
+            Type::BorrowedRef { is_mutable: false, type_, .. } => self.borrowed_input(function, type_),
             Type::ResolvedPath(path) => {
                 let canonical = self.context.renderer.path(path);
                 match (canonical.as_str(), type_args(path).as_slice()) {
                     ("core::option::Option", [inner]) => {
                         let inner = self.input(function, inner)?;
-                        if matches!(inner.conv, Conv::Option(_)) {
-                            return Err("a nested Option".to_owned());
-                        }
-                        if matches!(inner.conv, Conv::Keyed { .. }) {
-                            return Err("an optional keyed handle".to_owned());
+                        let simple = matches!(
+                            inner.conv,
+                            Conv::Same | Conv::Ref | Conv::Str | Conv::Text | Conv::Bytes | Conv::BytesInto | Conv::BytesOwned | Conv::Path { .. } | Conv::Custom { .. }
+                        );
+                        if !simple {
+                            return Err(format!("an optional {}", self.rendered(ty)));
                         }
                         Ok(Input { ffi: format!("ffi::Option<{}>", inner.ffi), conv: Conv::Option(Box::new(inner.conv)) })
                     }
                     ("alloc::vec::Vec", [Type::Primitive(byte)]) if byte == "u8" => Ok(Input::new("ffi::Slice<u8>", Conv::BytesOwned)),
-                    _ => match self.mapping(&canonical) {
-                        Some(Mapping::String) => Ok(Input::new("ffi::String", Conv::Text)),
-                        Some(Mapping::Bytes) => Ok(Input::new("ffi::Slice<u8>", Conv::BytesInto)),
-                        Some(Mapping::Path) => Ok(Input::new("ffi::Slice<u8>", Conv::Path { borrowed: false })),
-                        Some(Mapping::Custom(custom)) => {
-                            Ok(Input::new(carrier_in(custom.ffi), Conv::Custom { function: custom.into_rust, borrowed: false }))
-                        }
-                        Some(Mapping::Keyed(keyed)) => self.keyed_input(&keyed, false),
-                        Some(Mapping::Handle) | None => Err(self.rendered(ty)),
-                    },
+                    ("alloc::boxed::Box", [inner]) => {
+                        let inner = self.input(function, inner)?;
+                        Ok(Input { ffi: inner.ffi, conv: Conv::Boxed(Box::new(inner.conv)) })
+                    }
+                    ("alloc::borrow::Cow", [inner]) => {
+                        let inner = self.borrowed_input(function, inner)?;
+                        Ok(Input { ffi: inner.ffi, conv: Conv::Cow(Box::new(inner.conv)) })
+                    }
+                    _ => self.mapped_input(self.mapping(&canonical), false)?.ok_or_else(|| self.rendered(ty)),
                 }
             }
             _ => Err(self.rendered(ty)),
         }
     }
 
-    fn borrowed_input(&self, inner: &Type) -> Result<Input, String> {
+    fn borrowed_input(&self, function: &Function, inner: &Type) -> Result<Input, String> {
         match inner {
             Type::Primitive(name) if name == "str" => Ok(Input::new("ffi::String", Conv::Str)),
             Type::Primitive(name) if PRIMITIVES.contains(&name.as_str()) => Ok(Input::new(name, Conv::Ref)),
             Type::Slice(element) if is_byte(element) => Ok(Input::new("ffi::Slice<u8>", Conv::Bytes)),
-            Type::ResolvedPath(path) => match self.mapping(&self.context.renderer.path(path)) {
-                Some(Mapping::Bytes) => Ok(Input::new("ffi::Slice<u8>", Conv::BytesInto)),
-                Some(Mapping::Path) => Ok(Input::new("ffi::Slice<u8>", Conv::Path { borrowed: true })),
-                Some(Mapping::Custom(custom)) => {
-                    Ok(Input::new(carrier_in(custom.ffi), Conv::Custom { function: custom.into_rust, borrowed: true }))
-                }
-                Some(Mapping::Keyed(keyed)) => self.keyed_input(&keyed, true),
-                _ => Err(format!("&{}", self.rendered(inner))),
-            },
+            Type::ResolvedPath(path) => {
+                self.mapped_input(self.mapping(&self.context.renderer.path(path)), true)?.ok_or_else(|| format!("&{}", self.rendered(inner)))
+            }
+            Type::Generic(name) if name == "Self" => self.owner_input(function, true),
             _ => Err(format!("&{}", self.rendered(inner))),
         }
     }
@@ -451,8 +460,9 @@ impl Emitter<'_> {
     }
 
     /// The FFI type of a result and the conversion of `value` into it.
-    fn output(&self, ty: &Type, value: &str) -> Result<(String, String), String> {
+    fn output(&self, function: &Function, ty: &Type, value: &str) -> Result<(String, String), String> {
         match ty {
+            Type::Generic(name) if name == "Self" => self.owner_output(function, value, ty),
             Type::Tuple(types) if types.is_empty() => Ok(("()".to_owned(), value.to_owned())),
             Type::Primitive(name) if PRIMITIVES.contains(&name.as_str()) => Ok((name.clone(), value.to_owned())),
             Type::BorrowedRef { is_mutable: false, type_, .. } => match type_.as_ref() {
@@ -460,21 +470,24 @@ impl Emitter<'_> {
                 Type::Primitive(name) if PRIMITIVES.contains(&name.as_str()) => Ok((name.clone(), format!("*{value}"))),
                 Type::Slice(element) if is_byte(element) => Ok(bytes_out(value)),
                 Type::ResolvedPath(path) => self.mapped_output(&self.context.renderer.path(path), value, ty),
+                Type::Generic(name) if name == "Self" => self.owner_output(function, value, ty),
                 _ => Err(self.rendered(ty)),
             },
             Type::ResolvedPath(path) => {
                 let canonical = self.context.renderer.path(path);
                 match (canonical.as_str(), type_args(path).as_slice()) {
                     ("core::option::Option", [inner]) => {
-                        let (ffi, convert) = self.output(inner, "value")?;
+                        let (ffi, convert) = self.output(function, inner, "value")?;
                         if convert.contains('?') {
                             return Err("an Option of a Result".to_owned());
                         }
                         let mapped = if convert == "value" { value.to_owned() } else { format!("{value}.map(|value| {convert})") };
                         Ok((format!("ffi::Option<{ffi}>"), format!("ffi::Option::from({mapped})")))
                     }
-                    ("core::result::Result", [ok, _]) => self.output(ok, &format!("{value}.map_err(runtime::error)?")),
+                    ("core::result::Result", [ok, _]) => self.output(function, ok, &format!("{value}.map_err(runtime::error)?")),
                     ("alloc::vec::Vec", [Type::Primitive(byte)]) if byte == "u8" => Ok(bytes_out(value)),
+                    ("alloc::boxed::Box", [inner]) => self.output(function, inner, &format!("(*{value})")),
+                    ("alloc::borrow::Cow", [inner]) => self.output(function, &borrowed(inner), &format!("(&*{value})")),
                     _ => self.mapped_output(&canonical, value, ty),
                 }
             }
@@ -483,27 +496,61 @@ impl Emitter<'_> {
     }
 
     /// The shape of a result `output` lowered.
-    fn shape(&self, ty: &Type) -> Shape {
+    fn shape(&self, function: &Function, ty: &Type) -> Shape {
         match ty {
             Type::Primitive(name) => Shape::Primitive(name.clone()),
+            Type::Generic(name) if name == "Self" => self.owner_canonical(function).map_or(Shape::Unit, |owner| self.mapped_shape(owner)),
             Type::BorrowedRef { type_, .. } => match type_.as_ref() {
                 Type::Primitive(name) if name == "str" => Shape::Text,
                 Type::Primitive(name) => Shape::Primitive(name.clone()),
                 Type::Slice(_) => Shape::Bytes,
                 Type::ResolvedPath(path) => self.mapped_shape(&self.context.renderer.path(path)),
+                Type::Generic(name) if name == "Self" => self.owner_canonical(function).map_or(Shape::Unit, |owner| self.mapped_shape(owner)),
                 _ => Shape::Unit,
             },
             Type::ResolvedPath(path) => {
                 let canonical = self.context.renderer.path(path);
                 match (canonical.as_str(), type_args(path).as_slice()) {
-                    ("core::option::Option", [inner]) => Shape::Option(Box::new(self.shape(inner))),
-                    ("core::result::Result", [ok, _]) => self.shape(ok),
+                    ("core::option::Option", [inner]) => Shape::Option(Box::new(self.shape(function, inner))),
+                    ("core::result::Result", [ok, _]) => self.shape(function, ok),
+                    ("alloc::boxed::Box", [inner]) => self.shape(function, inner),
+                    ("alloc::borrow::Cow", [inner]) => self.shape(function, &borrowed(inner)),
                     ("alloc::vec::Vec", [_]) => Shape::Bytes,
                     _ => self.mapped_shape(&canonical),
                 }
             }
             _ => Shape::Unit,
         }
+    }
+
+    /// A mapped type as a parameter, owned or borrowed; `None` when it does not cross.
+    fn mapped_input(&self, mapping: Option<Mapping>, borrowed: bool) -> Result<Option<Input>, String> {
+        Ok(Some(match mapping {
+            Some(Mapping::String) if borrowed => Input::new("ffi::String", Conv::TextRef),
+            Some(Mapping::String) => Input::new("ffi::String", Conv::Text),
+            Some(Mapping::Bytes) => Input::new("ffi::Slice<u8>", Conv::BytesInto),
+            Some(Mapping::Path) => Input::new("ffi::Slice<u8>", Conv::Path { borrowed }),
+            Some(Mapping::Custom(custom)) => Input::new(carrier_in(custom.ffi), Conv::Custom { function: custom.into_rust, borrowed }),
+            Some(Mapping::Keyed(keyed)) => return self.keyed_input(&keyed, borrowed).map(Some),
+            Some(Mapping::Handle) | None => return Ok(None),
+        }))
+    }
+
+    /// The owner's canonical or public path, whichever the type map has.
+    fn owner_canonical<'f>(&self, function: &'f Function) -> Option<&'f str> {
+        [&function.owner, &function.owner_public].into_iter().flatten().find(|path| self.mapping(path).is_some()).map(String::as_str)
+    }
+
+    /// `Self` or `&Self` as a parameter, through the owner's mapping.
+    fn owner_input(&self, function: &Function, borrowed: bool) -> Result<Input, String> {
+        let mapping = self.owner_canonical(function).and_then(|owner| self.mapping(owner));
+        self.mapped_input(mapping, borrowed)?.ok_or_else(|| if borrowed { "&Self".to_owned() } else { "Self".to_owned() })
+    }
+
+    /// `Self` or `&Self` as a result, through the owner's mapping.
+    fn owner_output(&self, function: &Function, value: &str, ty: &Type) -> Result<(String, String), String> {
+        let owner = self.owner_canonical(function).ok_or_else(|| self.rendered(ty))?;
+        self.mapped_output(owner, value, ty)
     }
 
     fn mapped_shape(&self, canonical: &str) -> Shape {
@@ -651,6 +698,29 @@ impl Emitter<'_> {
     }
 }
 
+/// A wrapper's source: its doc comment, signature and body.
+fn wrapper(place: Place, path: &str, name: &str, parameters: &[String], returns: &str, setup: &[String], value: &str) -> String {
+    let indent = if place == Place::Service { "    " } else { "" };
+    let mut source = String::new();
+    let _ = writeln!(source, "{indent}/// Wraps `{}`.", item_path(path));
+    if place == Place::Free {
+        let _ = writeln!(source, "#[ffi]");
+    }
+    let _ = writeln!(source, "{indent}pub fn {name}({}) -> ffi::Result<{returns}, runtime::Error> {{", parameters.join(", "));
+    if setup.is_empty() {
+        let _ = writeln!(source, "{indent}    finish(|| Ok({value}))");
+    } else {
+        let _ = writeln!(source, "{indent}    finish(|| {{");
+        for line in setup {
+            let _ = writeln!(source, "{indent}        {line}");
+        }
+        let _ = writeln!(source, "{indent}        Ok({value})");
+        let _ = writeln!(source, "{indent}    }})");
+    }
+    let _ = writeln!(source, "{indent}}}");
+    source
+}
+
 /// The Rust argument built from the FFI parameter `name`, adding any statements it needs first.
 fn argument(name: &str, conv: &Conv, setup: &mut Vec<String>) -> String {
     match conv {
@@ -658,6 +728,7 @@ fn argument(name: &str, conv: &Conv, setup: &mut Vec<String>) -> String {
         Conv::Ref => format!("&{name}"),
         Conv::Str => format!("{name}.as_str()"),
         Conv::Text => format!("{name}.into_string()"),
+        Conv::TextRef => format!("&{name}.into_string()"),
         Conv::Bytes => format!("{name}.as_slice()"),
         Conv::BytesInto => format!("{name}.as_slice().into()"),
         Conv::BytesOwned => format!("{name}.as_slice().to_vec()"),
@@ -675,6 +746,8 @@ fn argument(name: &str, conv: &Conv, setup: &mut Vec<String>) -> String {
             setup.push(format!("let {name} = {rebuilt}{fallible};"));
             if *borrowed { format!("&{name}") } else { name.to_owned() }
         }
+        Conv::Boxed(inner) => format!("Box::new({})", argument(name, inner, setup)),
+        Conv::Cow(inner) => format!("std::borrow::Cow::Borrowed({})", argument(name, inner, setup)),
         Conv::Option(inner) => {
             setup.push(format!("let {name} = {name}.into_option();"));
             let (body, fallible, borrowed) = match inner.as_ref() {
@@ -688,7 +761,9 @@ fn argument(name: &str, conv: &Conv, setup: &mut Vec<String>) -> String {
                 Conv::Path { borrowed } => ("runtime::path(value)".to_owned(), true, *borrowed),
                 Conv::Custom { function, borrowed } => (format!("runtime::{function}(value)"), true, *borrowed),
                 Conv::Option(_) => unreachable!("nested options are rejected when lowering"),
-                Conv::Keyed { .. } => unreachable!("optional keyed handles are rejected when lowering"),
+                Conv::Keyed { .. } | Conv::TextRef | Conv::Boxed(_) | Conv::Cow(_) => {
+                    unreachable!("only simple optional parameters pass lowering")
+                }
             };
             let mut expression = format!("{name}.as_ref().map(|value| {body})");
             if fallible {
@@ -706,10 +781,11 @@ fn argument(name: &str, conv: &Conv, setup: &mut Vec<String>) -> String {
 fn conv_shape(conv: &Conv, ffi: &str) -> Shape {
     match conv {
         Conv::Same | Conv::Ref => Shape::Primitive(ffi.to_owned()),
-        Conv::Str | Conv::Text => Shape::Text,
+        Conv::Str | Conv::Text | Conv::TextRef => Shape::Text,
         Conv::Bytes | Conv::BytesInto | Conv::BytesOwned => Shape::Bytes,
         Conv::Path { .. } => Shape::Path,
         Conv::Custom { .. } => Shape::Custom(if ffi == "ffi::String" { Carrier::String } else { Carrier::Bytes }),
+        Conv::Boxed(inner) | Conv::Cow(inner) => conv_shape(inner, ffi),
         Conv::Keyed { keyed, key, .. } => {
             Shape::Keyed(KeyedType { name: keyed.name.clone(), key_name: keyed.key_name.clone(), key: Box::new(conv_shape(key, ffi)) })
         }
@@ -718,6 +794,11 @@ fn conv_shape(conv: &Conv, ffi: &str) -> Shape {
             Shape::Option(Box::new(conv_shape(inner, inner_ffi)))
         }
     }
+}
+
+/// A shared borrow of `ty`.
+fn borrowed(ty: &Type) -> Type {
+    Type::BorrowedRef { lifetime: None, is_mutable: false, type_: Box::new(ty.clone()) }
 }
 
 fn text_out(value: &str) -> (String, String) {
@@ -802,6 +883,9 @@ mod tests {
             (10, "demo::ThreadSafeRepo"),
             (11, "demo::Oid"),
             (12, "demo::Commit"),
+            (13, "alloc::boxed::Box"),
+            (14, "alloc::borrow::Cow"),
+            (15, "alloc::vec::Vec"),
         ])
     }
 
@@ -876,11 +960,45 @@ mod tests {
         assert!(source.contains("    pub fn commit_tree(&self, commit_key: ffi::String) -> ffi::Result<ffi::String, runtime::Error> {\n        finish(|| {\n            let repo = &self.inner.repo();\n            let commit_key = repo.find_commit(runtime::oid(&commit_key)?).map_err(runtime::error)?;\n            Ok(runtime::oid_out(&(commit_key.tree().map_err(runtime::error)?).id))\n"), "{source}");
         assert!(source.contains("Ok(runtime::oid_out(&commit_key.detach()))"), "by-value methods consume the rebuilt value: {source}");
         assert!(source.contains("Ok(ffi::Option::from(self.inner.repo().head_commit().map(|value| runtime::oid_out(&(value).id))))"), "{source}");
-        assert!(source.contains("            let commit = repo.find_commit(runtime::oid(&commit)?).map_err(runtime::error)?;\n            Ok(ffi::String::from_string(self.inner.repo().describe(&commit).to_string()))\n"), "{source}");
+        assert!(source.contains("            let commit = repo.find_commit(runtime::oid(&commit)?).map_err(runtime::error)?;\n            Ok(ffi::String::from_string(repo.describe(&commit).to_string()))\n"), "keyed parameters reuse the repository they were rebuilt from: {source}");
         assert!(facade.dropped.iter().any(|(path, why)| path == "demo::describe" && why.starts_with("takes a keyed handle")), "{:?}", facade.dropped);
         let tree = facade.members.iter().find(|member| member.path == "demo::Commit::tree").expect("emitted");
         assert_eq!(tree.keyed_owner.as_ref().map(|owner| owner.name.as_str()), Some("demo::Commit"));
         assert!(matches!(&tree.output, Shape::Keyed(owner) if owner.key_name == "id"));
+    }
+
+    #[test]
+    fn boxes_cows_string_references_and_self_lower() {
+        let boxed = function("demo::Repo::boxed", Some("demo::Repo"), Receiver::Shared, vec![("name", generic(13, vec![ty(1)]))], Some(generic(13, vec![ty(9)])));
+        let cow = function("demo::Repo::cow", Some("demo::Repo"), Receiver::Shared, vec![("name", generic(14, vec![ty(7)]))], Some(generic(14, vec![ty(7)])));
+        let find = function("demo::Repo::find", Some("demo::Repo"), Receiver::Shared, vec![("name", shared(ty(1)))], None);
+        let same = function("demo::Commit::same", Some("demo::Commit"), Receiver::Shared, vec![("other", shared(Type::Generic("Self".to_owned())))], Some(Type::Generic("Self".to_owned())));
+        let source = facade(&[boxed, cow, find, same]).source;
+        assert!(source.contains("Ok(ffi::Vec::from_vec((*self.inner.repo().boxed(Box::new(name.into_string()))).to_vec()))"), "{source}");
+        assert!(source.contains("Ok(ffi::Vec::from_vec((&*self.inner.repo().cow(std::borrow::Cow::Borrowed(name.as_slice().into()))).to_vec()))"), "{source}");
+        assert!(source.contains("Ok(self.inner.repo().find(&name.into_string()))"), "{source}");
+        assert!(source.contains("            let other = repo.find_commit(runtime::oid(&other)?).map_err(runtime::error)?;\n"), "{source}");
+        assert!(source.contains("Ok(runtime::oid_out(&(commit_key.same(&other)).id))"), "{source}");
+    }
+
+    #[test]
+    fn the_verdict_makes_what_the_emitter_cannot_lower_a_decision() {
+        let renderer = renderer();
+        let types = types();
+        let implementations = Implementations::default();
+        let classifier = Classifier::new(&renderer, &types, &[], &implementations);
+        let context = Context { renderer: &renderer, classifier: &classifier, runtime: "crate::runtime", provenance: "test" };
+        let names = function("demo::Repo::names", Some("demo::Repo"), Receiver::Shared, Vec::new(), Some(generic(15, vec![ty(1)])));
+        assert_eq!(classifier.classify(&names).class, Class::Automatic, "the classifier passes a Vec of text");
+        let verdict = verdict(&names, &context);
+        assert_eq!(verdict.class, Class::Decision);
+        assert_eq!(verdict.reasons[0].category, crate::classify::Category::Lowering);
+        let git_dir = function("demo::Repo::git_dir", Some("demo::Repo"), Receiver::Shared, Vec::new(), Some(shared(ty(2))));
+        assert_eq!(verdict_class(&git_dir, &context), Class::Automatic);
+    }
+
+    fn verdict_class(function: &Function, context: &Context<'_>) -> Class {
+        verdict(function, context).class
     }
 
     #[test]

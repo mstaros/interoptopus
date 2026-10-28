@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::classify::{Class, Classifier, Mapping};
+use crate::classify::{Class, Mapping, Verdict};
 use crate::hash::Fnv;
 use crate::render::Renderer;
 use crate::surface::Function;
@@ -280,7 +280,7 @@ pub fn signature_hash(path: &str, signature: &str) -> String {
 
 /// Classifies the surface, sets each item's status from the decisions and counts the result.
 #[must_use]
-pub fn items(functions: &[Function], renderer: &Renderer, classifier: &Classifier<'_>, decisions: &[Decision]) -> (Vec<Item>, Summary) {
+pub fn items(functions: &[Function], renderer: &Renderer, verdict: impl Fn(&Function) -> Verdict, decisions: &[Decision]) -> (Vec<Item>, Summary) {
     let decided: HashSet<&str> = decisions.iter().map(|decision| decision.signature_hash.as_str()).collect();
     let decided_paths: HashSet<&str> = decisions.iter().map(|decision| decision.path.as_str()).collect();
     let mut summary = Summary::default();
@@ -288,7 +288,7 @@ pub fn items(functions: &[Function], renderer: &Renderer, classifier: &Classifie
     for function in functions {
         let signature = function.signature(renderer);
         let signature_hash = signature_hash(&function.path, &signature);
-        let verdict = classifier.classify(function);
+        let verdict = verdict(function);
         let status = match verdict.class {
             _ if decided.contains(signature_hash.as_str()) => Status::Resolved,
             Class::Automatic => Status::Ready,
@@ -331,6 +331,7 @@ pub fn items(functions: &[Function], renderer: &Renderer, classifier: &Classifie
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::classify::Classifier;
     use crate::surface::Receiver;
     use rustdoc_types::Type;
 
@@ -373,7 +374,7 @@ mod tests {
             decision("demo::Repo::removed", "0000000000000001".to_owned()),
         ];
 
-        let (items, summary) = items(&functions, &renderer, &classifier, &decisions);
+        let (items, summary) = items(&functions, &renderer, |function| classifier.classify(function), &decisions);
         let statuses: Vec<Status> = items.iter().map(|item| item.status).collect();
         assert_eq!(statuses, [Status::Ready, Status::Resolved, Status::Stale, Status::Unresolved]);
         assert_eq!((summary.total, summary.automatic, summary.resolved, summary.stale, summary.unresolved), (4, 1, 1, 1, 1));
