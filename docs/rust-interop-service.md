@@ -22,7 +22,7 @@ by a per-repository manifest. The first target is gix (gitoxide fork) -> GixShar
 | Component | Location |
 |---|---|
 | Engine (Rust command-line tool) | This repository, `crates/rustdoc_gen` (package `interoptopus_rustdoc_gen_mps`, binary `interoptopus-rustdoc-gen`). Released with interoptopus via `publish_localcargo`; the binary is packaged with `package_rust_binary`. |
-| Names sidecar | This repository's C# backend writes the generated type and method names next to `Interop.cs`. |
+| Native names | The public C# layer derives native member names with `interoptopus_backends::casing`, the functions the C# backend itself uses, and never names native types; no sidecar is needed. |
 | C# service | `MerkleCompiler/MpsAgent.RustInteropService`, following `MpsAgent.GitService`: contract and options, an `IScriptAdapter`, an internal implementation. |
 | Manifest, runtime and outputs | The target bindings repository (GixSharp). |
 
@@ -44,7 +44,7 @@ response; failures exit non-zero with a structured error.
    service extracts again before generating, so a changed checkout yields different JSON and
    a stale manifest.
 3. **generate** emits the Rust facade, builds it and runs interoptopus (producing
-   `Interop.cs` and the names sidecar), then emits the public C# layer and smoke tests as a
+   `Interop.cs`), then emits the public C# layer and smoke tests as a
    deterministic set of files. It refuses a stale manifest, one whose provenance or items
    differ from a fresh analysis of the given JSON and configuration. By default it also
    refuses a manifest that is not ready; a request may ask for partial generation, which
@@ -254,8 +254,8 @@ type-map proposals ranked by impact (see Type map).
 - [ ] E3c `analyze` proposes type-map entries ranked by how many items each unblocks (with G3).
 - [ ] E4 Decision validation: structured payloads (see Manifest), per-type handle answers covering `&self` methods only with per-item overrides, and the check that builds the generated facade with the target's features. Needs E3a, and a buildable runtime: G2's minimal runtime or a stub of the runtime contract.
 - [ ] E5 Rust facade emitter (automatic, handle, convert and record kinds) plus inventory registration; handles cross the boundary as keys (see Handles). Facade types get unique module-qualified names (see Naming and namespaces). First increment, the automatic kind: `generate` emits one service for all types mapped to the runtime handle (functions returning the handle become constructors, including `&self` methods as constructors taking `&Self`; free functions and the handle's own type win name clashes; conversions between handle types are dropped), its `&self` methods, and free functions named after their module path. Every member returns `ffi::Result`. It refuses a stale manifest (provenance or items differ from a fresh analysis) and, unless the request sets `partial`, one that is not ready; it rejects output folders outside the worktree and writes `mod.rs` into `rust_output` only when it changes. An end-to-end test builds the generated facade for a demo crate and validates its inventory. The first real generation (gix, `dfe25025`) added two fixes: names interoptopus forbids get a trailing underscore (`init` becomes `init_`), and constructors taking the service name its type, because interoptopus copies their parameters into a free function where `Self` is unknown.
-- [ ] E6 Names sidecar in the C# backend.
-- [ ] E7 Emitter for the public C# layer and smoke tests. Namespaces follow rustdoc module paths (see Naming and namespaces).
+- [x] E6 Names sidecar in the C# backend. Dropped (2026-10-28): native member names come from `interoptopus_backends::casing`, and the public layer converts native values through overloaded runtime helpers instead of naming native types, so there is nothing to keep in sync.
+- [ ] E7 Emitter for the public C# layer and smoke tests. Namespaces follow rustdoc module paths (see Naming and namespaces). First increment: the service becomes a sealed, disposable class with static factories and methods; free functions become static methods of a class per module (`gix::env::agent` is `Gix.Env.Agent()`); conversions and error translation go through the hand-written C# runtime class named by `csharp_runtime` (its contract is in `csharp.rs`); the layer is written to `{csharp_output}/{ManagedNamespace}.g.cs`. Members with optional parameters are skipped and reported. Open: optional parameters, free functions returning options, generated smoke tests.
 - [ ] E8 Release with `publish_localcargo`; package the binary with `package_rust_binary`.
 
 ### Service (MerkleCompiler)

@@ -25,6 +25,7 @@ workspace = true
 tempfile.workspace = true
 
 [dependencies]
+interoptopus_backends.workspace = true
 rustdoc-types.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

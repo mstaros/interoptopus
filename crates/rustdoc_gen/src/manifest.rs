@@ -68,6 +68,10 @@ pub struct Configuration {
     /// Path of the hand-written runtime module.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_module: Option<String>,
+    /// Full name of the hand-written C# runtime class the public layer calls, such as
+    /// `GixSharp.GixInterop`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub csharp_runtime: Option<String>,
     /// Root namespace of the public C# layer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub managed_namespace: Option<String>,

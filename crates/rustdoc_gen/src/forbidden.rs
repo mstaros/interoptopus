@@ -16,9 +16,14 @@ const FORBIDDEN_NAMES: [&str; 136] = [
     "unsafe", "unsigned", "ushort", "using", "value", "var", "virtual", "void", "volatile", "when", "where", "while", "with", "yield",
 ];
 
+/// Whether interoptopus forbids `name`; the list also covers the C# keywords.
+pub fn is_forbidden(name: &str) -> bool {
+    FORBIDDEN_NAMES.contains(&name)
+}
+
 /// `name`, with a trailing underscore when interoptopus forbids it (`init` becomes `init_`).
 pub fn escaped(name: &str) -> String {
-    if FORBIDDEN_NAMES.contains(&name) { format!("{name}_") } else { name.to_owned() }
+    if is_forbidden(name) { format!("{name}_") } else { name.to_owned() }
 }
 
 #[cfg(test)]

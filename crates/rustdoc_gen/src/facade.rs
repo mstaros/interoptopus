@@ -53,6 +53,57 @@ pub struct Facade {
     pub emitted: Vec<String>,
     /// Paths left out, with the reason, sorted.
     pub dropped: Vec<(String, String)>,
+    /// The emitted members, as the C# layer needs them, in emission order.
+    pub members: Vec<GeneratedMember>,
+    /// The service's name.
+    pub service: String,
+}
+
+/// What crosses the boundary for one value, as the C# layer converts it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Shape {
+    /// Nothing.
+    Unit,
+    /// A primitive, by its Rust name.
+    Primitive(String),
+    /// Text.
+    Text,
+    /// Bytes.
+    Bytes,
+    /// A filesystem path.
+    Path,
+    /// A custom mapping, by its carrier.
+    Custom(Carrier),
+    /// An optional value.
+    Option(Box<Self>),
+    /// The service: a constructor's result, or the service a constructor takes.
+    Service,
+}
+
+/// What a generated member is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MemberKind {
+    /// A constructor of the service.
+    Constructor,
+    /// A `&self` method of the service.
+    Method,
+    /// A free function.
+    Function,
+}
+
+/// One emitted member, as the C# layer needs it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GeneratedMember {
+    /// The surface path it wraps.
+    pub path: String,
+    /// Constructor, method or free function.
+    pub kind: MemberKind,
+    /// The member's name in the facade.
+    pub name: String,
+    /// The parameters after `self`; a constructor taking the service lists it first.
+    pub params: Vec<(String, Shape)>,
+    /// The result.
+    pub output: Shape,
 }
 
 /// Where a member goes.
@@ -72,6 +123,7 @@ struct Member {
     rank: u8,
     path: String,
     source: String,
+    generated: GeneratedMember,
 }
 
 /// A function's fate.
@@ -149,7 +201,8 @@ pub fn emit(functions: &[&Function], context: &Context<'_>) -> Result<Facade, (S
     let mut paths: Vec<String> = kept.values().map(|member| member.path.clone()).collect();
     paths.sort();
     let members: Vec<&Member> = kept.values().collect();
-    Ok(Facade { source: emitter.module(&members), emitted: paths, dropped })
+    let generated = members.iter().map(|member| member.generated.clone()).collect();
+    Ok(Facade { source: emitter.module(&members), emitted: paths, dropped, members: generated, service: emitter.service })
 }
 
 /// The service is named after the shortest type mapped to the repository handle.
@@ -220,9 +273,11 @@ impl Emitter<'_> {
         let mut declarations = Vec::new();
         let mut setup = Vec::new();
         let mut arguments = Vec::new();
+        let mut shapes = Vec::new();
         for (index, (name, ty)) in function.params.iter().enumerate() {
             let name = parameter_name(name, index);
             let input = self.input(function, ty).map_err(|why| format!("parameter `{name}`: {why}"))?;
+            shapes.push((name.clone(), conv_shape(&input.conv, &input.ffi)));
             declarations.push(format!("{name}: {}", input.ffi));
             arguments.push(argument(&name, &input.conv, &mut setup));
         }
@@ -230,6 +285,7 @@ impl Emitter<'_> {
             (true, Some(accessor)) if constructor.is_some() => {
                 // interoptopus copies constructor parameters into a free function, where `Self` is unknown.
                 declarations.insert(0, format!("{handle_parameter}: &{}", self.service));
+                shapes.insert(0, (handle_parameter.clone(), Shape::Service));
                 format!("{handle_parameter}.inner.{accessor}().{}({})", function.name, arguments.join(", "))
             }
             (true, Some(accessor)) => format!("self.inner.{accessor}().{}({})", function.name, arguments.join(", ")),
@@ -249,6 +305,14 @@ impl Emitter<'_> {
                 (Place::Free, escaped(&free_name(&function.path)), "", returns, value)
             }
         };
+        let output_type = Type::Tuple(Vec::new());
+        let (kind, output) = if constructor.is_some() {
+            (MemberKind::Constructor, Shape::Service)
+        } else {
+            let kind = if method { MemberKind::Method } else { MemberKind::Function };
+            (kind, self.shape(function.output.as_ref().unwrap_or(&output_type)))
+        };
+        let generated = GeneratedMember { path: function.path.clone(), kind, name: name.clone(), params: shapes, output };
         let mut parameters = declarations;
         if !receiver.is_empty() {
             parameters.insert(0, receiver.to_owned());
@@ -271,7 +335,7 @@ impl Emitter<'_> {
             let _ = writeln!(source, "{indent}    }})");
         }
         let _ = writeln!(source, "{indent}}}");
-        Ok(Planned::Member(Member { place, name, rank, path: function.path.clone(), source }))
+        Ok(Planned::Member(Member { place, name, rank, path: function.path.clone(), source, generated }))
     }
 
     fn input(&self, function: &Function, ty: &Type) -> Result<Input, String> {
@@ -365,6 +429,41 @@ impl Emitter<'_> {
                 }
             }
             _ => Err(self.rendered(ty)),
+        }
+    }
+
+    /// The shape of a result `output` lowered.
+    fn shape(&self, ty: &Type) -> Shape {
+        match ty {
+            Type::Primitive(name) => Shape::Primitive(name.clone()),
+            Type::BorrowedRef { type_, .. } => match type_.as_ref() {
+                Type::Primitive(name) if name == "str" => Shape::Text,
+                Type::Primitive(name) => Shape::Primitive(name.clone()),
+                Type::Slice(_) => Shape::Bytes,
+                Type::ResolvedPath(path) => self.mapped_shape(&self.context.renderer.path(path)),
+                _ => Shape::Unit,
+            },
+            Type::ResolvedPath(path) => {
+                let canonical = self.context.renderer.path(path);
+                match (canonical.as_str(), type_args(path).as_slice()) {
+                    ("core::option::Option", [inner]) => Shape::Option(Box::new(self.shape(inner))),
+                    ("core::result::Result", [ok, _]) => self.shape(ok),
+                    ("alloc::vec::Vec", [_]) => Shape::Bytes,
+                    _ => self.mapped_shape(&canonical),
+                }
+            }
+            _ => Shape::Unit,
+        }
+    }
+
+    fn mapped_shape(&self, canonical: &str) -> Shape {
+        match self.mapping(canonical) {
+            Some(Mapping::String) => Shape::Text,
+            Some(Mapping::Bytes) => Shape::Bytes,
+            Some(Mapping::Path) => Shape::Path,
+            Some(Mapping::Custom(custom)) => Shape::Custom(custom.ffi),
+            Some(Mapping::Handle) => Shape::Service,
+            None => Shape::Unit,
         }
     }
 
@@ -485,6 +584,21 @@ fn argument(name: &str, conv: &Conv, setup: &mut Vec<String>) -> String {
                 }
             }
             expression
+        }
+    }
+}
+
+/// The shape of a lowered parameter.
+fn conv_shape(conv: &Conv, ffi: &str) -> Shape {
+    match conv {
+        Conv::Same | Conv::Ref => Shape::Primitive(ffi.to_owned()),
+        Conv::Str | Conv::Text => Shape::Text,
+        Conv::Bytes | Conv::BytesInto | Conv::BytesOwned => Shape::Bytes,
+        Conv::Path { .. } => Shape::Path,
+        Conv::Custom { .. } => Shape::Custom(if ffi == "ffi::String" { Carrier::String } else { Carrier::Bytes }),
+        Conv::Option(inner) => {
+            let inner_ffi = ffi.strip_prefix("ffi::Option<").and_then(|rest| rest.strip_suffix('>')).unwrap_or(ffi);
+            Shape::Option(Box::new(conv_shape(inner, inner_ffi)))
         }
     }
 }
