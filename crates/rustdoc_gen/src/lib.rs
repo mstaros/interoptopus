@@ -567,7 +567,7 @@ mod tests {
 
         let first = analyze(&request).expect("the surface is analyzed");
         assert!(first.manifest_updated);
-        assert_eq!((first.public_methods, first.public_free_functions), (13, 1));
+        assert_eq!((first.public_methods, first.public_free_functions), (14, 1));
         let manifest = Manifest::read(&manifest_path).expect("the manifest reads back");
         let state = |path: &str| manifest.items.iter().find(|item| item.path == path).map(|item| (item.class, item.status));
         assert_eq!(state("demo::Repo::name"), Some((Class::Automatic, Status::Ready)));
@@ -635,6 +635,10 @@ mod inner {
 
         pub fn set_display_name(&self, name: crate::Name) {
             let _ = name;
+        }
+
+        pub fn reopen(&self) -> Result<Repo, std::io::Error> {
+            Ok(Repo)
         }
 
         #[deprecated]
@@ -777,12 +781,13 @@ pub fn open(path: impl AsRef<std::path::Path>) -> Result<Repo, std::io::Error> {
 
         let generated = generate(&request).expect("the facade is generated");
         assert!(generated.written);
-        assert_eq!((generated.emitted, generated.pending), (10, 3), "demo::open and nine Repo methods; three items await decisions");
+        assert_eq!((generated.emitted, generated.pending), (11, 3), "demo::open and ten Repo methods; three items await decisions");
         let source = fs::read_to_string(&generated.rust_module).expect("the facade reads back");
         assert!(source.contains("pub enum ModeMode {") && source.contains("pub enum Event {"), "mirrors of a fieldless and a data enum: {source}");
         assert!(source.contains("pub struct StatsStats {") && source.contains("fn from_stats_stats("), "a record both ways: {source}");
         assert!(source.contains("pub struct Label {") && !source.contains("fn from_label("), "a borrowed view as a result only: {source}");
         assert!(source.contains("name.as_str().parse().map_err(runtime::error)?"), "a type mapped to string parses: {source}");
+        assert!(source.contains("    pub fn reopen(repo: &Self) -> ffi::Result<Self, runtime::Error> {\n"), "a method returning the handle takes it as `&Self`: {source}");
         assert!(!generate(&request).expect("the facade is generated again").written, "regenerating changes nothing");
         assert!(cargo(&["test", "--offline", "-p", "facade"]), "the generated facade builds and registers with an inventory");
         let clippy = std::process::Command::new("cargo")
