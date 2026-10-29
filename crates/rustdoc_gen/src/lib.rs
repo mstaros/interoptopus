@@ -13,8 +13,8 @@
 //! `extract` runs rustdoc with JSON output for a crate and its prefixed dependencies.
 //! `analyze` classifies the public function surface of the root crate's JSON and, given a
 //! manifest, rewrites its items and summary. `generate` emits the Rust facade for the manifest's
-//! ready automatic items into a worktree and, when the manifest names a C# output folder, the
-//! public C# layer over it.
+//! ready automatic items into a worktree. The C# bindings are interoptopus': its C# backend
+//! generates them from the facade, and the engine writes no C#.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -28,7 +28,6 @@ use serde::{Deserialize, Serialize};
 
 mod cargo_doc;
 mod classify;
-mod csharp;
 mod facade;
 mod forbidden;
 mod hash;
@@ -226,14 +225,6 @@ pub struct GenerateResult {
     /// Items not generated yet: unresolved, or decided with a kind the emitter does not
     /// support yet.
     pub pending: usize,
-    /// The public C# layer, when the manifest names a `csharp_output` folder.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub csharp_file: Option<PathBuf>,
-    /// Whether the C# file changed.
-    pub csharp_written: bool,
-    /// Emitted members the C# layer leaves out, with the reason.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub csharp_skipped: Vec<Dropped>,
 }
 
 /// Runs one command against a JSON request and returns the response envelope.
@@ -371,51 +362,13 @@ pub fn generate(request: &GenerateRequest) -> Result<GenerateResult, EngineError
     let facade = facade::emit(&selected, &context)
         .map_err(|(path, why)| EngineError::new(ErrorCode::Internal, format!("cannot emit `{path}`: {why}")))?;
     let written = write_if_changed(&rust_module, &facade.source)?;
-    let csharp = match configuration.csharp_output.as_deref() {
-        None => None,
-        Some(folder) => Some(csharp_layer(&facade, configuration, &crate_name, &header, &request.worktree, folder)?),
-    };
-    let (csharp_file, csharp_written, csharp_skipped) =
-        csharp.map_or((None, false, Vec::new()), |(file, written, skipped)| (Some(file), written, skipped));
     Ok(GenerateResult {
         rust_module,
         written,
         emitted: facade.emitted.len(),
         dropped: facade.dropped.into_iter().map(|(path, reason)| Dropped { path, reason }).collect(),
         pending,
-        csharp_file,
-        csharp_written,
-        csharp_skipped,
     })
-}
-
-/// Writes the public C# layer over the emitted facade into `folder` of the worktree.
-fn csharp_layer(
-    facade: &facade::Facade,
-    configuration: &Configuration,
-    crate_name: &str,
-    header: &str,
-    worktree: &Path,
-    folder: &Path,
-) -> Result<(PathBuf, bool, Vec<Dropped>), EngineError> {
-    let required = |value: Option<&String>, field: &str| {
-        value.cloned().ok_or_else(|| EngineError::new(ErrorCode::InvalidRequest, format!("`csharp_output` needs `{field}` in the manifest configuration")))
-    };
-    let native_namespace = required(configuration.native_namespace.as_ref(), "native_namespace")?;
-    let runtime = required(configuration.csharp_runtime.as_ref(), "csharp_runtime")?;
-    let managed_namespace =
-        configuration.managed_namespace.clone().unwrap_or_else(|| interoptopus_backends::casing::rust_to_pascal(crate_name));
-    let context = csharp::Context {
-        provenance: header,
-        managed_namespace: &managed_namespace,
-        native_namespace: &native_namespace,
-        runtime: &runtime,
-        service: &facade.service,
-    };
-    let layer = csharp::emit(&facade.members, &context);
-    let file = contained(worktree, folder)?.join(format!("{managed_namespace}.g.cs"));
-    let written = write_if_changed(&file, &layer.source)?;
-    Ok((file, written, layer.skipped.into_iter().map(|(path, reason)| Dropped { path, reason }).collect()))
 }
 
 /// `worktree` joined with `folder`, which must be relative and stay inside it.
@@ -722,7 +675,7 @@ pub fn open(path: impl AsRef<std::path::Path>) -> Result<Repo, std::io::Error> {
         })
         .expect("the workspace is documented");
         let manifest_path = root.join("manifest.json");
-        let configuration = r#"{"configuration": {"type_map": {"demo::Repo": "handle"}, "exclude_paths": ["demo::schema"], "rust_output": "facade/src/generated", "csharp_output": "csharp", "native_namespace": "Demo.Native", "csharp_runtime": "Demo.Runtime"}}"#;
+        let configuration = r#"{"configuration": {"type_map": {"demo::Repo": "handle"}, "exclude_paths": ["demo::schema"], "rust_output": "facade/src/generated"}}"#;
         fs::write(&manifest_path, configuration).expect("the manifest can be written");
         let rustdoc_json = extracted.crates[0].json.clone();
         let analysis = AnalyzeRequest { rustdoc_json: rustdoc_json.clone(), manifest: Some(manifest_path.clone()), dependency_json: Vec::new() };
@@ -739,9 +692,6 @@ pub fn open(path: impl AsRef<std::path::Path>) -> Result<Repo, std::io::Error> {
 
         let generated = generate(&request).expect("the facade is generated");
         assert!(generated.written);
-        let csharp = fs::read_to_string(generated.csharp_file.as_ref().expect("the C# layer is written")).expect("the C# layer reads back");
-        assert!(csharp.contains("namespace Demo\n") && csharp.contains("public sealed class Repo : IDisposable"), "{csharp}");
-        assert!(csharp.contains("public static Repo Open(string path)"), "{csharp}");
         assert_eq!((generated.emitted, generated.pending), (2, 3), "demo::open and demo::Repo::name; three items await decisions");
         assert!(!generate(&request).expect("the facade is generated again").written, "regenerating changes nothing");
         assert!(cargo(&["test", "--offline", "-p", "facade"]), "the generated facade builds and registers with an inventory");

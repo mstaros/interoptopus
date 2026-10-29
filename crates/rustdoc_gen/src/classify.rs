@@ -70,9 +70,6 @@ pub struct Keyed {
     pub fallible: bool,
     /// Rust expression producing the key from `{value}`.
     pub key_of: String,
-    /// The key's name in the public layer, such as `id`.
-    #[serde(default = "default_key_name")]
-    pub key_name: String,
     /// The type's path as the type map writes it; set when the type map is resolved.
     #[serde(skip)]
     pub name: String,
@@ -84,10 +81,6 @@ pub const REPO_PLACEHOLDER: &str = "{repo}";
 pub const KEY_PLACEHOLDER: &str = "{key}";
 /// See [`REPO_PLACEHOLDER`].
 pub const VALUE_PLACEHOLDER: &str = "{value}";
-
-fn default_key_name() -> String {
-    "key".to_owned()
-}
 
 /// The FFI form of a custom mapping.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -826,7 +819,6 @@ mod tests {
             rebuild: rebuild.to_owned(),
             fallible: true,
             key_of: "{value}.id".to_owned(),
-            key_name: "id".to_owned(),
             name: "demo::Commit".to_owned(),
         };
         let overrides = BTreeMap::from([("demo::Repo".to_owned(), Mapping::Handle), ("demo::Commit".to_owned(), Mapping::Keyed(keyed))]);

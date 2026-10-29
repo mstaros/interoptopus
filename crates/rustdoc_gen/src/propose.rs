@@ -142,7 +142,6 @@ fn keyed_probe(ty: &str, context: &Context<'_>) -> Mapping {
         rebuild: [REPO_PLACEHOLDER, KEY_PLACEHOLDER].concat(),
         fallible: false,
         key_of: VALUE_PLACEHOLDER.to_owned(),
-        key_name: "key".to_owned(),
         name: ty.to_owned(),
     })
 }

@@ -819,7 +819,6 @@ dependencies = [
 name = "interoptopus_rustdoc_gen_mps"
 version = "0.19.0"
 dependencies = [
- "interoptopus_backends_mps",
  "rustdoc-types",
  "serde",
  "serde_json",

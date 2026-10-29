@@ -89,22 +89,9 @@ pub struct Configuration {
     /// Output folder for generated Rust.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rust_output: Option<PathBuf>,
-    /// Output folder for generated C#.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub csharp_output: Option<PathBuf>,
     /// Path of the hand-written runtime module.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_module: Option<String>,
-    /// Full name of the hand-written C# runtime class the public layer calls, such as
-    /// `GixSharp.GixInterop`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub csharp_runtime: Option<String>,
-    /// Root namespace of the public C# layer.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub managed_namespace: Option<String>,
-    /// Namespace of the generated interop layer.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub native_namespace: Option<String>,
     /// Name of the native library.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub library_name: Option<String>,

@@ -64,72 +64,6 @@ pub struct Facade {
     pub emitted: Vec<String>,
     /// Paths left out, with the reason, sorted.
     pub dropped: Vec<(String, String)>,
-    /// The emitted members, as the C# layer needs them, in emission order.
-    pub members: Vec<GeneratedMember>,
-    /// The service's name.
-    pub service: String,
-}
-
-/// What crosses the boundary for one value, as the C# layer converts it.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Shape {
-    /// Nothing.
-    Unit,
-    /// A primitive, by its Rust name.
-    Primitive(String),
-    /// Text.
-    Text,
-    /// Bytes.
-    Bytes,
-    /// A filesystem path.
-    Path,
-    /// A custom mapping, by its carrier.
-    Custom(Carrier),
-    /// An optional value.
-    Option(Box<Self>),
-    /// The service: a constructor's result, or the service a constructor takes.
-    Service,
-    /// A keyed handle, crossing as its key.
-    Keyed(KeyedType),
-}
-
-/// A keyed handle type, as the C# layer needs it.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct KeyedType {
-    /// The type's path as the type map writes it, such as `gix::Commit`.
-    pub name: String,
-    /// The key's name in the public layer.
-    pub key_name: String,
-    /// The key's shape.
-    pub key: Box<Shape>,
-}
-
-/// What a generated member is.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum MemberKind {
-    /// A constructor of the service.
-    Constructor,
-    /// A `&self` method of the service.
-    Method,
-    /// A free function.
-    Function,
-}
-
-/// One emitted member, as the C# layer needs it.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GeneratedMember {
-    /// The surface path it wraps.
-    pub path: String,
-    /// Constructor, method or free function.
-    pub kind: MemberKind,
-    /// The member's name in the facade.
-    pub name: String,
-    /// The parameters after `self`; a constructor taking the service lists it first.
-    pub params: Vec<(String, Shape)>,
-    /// The result.
-    pub output: Shape,
-    /// The keyed type a method belongs to; its key is the first native argument.
-    pub keyed_owner: Option<KeyedType>,
 }
 
 /// Where a member goes.
@@ -149,7 +83,6 @@ struct Member {
     rank: u8,
     path: String,
     source: String,
-    generated: GeneratedMember,
 }
 
 /// A function's fate.
@@ -237,8 +170,7 @@ pub fn emit(functions: &[&Function], context: &Context<'_>) -> Result<Facade, (S
     let mut paths: Vec<String> = kept.values().map(|member| member.path.clone()).collect();
     paths.sort();
     let members: Vec<&Member> = kept.values().collect();
-    let generated = members.iter().map(|member| member.generated.clone()).collect();
-    Ok(Facade { source: emitter.module(&members), emitted: paths, dropped, members: generated, service: emitter.service })
+    Ok(Facade { source: emitter.module(&members), emitted: paths, dropped })
 }
 
 /// The classifier's verdict, with an automatic function the emitter does not generate turned
@@ -330,15 +262,15 @@ impl Emitter<'_> {
         let mut declarations = Vec::new();
         let mut setup = Vec::new();
         let mut arguments = Vec::new();
-        let mut shapes = Vec::new();
+        let mut takes_keyed = false;
         for (index, (name, ty)) in function.params.iter().enumerate() {
             let name = parameter_name(name, index);
             let input = self.input(function, ty).map_err(|why| format!("parameter `{name}`: {why}"))?;
-            shapes.push((name.clone(), conv_shape(&input.conv, &input.ffi)));
+            takes_keyed |= is_keyed(&input.conv);
             declarations.push(format!("{name}: {}", input.ffi));
             arguments.push(argument(&name, &input.conv, &mut setup));
         }
-        if shapes.iter().any(|(_, shape)| matches!(shape, Shape::Keyed(_))) && (!method || constructor.is_some()) {
+        if takes_keyed && (!method || constructor.is_some()) {
             return Ok(Planned::Dropped("takes a keyed handle, which needs the handle to rebuild from".to_owned()));
         }
         let member_name = keyed_owner.as_ref().map_or_else(|| function.name.clone(), |(path, _)| format!("{}_{}", snake(last_segment(path)), function.name));
@@ -352,9 +284,9 @@ impl Emitter<'_> {
         } else {
             match (method, &accessor) {
             (true, Some(accessor)) if constructor.is_some() => {
-                // interoptopus copies constructor parameters into a free function, where `Self` is unknown.
+                // interoptopus copies constructor parameters into a free function, where `Self` is
+                // unknown: a workaround until interoptopus fixes it (design doc, Boundary with interoptopus).
                 declarations.insert(0, format!("{handle_parameter}: &{}", self.service));
-                shapes.insert(0, (handle_parameter.clone(), Shape::Service));
                 format!("{handle_parameter}.inner.{accessor}().{}({})", function.name, arguments.join(", "))
             }
             (true, Some(accessor)) => {
@@ -379,21 +311,12 @@ impl Emitter<'_> {
                 (Place::Free, escaped(&free_name(&function.path)), "", returns, value)
             }
         };
-        let output_type = Type::Tuple(Vec::new());
-        let (kind, output) = if constructor.is_some() {
-            (MemberKind::Constructor, Shape::Service)
-        } else {
-            let kind = if method { MemberKind::Method } else { MemberKind::Function };
-            (kind, self.shape(function, function.output.as_ref().unwrap_or(&output_type)))
-        };
-        let keyed_owner = keyed_owner.map(|(_, keyed)| self.keyed_type(&keyed));
-        let generated = GeneratedMember { path: function.path.clone(), kind, name: name.clone(), params: shapes, output, keyed_owner };
         let mut parameters = declarations;
         if !receiver.is_empty() {
             parameters.insert(0, receiver.to_owned());
         }
         let source = wrapper(place, &function.path, &name, &parameters, &returns, &setup, &value);
-        Ok(Planned::Member(Box::new(Member { place, name, rank, path: function.path.clone(), source, generated })))
+        Ok(Planned::Member(Box::new(Member { place, name, rank, path: function.path.clone(), source })))
     }
 
     fn input(&self, function: &Function, ty: &Type) -> Result<Input, String> {
@@ -495,34 +418,6 @@ impl Emitter<'_> {
         }
     }
 
-    /// The shape of a result `output` lowered.
-    fn shape(&self, function: &Function, ty: &Type) -> Shape {
-        match ty {
-            Type::Primitive(name) => Shape::Primitive(name.clone()),
-            Type::Generic(name) if name == "Self" => self.owner_canonical(function).map_or(Shape::Unit, |owner| self.mapped_shape(owner)),
-            Type::BorrowedRef { type_, .. } => match type_.as_ref() {
-                Type::Primitive(name) if name == "str" => Shape::Text,
-                Type::Primitive(name) => Shape::Primitive(name.clone()),
-                Type::Slice(_) => Shape::Bytes,
-                Type::ResolvedPath(path) => self.mapped_shape(&self.context.renderer.path(path)),
-                Type::Generic(name) if name == "Self" => self.owner_canonical(function).map_or(Shape::Unit, |owner| self.mapped_shape(owner)),
-                _ => Shape::Unit,
-            },
-            Type::ResolvedPath(path) => {
-                let canonical = self.context.renderer.path(path);
-                match (canonical.as_str(), type_args(path).as_slice()) {
-                    ("core::option::Option", [inner]) => Shape::Option(Box::new(self.shape(function, inner))),
-                    ("core::result::Result", [ok, _]) => self.shape(function, ok),
-                    ("alloc::boxed::Box", [inner]) => self.shape(function, inner),
-                    ("alloc::borrow::Cow", [inner]) => self.shape(function, &borrowed(inner)),
-                    ("alloc::vec::Vec", [_]) => Shape::Bytes,
-                    _ => self.mapped_shape(&canonical),
-                }
-            }
-            _ => Shape::Unit,
-        }
-    }
-
     /// A mapped type as a parameter, owned or borrowed; `None` when it does not cross.
     fn mapped_input(&self, mapping: Option<Mapping>, borrowed: bool) -> Result<Option<Input>, String> {
         Ok(Some(match mapping {
@@ -551,18 +446,6 @@ impl Emitter<'_> {
     fn owner_output(&self, function: &Function, value: &str, ty: &Type) -> Result<(String, String), String> {
         let owner = self.owner_canonical(function).ok_or_else(|| self.rendered(ty))?;
         self.mapped_output(owner, value, ty)
-    }
-
-    fn mapped_shape(&self, canonical: &str) -> Shape {
-        match self.mapping(canonical) {
-            Some(Mapping::String) => Shape::Text,
-            Some(Mapping::Bytes) => Shape::Bytes,
-            Some(Mapping::Path) => Shape::Path,
-            Some(Mapping::Custom(custom)) => Shape::Custom(custom.ffi),
-            Some(Mapping::Handle) => Shape::Service,
-            Some(Mapping::Keyed(keyed)) => Shape::Keyed(self.keyed_type(&keyed)),
-            None => Shape::Unit,
-        }
     }
 
     fn mapped_output(&self, canonical: &str, value: &str, ty: &Type) -> Result<(String, String), String> {
@@ -619,12 +502,6 @@ impl Emitter<'_> {
             Some(Mapping::Custom(custom)) => Ok((carrier_out(custom.ffi).to_owned(), format!("runtime::{}(&{value})", custom.into_ffi))),
             _ => Err(format!("the key `{}` of `{}`", keyed.key, keyed.name)),
         }
-    }
-
-    /// A keyed type as the C# layer needs it.
-    fn keyed_type(&self, keyed: &Keyed) -> KeyedType {
-        let key = if PRIMITIVES.contains(&keyed.key.as_str()) { Shape::Primitive(keyed.key.clone()) } else { self.mapped_shape(&keyed.key) };
-        KeyedType { name: keyed.name.clone(), key_name: keyed.key_name.clone(), key: Box::new(key) }
     }
 
     /// The whole module.
@@ -777,22 +654,12 @@ fn argument(name: &str, conv: &Conv, setup: &mut Vec<String>) -> String {
     }
 }
 
-/// The shape of a lowered parameter.
-fn conv_shape(conv: &Conv, ffi: &str) -> Shape {
+/// Whether a lowered parameter is a keyed handle, directly or wrapped.
+fn is_keyed(conv: &Conv) -> bool {
     match conv {
-        Conv::Same | Conv::Ref => Shape::Primitive(ffi.to_owned()),
-        Conv::Str | Conv::Text | Conv::TextRef => Shape::Text,
-        Conv::Bytes | Conv::BytesInto | Conv::BytesOwned => Shape::Bytes,
-        Conv::Path { .. } => Shape::Path,
-        Conv::Custom { .. } => Shape::Custom(if ffi == "ffi::String" { Carrier::String } else { Carrier::Bytes }),
-        Conv::Boxed(inner) | Conv::Cow(inner) => conv_shape(inner, ffi),
-        Conv::Keyed { keyed, key, .. } => {
-            Shape::Keyed(KeyedType { name: keyed.name.clone(), key_name: keyed.key_name.clone(), key: Box::new(conv_shape(key, ffi)) })
-        }
-        Conv::Option(inner) => {
-            let inner_ffi = ffi.strip_prefix("ffi::Option<").and_then(|rest| rest.strip_suffix('>')).unwrap_or(ffi);
-            Shape::Option(Box::new(conv_shape(inner, inner_ffi)))
-        }
+        Conv::Keyed { .. } => true,
+        Conv::Boxed(inner) | Conv::Cow(inner) | Conv::Option(inner) => is_keyed(inner),
+        _ => false,
     }
 }
 
@@ -922,7 +789,6 @@ mod tests {
             rebuild: "{repo}.find_commit({key})".to_owned(),
             fallible: true,
             key_of: "{value}.id".to_owned(),
-            key_name: "id".to_owned(),
             name: "demo::Commit".to_owned(),
         });
         [
@@ -962,9 +828,6 @@ mod tests {
         assert!(source.contains("Ok(ffi::Option::from(self.inner.repo().head_commit().map(|value| runtime::oid_out(&(value).id))))"), "{source}");
         assert!(source.contains("            let commit = repo.find_commit(runtime::oid(&commit)?).map_err(runtime::error)?;\n            Ok(ffi::String::from_string(repo.describe(&commit).to_string()))\n"), "keyed parameters reuse the repository they were rebuilt from: {source}");
         assert!(facade.dropped.iter().any(|(path, why)| path == "demo::describe" && why.starts_with("takes a keyed handle")), "{:?}", facade.dropped);
-        let tree = facade.members.iter().find(|member| member.path == "demo::Commit::tree").expect("emitted");
-        assert_eq!(tree.keyed_owner.as_ref().map(|owner| owner.name.as_str()), Some("demo::Commit"));
-        assert!(matches!(&tree.output, Shape::Keyed(owner) if owner.key_name == "id"));
     }
 
     #[test]
