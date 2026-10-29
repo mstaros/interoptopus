@@ -9,7 +9,7 @@ use std::fmt;
 
 use rustdoc_types::{
     AssocItemConstraintKind, Attribute, Crate, Enum, GenericArg, GenericArgs, GenericBound, GenericParamDefKind, Id, Impl, Item, ItemEnum,
-    ItemKind, Path, Struct, Term, Type, Union, VariantKind,
+    ItemKind, Path, Struct, StructKind, Term, Type, Union, VariantKind,
 };
 use serde::{Deserialize, Serialize};
 
@@ -305,6 +305,25 @@ impl VariantFields {
     }
 }
 
+/// A public struct whose named fields are all public, which can cross as an `#[ffi]` mirror (the
+/// record kind in `facade.rs`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StructDef {
+    /// Its public path in its own crate, such as `gix::create::Options`.
+    pub public: String,
+    /// Its fields in declaration order, typed like `VariantDef::fields`.
+    pub fields: Vec<(String, Type)>,
+    /// Whether it is declared with a lifetime: a borrowed view, which crosses as a result only.
+    pub borrows: bool,
+    /// Whether another crate may build it with a struct literal: it is not `#[non_exhaustive]`.
+    pub constructible: bool,
+    /// Whether it has type or const parameters.
+    pub generic: bool,
+}
+
+/// The detail for an enum or struct without a mirror name.
+const UNNAMED: &str = "not nameable through the root crate, or another type claims its mirror name";
+
 /// An id no renderer knows: a path under it renders as its written, canonical text.
 const UNKNOWN_ID: Id = Id(u32::MAX);
 /// Trait implementations listed in rustdoc JSON, plus the type facts proposals need.
@@ -322,26 +341,50 @@ pub struct Implementations {
     with_lifetime: BTreeSet<String>,
     /// Public enums by canonical path.
     enums: BTreeMap<String, EnumDef>,
+    /// Public structs whose named fields are all public, by canonical path.
+    structs: BTreeMap<String, StructDef>,
     /// The root crate's name.
     root: Option<String>,
-    /// Public module paths of the dependency crates the root crate re-exports, by crate name.
+    /// For each crate, the crates it re-exports as modules, with the shortest path in the
+    /// re-exporting crate: `pub use gix_hash as hash`, or a glob such as `pub use gix_diff::*`.
+    reexports: BTreeMap<String, BTreeMap<String, String>>,
+    /// The public path through the root crate of each crate it reaches through re-exports.
     crate_paths: BTreeMap<String, String>,
-    /// Mirror names by canonical path; enums whose name another enum also claims have none.
+    /// Mirror names by canonical path; types whose name another type also claims have none.
     mirrors: BTreeMap<String, String>,
 }
 
 impl Implementations {
-    /// Adds the trait implementations, lifetime-generic types and public enums one crate's JSON
-    /// lists.
+    /// Adds the trait implementations, lifetime-generic types, public enums and structs, and the
+    /// crates re-exported as modules that one crate's JSON lists.
     pub fn add(&mut self, krate: &Crate) {
         let renderer = Renderer::new(krate);
         let public_paths = surface::public_paths(krate);
-        for item in krate.index.values() {
-            if let ItemEnum::Enum(enumeration) = &item.inner
-                && let (Some(summary), Some(public)) = (krate.paths.get(&item.id), public_paths.get(&item.id))
-                && summary.crate_id == 0
+        let name = krate.index.get(&krate.root).and_then(|root| root.name.clone()).unwrap_or_default();
+        for (id, public) in &public_paths {
+            if let Some(summary) = krate.paths.get(id)
+                && let [target] = summary.path.as_slice()
+                && summary.crate_id != 0
+                && summary.kind == ItemKind::Module
             {
-                self.enums.insert(summary.path.join("::"), enum_def(krate, &renderer, item, enumeration, public));
+                let entry = self.reexports.entry(name.clone()).or_default().entry(target.clone()).or_insert_with(|| public.clone());
+                if (public.len(), public) < (entry.len(), &*entry) {
+                    entry.clone_from(public);
+                }
+            }
+        }
+        for item in krate.index.values() {
+            let local = krate.paths.get(&item.id).filter(|summary| summary.crate_id == 0).zip(public_paths.get(&item.id));
+            match (&item.inner, local) {
+                (ItemEnum::Enum(enumeration), Some((summary, public))) => {
+                    self.enums.insert(summary.path.join("::"), enum_def(krate, &renderer, item, enumeration, public));
+                }
+                (ItemEnum::Struct(structure), Some((summary, public))) => {
+                    if let Some(def) = struct_def(krate, &renderer, item, structure, public) {
+                        self.structs.insert(summary.path.join("::"), def);
+                    }
+                }
+                _ => {}
             }
             match &item.inner {
                 ItemEnum::Impl(implementation) => self.implementation(krate, &renderer, implementation),
@@ -407,30 +450,19 @@ impl Implementations {
         self.with_lifetime.contains(path)
     }
 
-    /// Adds the root crate: what `add` collects, plus its name and the dependency crates it
-    /// re-exports as modules, through which their enums are nameable.
+    /// Adds the root crate: what `add` collects, plus its name, through which other crates' types
+    /// are named.
     pub fn add_root(&mut self, krate: &Crate) {
         self.add(krate);
         self.root = krate.index.get(&krate.root).and_then(|root| root.name.clone());
-        for (id, public) in surface::public_paths(krate) {
-            let Some(summary) = krate.paths.get(&id) else { continue };
-            if let [krate_name] = summary.path.as_slice()
-                && summary.crate_id != 0
-                && summary.kind == ItemKind::Module
-            {
-                let entry = self.crate_paths.entry(krate_name.clone()).or_insert_with(|| public.clone());
-                if public.len() < entry.len() {
-                    *entry = public;
-                }
-            }
-        }
     }
 
-    /// Names every mirror, once all crates are added; two enums claiming one name both go
-    /// without.
+    /// Resolves the paths through the root crate and names every mirror, once all crates are
+    /// added; two types claiming one name both go without.
     pub fn finish(&mut self) {
+        self.crate_paths = self.crate_prefixes();
         let mut claims: BTreeMap<String, Vec<String>> = BTreeMap::new();
-        for canonical in self.enums.keys() {
+        for canonical in self.enums.keys().chain(self.structs.keys()) {
             if let Some(name) = self.nameable(canonical).as_deref().and_then(mirror_name) {
                 claims.entry(name).or_default().push(canonical.clone());
             }
@@ -441,22 +473,56 @@ impl Implementations {
         }).collect();
     }
 
+    /// The public path through the root crate of every crate it reaches through re-exports,
+    /// shortest first: directly (`gix_hash` at `gix::hash`), through a glob (`gix::diff`
+    /// glob-imports `gix_diff`) or through another crate (`gix_diff::blob` glob-imports
+    /// `gix_imara_diff`, so `gix` reaches it at `gix::diff::blob`).
+    fn crate_prefixes(&self) -> BTreeMap<String, String> {
+        let Some(root) = &self.root else { return BTreeMap::new() };
+        let mut prefixes = BTreeMap::from([(root.clone(), root.clone())]);
+        let mut changed = true;
+        while changed {
+            changed = false;
+            for (from, targets) in &self.reexports {
+                let Some(prefix) = prefixes.get(from).cloned() else { continue };
+                for (target, public) in targets {
+                    let Some(rest) = public.strip_prefix(from.as_str()).filter(|rest| rest.is_empty() || rest.starts_with("::")) else {
+                        continue;
+                    };
+                    let candidate = format!("{prefix}{rest}");
+                    if prefixes.get(target).is_none_or(|known| (candidate.len(), &candidate) < (known.len(), known)) {
+                        prefixes.insert(target.clone(), candidate);
+                        changed = true;
+                    }
+                }
+            }
+        }
+        prefixes.remove(root);
+        prefixes
+    }
+
     /// The public enum at `canonical`.
     #[must_use]
     pub fn enum_def(&self, canonical: &str) -> Option<&EnumDef> {
         self.enums.get(canonical)
     }
 
-    /// The mirror name of the enum at `canonical`, if it has one.
+    /// The public struct at `canonical`, if its named fields are all public.
+    #[must_use]
+    pub fn struct_def(&self, canonical: &str) -> Option<&StructDef> {
+        self.structs.get(canonical)
+    }
+
+    /// The mirror name of the enum or struct at `canonical`, if it has one.
     #[must_use]
     pub fn mirror(&self, canonical: &str) -> Option<&str> {
         self.mirrors.get(canonical).map(String::as_str)
     }
 
-    /// The path that names the enum at `canonical` through the root crate's public API.
+    /// The path that names the enum or struct at `canonical` through the root crate's public API.
     #[must_use]
     pub fn nameable(&self, canonical: &str) -> Option<String> {
-        let public = &self.enums.get(canonical)?.public;
+        let public = self.enums.get(canonical).map(|def| &def.public).or_else(|| self.structs.get(canonical).map(|def| &def.public))?;
         let (krate, rest) = public.split_once("::")?;
         if Some(krate) == self.root.as_deref() {
             return Some(public.clone());
@@ -495,6 +561,23 @@ impl Implementations {
     #[cfg(test)]
     pub(crate) fn with_enum(mut self, canonical: &str, def: EnumDef) -> Self {
         self.enums.insert(canonical.to_owned(), def);
+        self.finish();
+        self
+    }
+
+    /// Adds a struct and names the mirrors again.
+    #[cfg(test)]
+    pub(crate) fn with_struct(mut self, canonical: &str, def: StructDef) -> Self {
+        self.structs.insert(canonical.to_owned(), def);
+        self.finish();
+        self
+    }
+
+    /// Records that crate `from` re-exports crate `target` at `public`, and names the mirrors
+    /// again.
+    #[cfg(test)]
+    pub(crate) fn with_reexport(mut self, from: &str, target: &str, public: &str) -> Self {
+        self.reexports.entry(from.to_owned()).or_default().insert(target.to_owned(), public.to_owned());
         self.finish();
         self
     }
@@ -747,7 +830,7 @@ impl<'a> Classifier<'a> {
                 }
                 Some(_) => Ok(()),
                 None => self
-                    .mirrored(&canonical, function)
+                    .mirrored(&canonical, function, position)
                     .unwrap_or_else(|| Err(self.unmapped(&canonical, &self.renderer.ty(&Type::ResolvedPath(path.clone()))))),
             },
         }
@@ -765,25 +848,34 @@ impl<'a> Classifier<'a> {
                 }
                 _ => Ok(()),
             },
-            Type::ResolvedPath(path) if self.implementations.enum_def(&self.renderer.path(path)).is_some() => {
-                self.mirrored(&self.renderer.path(path), function).unwrap_or(Ok(()))
+            Type::ResolvedPath(path) if self.has_mirror_definition(path) => {
+                self.mirrored(&self.renderer.path(path), function, position).unwrap_or(Ok(()))
             }
             Type::Generic(name) if name == "Self" => self.owner_value(function),
             _ => Err(self.blocked(inner, Category::Borrowed)),
         }
     }
 
-    /// Whether an enum crosses as its mirror: it needs a mirror name, no type parameters, at
-    /// least one variant, no hidden fields and no recursion, and every payload must cross as a
-    /// result. `None` when `canonical` is no public enum.
-    fn mirrored(&self, canonical: &str, function: &Function) -> Option<Result<(), Reason>> {
+    /// Whether `path` names a public enum, or a struct whose named fields are all public.
+    fn has_mirror_definition(&self, path: &Path) -> bool {
+        let canonical = self.renderer.path(path);
+        self.implementations.enum_def(&canonical).is_some() || self.implementations.struct_def(&canonical).is_some()
+    }
+
+    /// Whether an enum or struct crosses as its mirror; `None` when `canonical` is neither. An
+    /// enum needs a mirror name, no type parameters, at least one variant, no hidden fields and no
+    /// recursion, and every payload must cross as a result.
+    fn mirrored(&self, canonical: &str, function: &Function, position: Position) -> Option<Result<(), Reason>> {
+        if let Some(def) = self.implementations.struct_def(canonical) {
+            return Some(self.recorded(canonical, def, function, position));
+        }
         let def = self.implementations.enum_def(canonical)?;
         let blocked = |category: Category, detail: &str| Some(Err(Reason::new(category, format!("{canonical}: {detail}")).about(Some(canonical))));
         if def.generic {
             return blocked(Category::Generic, "a generic enum");
         }
         if self.implementations.mirror(canonical).is_none() {
-            return blocked(Category::Unmapped, "not nameable through the root crate, or another enum claims its mirror name");
+            return blocked(Category::Unmapped, UNNAMED);
         }
         if def.variants.is_empty() {
             return blocked(Category::Unsupported, "an enum without variants");
@@ -800,6 +892,55 @@ impl<'a> Classifier<'a> {
         });
         self.visiting.borrow_mut().pop();
         Some(checked)
+    }
+
+    /// Whether a struct crosses as its mirror: it needs a mirror name, no type parameters, at least
+    /// one field, no field holding the runtime handle and no recursion, and every field must cross
+    /// in `position`; as a parameter it must also be owned and buildable.
+    fn recorded(&self, canonical: &str, def: &StructDef, function: &Function, position: Position) -> Result<(), Reason> {
+        let blocked = |category: Category, detail: &str| Err(Reason::new(category, format!("{canonical}: {detail}")).about(Some(canonical)));
+        if def.generic {
+            return blocked(Category::Generic, "a generic struct");
+        }
+        if self.implementations.mirror(canonical).is_none() {
+            return blocked(Category::Unmapped, UNNAMED);
+        }
+        if def.fields.is_empty() {
+            return blocked(Category::Unsupported, "a struct without fields");
+        }
+        if let Some((field, _)) = def.fields.iter().find(|(_, ty)| self.holds_handle(ty)) {
+            return blocked(Category::Unmapped, &format!("field `{field}` holds the runtime handle"));
+        }
+        if position == Position::Input && def.borrows {
+            return blocked(Category::Unmapped, "a borrowed view, which crosses as a result only");
+        }
+        if position == Position::Input && !def.constructible {
+            return blocked(Category::Unmapped, "`#[non_exhaustive]`, so its mirror cannot build it");
+        }
+        if self.visiting.borrow().iter().any(|path| path == canonical) || def.fields.iter().any(|(_, ty)| mentions_self(ty)) {
+            return blocked(Category::Unsupported, "a recursive struct");
+        }
+        self.visiting.borrow_mut().push(canonical.to_owned());
+        let checked = def.fields.iter().try_for_each(|(field, ty)| {
+            self.value(ty, function, position).map_err(|reason| Reason { detail: format!("{canonical}: field `{field}`: {}", reason.detail), ..reason })
+        });
+        self.visiting.borrow_mut().pop();
+        checked
+    }
+
+    /// Whether `ty`, through references, wrappers and type arguments, mentions a type mapped to
+    /// the runtime handle.
+    fn holds_handle(&self, ty: &Type) -> bool {
+        match ty {
+            Type::BorrowedRef { type_, .. } | Type::RawPointer { type_, .. } | Type::Slice(type_) | Type::Array { type_, .. } => {
+                self.holds_handle(type_)
+            }
+            Type::Tuple(types) => types.iter().any(|ty| self.holds_handle(ty)),
+            Type::ResolvedPath(path) => {
+                self.types.get(&self.renderer.path(path)) == Some(&Mapping::Handle) || type_args(path).iter().any(|arg| self.holds_handle(arg))
+            }
+            _ => false,
+        }
     }
 
     fn owner_value(&self, function: &Function) -> Result<(), Reason> {
@@ -913,6 +1054,28 @@ fn enum_def(krate: &Crate, renderer: &Renderer, item: &Item, enumeration: &Enum,
         open: enumeration.has_stripped_variants || non_exhaustive(&item.attrs),
         generic: enumeration.generics.params.iter().any(|param| !matches!(param.kind, GenericParamDefKind::Lifetime { .. })),
     }
+}
+
+/// The definition of `item`, a struct whose public path in its own crate is `public`; `None`
+/// unless its fields are named and all public.
+fn struct_def(krate: &Crate, renderer: &Renderer, item: &Item, structure: &Struct, public: &str) -> Option<StructDef> {
+    let StructKind::Plain { fields, has_stripped_fields: false } = &structure.kind else { return None };
+    let fields = fields
+        .iter()
+        .map(|id| {
+            let field = krate.index.get(id)?;
+            let ItemEnum::StructField(ty) = &field.inner else { return None };
+            Some((field.name.clone()?, portable(ty, renderer)))
+        })
+        .collect::<Option<Vec<_>>>()?;
+    let params = &structure.generics.params;
+    Some(StructDef {
+        public: public.to_owned(),
+        fields,
+        borrows: params.iter().any(|param| matches!(param.kind, GenericParamDefKind::Lifetime { .. })),
+        constructible: !non_exhaustive(&item.attrs),
+        generic: params.iter().any(|param| !matches!(param.kind, GenericParamDefKind::Lifetime { .. })),
+    })
 }
 
 fn non_exhaustive(attrs: &[Attribute]) -> bool {
@@ -1043,6 +1206,10 @@ mod tests {
             (16, "demo::Event"),
             (17, "demo::List"),
             (18, "demo::Pair"),
+            (19, "demo::Stats"),
+            (20, "demo::Label"),
+            (21, "demo::Holder"),
+            (22, "demo::Open"),
         ])
     }
 
@@ -1125,6 +1292,54 @@ mod tests {
             .with_enum("demo::a::B", enum_def("demo::a::B", vec![unit("X")]))
             .with_enum("demo::inner::AB", enum_def("demo::AB", vec![unit("Y")]));
         assert_eq!((clash.mirror("demo::a::B"), clash.mirror("demo::inner::AB")), (None, None));
+    }
+
+    #[test]
+    fn mirror_names_follow_reexports_through_globs_and_other_crates() {
+        let implementations = Implementations::default()
+            .with_root("gix")
+            .with_reexport("gix", "gix_diff", "gix::diff")
+            .with_reexport("gix_diff", "gix_imara_diff", "gix_diff::blob")
+            .with_reexport("gix", "gix_hash", "gix::hash")
+            .with_enum("gix_imara_diff::Algorithm", enum_def("gix_imara_diff::Algorithm", vec![unit("Myers")]))
+            .with_enum("gix_hash::Kind", enum_def("gix_hash::Kind", vec![unit("Sha1")]));
+        assert_eq!(implementations.nameable("gix_imara_diff::Algorithm").as_deref(), Some("gix::diff::blob::Algorithm"));
+        assert_eq!(implementations.mirror("gix_imara_diff::Algorithm"), Some("DiffBlobAlgorithm"));
+        assert_eq!(implementations.mirror("gix_hash::Kind"), Some("HashKind"));
+    }
+
+    /// A record, a borrowed view, a struct holding the runtime handle and a `#[non_exhaustive]` one.
+    fn records() -> Implementations {
+        let record = |public: &str, fields: Vec<(&str, Type)>| StructDef {
+            public: public.to_owned(),
+            fields: fields.into_iter().map(|(name, ty)| (name.to_owned(), ty)).collect(),
+            borrows: false,
+            constructible: true,
+            generic: false,
+        };
+        let stats = record("demo::Stats", vec![("count", Type::Primitive("u32".to_owned())), ("mode", resolved(15, Vec::new()))]);
+        let label = StructDef { borrows: true, ..record("demo::Label", vec![("text", shared(Type::Primitive("str".to_owned())))]) };
+        let holder = record("demo::Holder", vec![("repo", shared(resolved(14, Vec::new())))]);
+        let open = StructDef { constructible: false, ..record("demo::Open", vec![("flag", Type::Primitive("bool".to_owned()))]) };
+        enums().with_struct("demo::Stats", stats).with_struct("demo::Label", label).with_struct("demo::Holder", holder).with_struct("demo::Open", open)
+    }
+
+    #[test]
+    fn structs_cross_as_mirrors_unless_they_hold_the_handle_or_cannot_be_built() {
+        let renderer = renderer();
+        let implementations = records();
+        let overrides = BTreeMap::from([("demo::Repo".to_owned(), Mapping::Handle)]);
+        let classifier = Classifier::new(&renderer, &overrides, &[], &implementations);
+        let result = |id: u32| classifier.classify(&method(Receiver::Shared, Vec::new(), Some(resolved(id, Vec::new())))).reasons;
+        let parameter = |id: u32| classifier.classify(&method(Receiver::Shared, vec![("value", resolved(id, Vec::new()))], None)).reasons;
+        assert!(result(19).is_empty() && parameter(19).is_empty(), "a record crosses both ways");
+        assert!(result(20).is_empty(), "a borrowed view crosses as a result");
+        assert!(parameter(20)[0].detail.ends_with("demo::Label: a borrowed view, which crosses as a result only"), "{:?}", parameter(20));
+        assert!(result(22).is_empty(), "a `#[non_exhaustive]` struct crosses as a result");
+        assert!(parameter(22)[0].detail.ends_with("demo::Open: `#[non_exhaustive]`, so its mirror cannot build it"), "{:?}", parameter(22));
+        let holder = result(21);
+        assert_eq!((holder[0].category, holder[0].detail.as_str()), (Category::Unmapped, "demo::Holder: field `repo` holds the runtime handle"));
+        assert_eq!(implementations.mirror("demo::Stats"), Some("Stats"));
     }
 
     fn as_ref(target: Type) -> Type {

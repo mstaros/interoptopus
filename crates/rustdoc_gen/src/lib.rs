@@ -406,8 +406,8 @@ fn type_map(krate: &Crate, configuration: &Configuration) -> BTreeMap<String, Ma
         .collect()
 }
 
-/// The trait implementations and enums of the root crate and of the dependency crates' JSON, with
-/// a digest of each dependency's JSON for provenance.
+/// The trait implementations and mirror definitions of the root crate and of the dependency
+/// crates' JSON, with a digest of each dependency's JSON for provenance.
 fn dependencies(krate: &Crate, dependency_json: &[PathBuf]) -> Result<(classify::Implementations, Vec<String>), EngineError> {
     let mut implementations = classify::Implementations::default();
     implementations.add_root(krate);
@@ -567,13 +567,14 @@ mod tests {
 
         let first = analyze(&request).expect("the surface is analyzed");
         assert!(first.manifest_updated);
-        assert_eq!((first.public_methods, first.public_free_functions), (8, 1));
+        assert_eq!((first.public_methods, first.public_free_functions), (11, 1));
         let manifest = Manifest::read(&manifest_path).expect("the manifest reads back");
         let state = |path: &str| manifest.items.iter().find(|item| item.path == path).map(|item| (item.class, item.status));
         assert_eq!(state("demo::Repo::name"), Some((Class::Automatic, Status::Ready)));
         assert_eq!(state("demo::open"), Some((Class::Automatic, Status::Ready)), "public type-map names reach canonical paths");
-        for mirrored in ["demo::Repo::mode", "demo::Repo::set_mode", "demo::Repo::last_event"] {
-            assert_eq!(state(mirrored), Some((Class::Automatic, Status::Ready)), "{mirrored} crosses through enum mirrors");
+        let mirrored = ["demo::Repo::mode", "demo::Repo::set_mode", "demo::Repo::last_event", "demo::Repo::stats", "demo::Repo::set_stats", "demo::Repo::label"];
+        for mirrored in mirrored {
+            assert_eq!(state(mirrored), Some((Class::Automatic, Status::Ready)), "{mirrored} crosses through mirrors");
         }
         assert_eq!(state("demo::Repo::rename"), Some((Class::Decision, Status::Unresolved)));
         assert_eq!(state("demo::Repo::find"), Some((Class::Decision, Status::Unresolved)));
@@ -616,6 +617,18 @@ mod inner {
             None
         }
 
+        pub fn stats(&self) -> crate::stats::Stats {
+            crate::stats::Stats { count: 0, name: String::new(), mode: crate::mode::Mode::Read, note: None, fallback: None }
+        }
+
+        pub fn set_stats(&self, stats: crate::stats::Stats) {
+            let _ = stats;
+        }
+
+        pub fn label(&self) -> crate::Label<'_> {
+            crate::Label { text: "", data: &[] }
+        }
+
         #[deprecated]
         pub fn old(&self) {}
     }
@@ -637,6 +650,21 @@ pub enum Event {
     Opened(u32),
     Renamed { from: String, to: String },
     Closed,
+}
+
+pub mod stats {
+    pub struct Stats {
+        pub count: u32,
+        pub name: String,
+        pub mode: crate::mode::Mode,
+        pub note: Option<String>,
+        pub fallback: Option<crate::mode::Mode>,
+    }
+}
+
+pub struct Label<'a> {
+    pub text: &'a str,
+    pub data: &'a [u8],
 }
 
 pub struct Item;
@@ -724,11 +752,20 @@ pub fn open(path: impl AsRef<std::path::Path>) -> Result<Repo, std::io::Error> {
 
         let generated = generate(&request).expect("the facade is generated");
         assert!(generated.written);
-        assert_eq!((generated.emitted, generated.pending), (5, 3), "demo::open and four Repo methods; three items await decisions");
+        assert_eq!((generated.emitted, generated.pending), (8, 3), "demo::open and seven Repo methods; three items await decisions");
         let source = fs::read_to_string(&generated.rust_module).expect("the facade reads back");
         assert!(source.contains("pub enum ModeMode {") && source.contains("pub enum Event {"), "mirrors of a fieldless and a data enum: {source}");
+        assert!(source.contains("pub struct StatsStats {") && source.contains("fn from_stats_stats("), "a record both ways: {source}");
+        assert!(source.contains("pub struct Label {") && !source.contains("fn from_label("), "a borrowed view as a result only: {source}");
         assert!(!generate(&request).expect("the facade is generated again").written, "regenerating changes nothing");
         assert!(cargo(&["test", "--offline", "-p", "facade"]), "the generated facade builds and registers with an inventory");
+        let clippy = std::process::Command::new("cargo")
+            .args(["+nightly-2026-07-18", "clippy", "--offline", "-p", "facade", "--manifest-path"])
+            .arg(root.join("Cargo.toml"))
+            .args(["--", "-D", "warnings"])
+            .status()
+            .expect("cargo runs");
+        assert!(clippy.success(), "the generated facade passes clippy");
 
         let mut manifest = Manifest::read(&manifest_path).expect("the manifest reads back");
         manifest.items[0].status = Status::Excluded;

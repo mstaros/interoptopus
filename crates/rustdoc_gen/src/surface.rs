@@ -3,7 +3,7 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 
-use rustdoc_types::{Crate, GenericBound, GenericParamDefKind, Id, Item, ItemEnum, Type, Visibility, WherePredicate};
+use rustdoc_types::{Crate, GenericBound, GenericParamDefKind, Id, Item, ItemEnum, ItemKind, Type, Visibility, WherePredicate};
 
 use crate::render::Renderer;
 
@@ -153,7 +153,11 @@ pub fn public_paths(krate: &Crate) -> HashMap<Id, String> {
                 },
             };
             let is_module = matches!(krate.index.get(&target).map(|target| &target.inner), Some(ItemEnum::Module(_)));
-            if !matches!(&item.inner, ItemEnum::Use(import) if import.is_glob) {
+            // A glob of a local module adds that module's items under this prefix (followed below); a
+            // glob of another crate's module stands for that module re-exported here.
+            let glob = matches!(&item.inner, ItemEnum::Use(import) if import.is_glob);
+            let external_module = !krate.index.contains_key(&target) && krate.paths.get(&target).is_some_and(|summary| summary.kind == ItemKind::Module);
+            if !glob || external_module {
                 paths.entry(target).or_insert_with(|| path.clone());
             }
             if is_module && visited.insert(target) {
