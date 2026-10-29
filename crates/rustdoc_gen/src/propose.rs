@@ -5,25 +5,22 @@
 //! handles and listed apart, since accepting one needs its rebuild and key. Each proposal is ranked
 //! by the blocked items it unblocks, and the items it removes a blocker from, when classified and
 //! lowered (`facade::verdict`) with it applied. A
-//! person accepts a proposal by moving it into the type map; whether the emitter can lower the
-//! accepted mapping is a separate question (E5's convert kind).
+//! person accepts a proposal by moving it into the type map; the emitter lowers an accepted
+//! mapping through the same traits (E5's convert kind).
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use rustdoc_types::Type;
 
-use crate::classify::{Category, Classifier, Implementations, KEY_PLACEHOLDER, Keyed, Mapping, REPO_PLACEHOLDER, Reason, VALUE_PLACEHOLDER};
+use crate::classify::{
+    AS_REF_BYTES, Category, Classifier, DISPLAY, FROM_BYTE_VEC, FROM_BYTES, FROM_STR, Implementations, KEY_PLACEHOLDER, Keyed, Mapping,
+    REPO_PLACEHOLDER, Reason, TRY_FROM_STR, VALUE_PLACEHOLDER,
+};
 use crate::facade;
 use crate::manifest::Proposal;
 use crate::render::{Renderer, type_args};
 use crate::surface::{Function, Receiver};
 
-const DISPLAY: &str = "core::fmt::Display";
-const FROM_STR: &str = "core::str::traits::FromStr";
-const TRY_FROM_STR: &str = "core::convert::TryFrom<&str>";
-const AS_REF_BYTES: &str = "core::convert::AsRef<[u8]>";
-const FROM_BYTES: &str = "core::convert::From<&[u8]>";
-const FROM_BYTE_VEC: &str = "core::convert::From<alloc::vec::Vec<u8>>";
 const SEND: &str = "core::marker::Send";
 const SYNC: &str = "core::marker::Sync";
 

@@ -118,6 +118,19 @@ const CONVERTING: [&str; 4] = ["core::convert::AsRef", "core::borrow::Borrow", "
 const ITERATOR: &str = "core::iter::traits::iterator::Iterator";
 const DEREF: &str = "core::ops::deref::Deref";
 
+/// `Display`: a type mapped to `string` crosses out as its display text.
+pub const DISPLAY: &str = "core::fmt::Display";
+/// `FromStr`: a type mapped to `string` crosses in by parsing.
+pub const FROM_STR: &str = "core::str::traits::FromStr";
+/// `TryFrom<&str>`: a type mapped to `string` crosses in through `TryFrom`.
+pub const TRY_FROM_STR: &str = "core::convert::TryFrom<&str>";
+/// `AsRef<[u8]>`: a type mapped to `bytes` crosses out as a byte view.
+pub const AS_REF_BYTES: &str = "core::convert::AsRef<[u8]>";
+/// `From<&[u8]>`: a type mapped to `bytes` crosses in from a byte slice.
+pub const FROM_BYTES: &str = "core::convert::From<&[u8]>";
+/// `From<Vec<u8>>`: a type mapped to `bytes` crosses in from owned bytes.
+pub const FROM_BYTE_VEC: &str = "core::convert::From<alloc::vec::Vec<u8>>";
+
 /// The class of a surface function.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -339,6 +352,8 @@ pub struct Implementations {
     deref_targets: BTreeMap<String, String>,
     /// Types declared with a lifetime parameter.
     with_lifetime: BTreeSet<String>,
+    /// The crates whose rustdoc JSON was added, so their trait implementations are known.
+    crates: BTreeSet<String>,
     /// Public enums by canonical path.
     enums: BTreeMap<String, EnumDef>,
     /// Public structs whose named fields are all public, by canonical path.
@@ -361,6 +376,7 @@ impl Implementations {
         let renderer = Renderer::new(krate);
         let public_paths = surface::public_paths(krate);
         let name = krate.index.get(&krate.root).and_then(|root| root.name.clone()).unwrap_or_default();
+        self.crates.insert(name.clone());
         for (id, public) in &public_paths {
             if let Some(summary) = krate.paths.get(id)
                 && let [target] = summary.path.as_slice()
@@ -436,6 +452,19 @@ impl Implementations {
     #[must_use]
     pub fn implements_reference(&self, path: &str, reference: &str) -> bool {
         self.by_reference.get(reference).into_iter().flatten().any(|implementer| base(implementer) == path)
+    }
+
+    /// Whether `implementer`, exactly as the renderer writes it (`&bstr::BStr` is not
+    /// `bstr::BStr`), implements a trait reference with its arguments.
+    #[must_use]
+    pub fn implements_exactly(&self, implementer: &str, reference: &str) -> bool {
+        self.by_reference.get(reference).is_some_and(|implementers| implementers.contains(implementer))
+    }
+
+    /// Whether the crate defining `path` was documented, so its trait implementations are known.
+    #[must_use]
+    pub fn documents(&self, path: &str) -> bool {
+        path.split("::").next().is_some_and(|krate| self.crates.contains(krate))
     }
 
     /// The `Deref` target of the type at `path`, as the renderer writes it.
@@ -547,6 +576,13 @@ impl Implementations {
     pub(crate) fn with_facts<'p>(mut self, derefs: impl IntoIterator<Item = (&'p str, &'p str)>, lifetimes: &[&str]) -> Self {
         self.deref_targets.extend(derefs.into_iter().map(|(path, target)| (path.to_owned(), target.to_owned())));
         self.with_lifetime.extend(lifetimes.iter().map(|path| (*path).to_owned()));
+        self
+    }
+
+    /// Marks a crate as documented.
+    #[cfg(test)]
+    pub(crate) fn with_crate(mut self, name: &str) -> Self {
+        self.crates.insert(name.to_owned());
         self
     }
 
