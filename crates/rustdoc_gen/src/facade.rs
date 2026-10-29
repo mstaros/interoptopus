@@ -345,9 +345,7 @@ impl Emitter<'_> {
         } else {
             match (method, &accessor) {
             (true, Some(accessor)) if constructor.is_some() => {
-                // interoptopus copies constructor parameters into a free function, where `Self` is
-                // unknown: a workaround until interoptopus fixes it (design doc, Boundary with interoptopus).
-                declarations.insert(0, format!("{handle_parameter}: &{}", self.service));
+                declarations.insert(0, format!("{handle_parameter}: &Self"));
                 format!("{handle_parameter}.inner.{accessor}().{}({})", function.name, arguments.join(", "))
             }
             (true, Some(accessor)) => {
@@ -1607,7 +1605,7 @@ mod tests {
     fn methods_returning_the_handle_become_constructors_taking_it() {
         let main = function("demo::Repo::main", Some("demo::Repo"), Receiver::Shared, Vec::new(), Some(generic(3, vec![ty(4), ty(5)])));
         let source = facade(&[main]).source;
-        assert!(source.contains("    pub fn main(repo: &Repo) -> ffi::Result<Self, runtime::Error> {\n"), "{source}");
+        assert!(source.contains("    pub fn main(repo: &Self) -> ffi::Result<Self, runtime::Error> {\n"), "{source}");
         assert!(source.contains("runtime::Repo::from(repo.inner.repo().main().map_err(runtime::error)?)"), "{source}");
     }
 
