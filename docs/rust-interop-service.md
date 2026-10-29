@@ -47,7 +47,7 @@ Interoptopus fixes to discuss:
 - Services returned only from constructors, never from methods or inside `Option` and `Vec`
   (see Handles): this is what keeps keyed handles from becoming per-type services.
 
-Fixed in interoptopus on 2026-10-29, not released yet (needs 0.19.1):
+Fixed in interoptopus 0.19.1 (2026-10-29):
 
 - `Self` in service parameter types: the service macro copied parameters into a free function,
   where `Self` is unknown. It now writes the service type there, for constructors and methods,
