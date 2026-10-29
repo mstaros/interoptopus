@@ -123,9 +123,9 @@ One JSON file per target repository.
 
 ## Classification (v1)
 
-- **Automatic**: every type is in the type map or is a public enum the facade mirrors (see
-  Enums); borrowed results only for handle types that have a decision; generic arguments only
-  when a mapped type satisfies their bounds (see Type map).
+- **Automatic**: every type is in the type map or is a public enum or record the facade
+  mirrors (see Mirrors); borrowed results only for handle types that have a decision; generic
+  arguments only when a mapped type satisfies their bounds (see Type map).
 - **Needs a decision**: unmapped borrowed results and other generics; results implementing
   `Iterator` until a cursor template exists; `&mut self` methods on the runtime handle, which
   need the persistent holder. Categories come from trait implementations (`Iterator`, `Fn*`,
@@ -244,28 +244,36 @@ Every call rebuilds the object, so bulk reads, such as a 10,000-commit log readi
 each (50,000 lookups), should use a per-item `record` override that returns the fields
 together.
 
-## Enums
+## Mirrors
 
-A public enum crosses as an `#[ffi]` mirror without a type-map entry, named after its shortest
-public path through the root crate without the root segment (`gix::remote::Direction` becomes
-`RemoteDirection`). An enum without such a path, or whose mirror name another enum or the
+Public enums and records cross as `#[ffi]` mirrors without type-map entries. A record is a
+public struct whose named fields are all public; a struct with private or unnamed fields stays
+unmapped. A mirror is named after its type's shortest public path through the root crate,
+without the root segment (`gix::remote::Direction` becomes `RemoteDirection`). That path
+follows other crates re-exported as modules, also through globs and through other crates:
+`gix_imara_diff::Algorithm` is public as `gix::diff::blob::Algorithm`, so its mirror is
+`DiffBlobAlgorithm`. A type without such a path, or whose mirror name another type or the
 service claims, gets no mirror, and its items need a decision. Variants and fields keep their
-Rust names (escaped like other names interoptopus rejects), explicit discriminants are copied
-as literals, and empty tuple and struct variants become unit variants. The mirror declares no
-`#[repr]`: the discriminant type and the C# shape (a plain enum or a union) are interoptopus'.
+Rust names (escaped like other names interoptopus rejects), and path segments that are keywords
+become raw identifiers (`worktree_admin::r#move`). Mirrors declare no `#[repr]`: the
+discriminant type and the C# shape (a plain enum, a union or a struct) are interoptopus'.
 
-- Fieldless enums cross both ways: `to_<mirror>` copies results, `from_<mirror>` converts
-  parameters.
-- Enums with data cross as results only. Payloads convert like results, from references:
-  primitives, text, bytes, paths, custom mappings, keys and nested enums. Enum parameters with
-  data, and other payloads, are `lowering` decisions.
-- A `#[non_exhaustive]` enum, or one with hidden variants, maps a variant the facade does not
-  know to `runtime::error(UnknownVariant(..))`.
-- Generic and recursive enums, enums without variants and enums with hidden fields need a
-  decision.
-- Definitions come from the root crate's and the dependencies' rustdoc JSON. Paths through glob
-  re-exports are not followed yet, so such enums get no mirror (gix: `gix_imara_diff::Algorithm`,
-  public as `gix::diff::blob::Algorithm`).
+- Enums: explicit discriminants are copied as literals, and empty tuple and struct variants
+  become unit variants. Fieldless enums cross both ways (`to_<mirror>` for results,
+  `from_<mirror>` for parameters); enums with data cross as results only. A
+  `#[non_exhaustive]` enum, or one with hidden variants, maps a variant the facade does not know
+  to `runtime::error(UnknownVariant(..))`.
+- Records: `to_<mirror>` copies the fields of any record, borrowed views (structs with a
+  lifetime, such as `SignatureRef`) included; `from_<mirror>` builds an owned record that is not
+  `#[non_exhaustive]` from primitives, text, bytes, options and nested mirrors. A record with a
+  field holding the runtime handle (gix's `Object`, `Reference`) gets no mirror: it is a
+  keyed-handle candidate.
+- Payloads and fields convert like results, from references: primitives, text, bytes, paths,
+  custom mappings, keys, options and nested mirrors. Enum parameters with data, other payloads,
+  and record parameters with other fields (such as paths) are `lowering` decisions.
+- Generic and recursive types, enums without variants, records without fields and enums with
+  hidden fields need a decision.
+- Definitions come from the root crate's and the dependencies' rustdoc JSON.
 
 ## Determinism and safety
 
@@ -313,6 +321,11 @@ as literals, and empty tuple and struct variants become unit variants. The mirro
   through 5 mirrors: `HashKind`, `RemoteDirection`, `RepositoryKind`, `SecTrust` and
   `StateInProgress`. First blockers: receiver 365, unmapped 125 (from 130); blockers inside
   enums name the payload, such as `gix_ref::FullName` in `PreviousValue`.
+- Record kind (2026-10-29): 81 automatic items (from 61) and 75 generated members (from 56)
+  through 12 record and 10 enum mirrors; first blockers: receiver 365, unmapped 102 (from 125).
+  No blocker is left for want of a mirror name. Records holding the runtime handle (`Object`
+  12 blockers, `Reference` 8, `Blob` 5, `Tag` 4, `EntryRef` 4, `Head` 2) are keyed-handle
+  candidates.
 
 ## Open decisions
 
@@ -348,7 +361,7 @@ type-map proposals ranked by impact (see Type map).
 - [x] E3b Report every blocker per item. Done: items list `reasons` in order (receiver, parameters, result), the summary adds `sole_blockers`, and items ignore fields that older engine versions wrote. On gix only 70 of the 405 receiver-first items are blocked by the receiver alone (see Reference measurements).
 - [ ] E3c `analyze` proposes type-map entries ranked by how many items each unblocks (with G3). First increment (report only): the manifest carries `proposals` and `handle_candidates`, ranked by unblocks and reduces (see Type map; gix numbers under Reference measurements). Open: accepted string and bytes mappings need the emitter's convert kind (E5). Handle candidates are measured and labeled as `keyed` (2026-10-28).
 - [ ] E4 Decision validation: structured payloads (see Manifest), per-type handle answers covering `&self` methods only with per-item overrides, and the check that builds the generated facade with the target's features. Needs E3a, and a buildable runtime: G2's minimal runtime or a stub of the runtime contract. First part (2026-10-28): `analyze` and `generate` check keyed payloads (placeholders, `repo` mapped as a handle, a primitive key or one with a data mapping); the build check is the target's build of the generated facade. Open: per-item decision payloads, and running the build from the service.
-- [ ] E5 Rust facade emitter (automatic, handle, convert and record kinds) plus inventory registration; handles cross the boundary as keys (see Handles). Facade types get unique module-qualified names (see Naming and namespaces). First increment, the automatic kind: `generate` emits one service for all types mapped to the runtime handle (functions returning the handle become constructors, including `&self` methods as constructors taking `&Self`; free functions and the handle's own type win name clashes; conversions between handle types are dropped), its `&self` methods, and free functions named after their module path. Every member returns `ffi::Result`. It refuses a stale manifest (provenance or items differ from a fresh analysis) and, unless the request sets `partial`, one that is not ready; it rejects output folders outside the worktree and writes `mod.rs` into `rust_output` only when it changes. An end-to-end test builds the generated facade for a demo crate and validates its inventory. Keyed handles (2026-10-28) are the handle kind: see Handles. The first keyed generation for gix moved two cases from automatic to blocked, since the emitter cannot lower them yet: parameters `impl IntoIterator<Item = …>` ("waits for slice parameters") and parameters borrowing the runtime handle ("takes the runtime handle as a parameter"). Automatic means generated (2026-10-28): `facade::verdict` runs the emitter on every function the classifier passes, and `analyze`, `generate` and `propose` use it, so what the emitter does not generate is a decision with category `lowering` and the emitter's reason, and `generate` cannot fail on an automatic item. The emitter lowers `Box<T>` and `Cow<T>` parameters and results, `&String` parameters, and `Self`/`&Self` through the owner's mapping. Open: `Vec<T>` and `IntoIterator` parameters (slices), nested options and options of results. The first real generation (gix, `dfe25025`) added two fixes: names interoptopus forbids get a trailing underscore (`init` becomes `init_`), and constructors taking the service name its type, because interoptopus copies their parameters into a free function where `Self` is unknown. The second is a workaround to fix in interoptopus (see Boundary with interoptopus). Enum kind (2026-10-29): public enums cross as `#[ffi]` mirrors (see Enums): fieldless enums both ways, enums with data as results, unknown variants of open enums as runtime errors; on gix 5 mirrors make 5 more items automatic (see Reference measurements). gix-ffi does not build with them yet: the service gains `kind`, which interoptopus' unqualified `Self::kind()` resolves to (see Boundary with interoptopus).
+- [ ] E5 Rust facade emitter (automatic, handle, convert and record kinds) plus inventory registration; handles cross the boundary as keys (see Handles). Facade types get unique module-qualified names (see Naming and namespaces). First increment, the automatic kind: `generate` emits one service for all types mapped to the runtime handle (functions returning the handle become constructors, including `&self` methods as constructors taking `&Self`; free functions and the handle's own type win name clashes; conversions between handle types are dropped), its `&self` methods, and free functions named after their module path. Every member returns `ffi::Result`. It refuses a stale manifest (provenance or items differ from a fresh analysis) and, unless the request sets `partial`, one that is not ready; it rejects output folders outside the worktree and writes `mod.rs` into `rust_output` only when it changes. An end-to-end test builds the generated facade for a demo crate and validates its inventory. Keyed handles (2026-10-28) are the handle kind: see Handles. The first keyed generation for gix moved two cases from automatic to blocked, since the emitter cannot lower them yet: parameters `impl IntoIterator<Item = …>` ("waits for slice parameters") and parameters borrowing the runtime handle ("takes the runtime handle as a parameter"). Automatic means generated (2026-10-28): `facade::verdict` runs the emitter on every function the classifier passes, and `analyze`, `generate` and `propose` use it, so what the emitter does not generate is a decision with category `lowering` and the emitter's reason, and `generate` cannot fail on an automatic item. The emitter lowers `Box<T>` and `Cow<T>` parameters and results, `&String` parameters, and `Self`/`&Self` through the owner's mapping. Open: `Vec<T>` and `IntoIterator` parameters (slices), nested options and options of results. The first real generation (gix, `dfe25025`) added two fixes: names interoptopus forbids get a trailing underscore (`init` becomes `init_`), and constructors taking the service name its type, because interoptopus copies their parameters into a free function where `Self` is unknown. The second is a workaround to fix in interoptopus (see Boundary with interoptopus). Enum kind (2026-10-29): public enums cross as `#[ffi]` mirrors (see Mirrors): fieldless enums both ways, enums with data as results, unknown variants of open enums as runtime errors; on gix 5 mirrors make 5 more items automatic (see Reference measurements). gix-ffi does not build with them yet: the service gains `kind`, which interoptopus' unqualified `Self::kind()` resolves to (see Boundary with interoptopus). Record kind (2026-10-29): public structs with named, public fields cross as `#[ffi]` mirrors (see Mirrors): `to_<mirror>` for results, borrowed views included, and `from_<mirror>` for owned, buildable parameters; mirror names follow glob re-exports and other crates, and keyword path segments become raw identifiers. On gix 81 items are automatic and 75 members generated (see Reference measurements); with `kind` set aside, the generated facade compiles in gix-ffi and is clippy-clean. The end-to-end test now also runs clippy on the generated facade.
 - [x] E6 Names sidecar in the C# backend. Not needed: the engine writes no C# (2026-10-29, see Boundary with interoptopus).
 - [x] E7 Public C# layer: out of the engine (2026-10-29, see Boundary with interoptopus). A first increment (2026-10-28) emitted `{ManagedNamespace}.g.cs` with its own names, conversions and keyed classes, re-implementing interoptopus' member naming; it was removed with its settings (`csharp_output`, `csharp_runtime`, `managed_namespace`, `native_namespace`) and the keyed payload's `key_name`.
 - [ ] E8 Release with `publish_localcargo`; package the binary with `package_rust_binary`.
