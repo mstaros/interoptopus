@@ -215,7 +215,9 @@ pub struct Summary {
     pub stale: usize,
     /// Decisions whose path is no longer on the surface.
     pub orphaned_decisions: usize,
-    /// Whether generation may run: nothing unresolved, stale or orphaned.
+    /// Whether `generate` runs without `partial`: nothing unresolved, stale or orphaned, and no
+    /// item decided with a kind generation does not support yet; `exclude` and `manual` need no
+    /// generated code.
     pub ready: bool,
     /// Unresolved, stale and excluded items per category of their first blocker.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -265,11 +267,23 @@ pub fn signature_hash(path: &str, signature: &str) -> String {
     hash.hex()
 }
 
+/// The signature hashes decided `exclude` or `manual`: items that need no generated code.
+#[must_use]
+pub fn settled(decisions: &[Decision]) -> HashSet<&str> {
+    decisions
+        .iter()
+        .filter(|decision| matches!(decision.kind, DecisionKind::Exclude | DecisionKind::Manual))
+        .map(|decision| decision.signature_hash.as_str())
+        .collect()
+}
+
 /// Classifies the surface, sets each item's status from the decisions and counts the result.
 #[must_use]
 pub fn items(functions: &[Function], renderer: &Renderer, verdict: impl Fn(&Function) -> Verdict, decisions: &[Decision]) -> (Vec<Item>, Summary) {
     let decided: HashSet<&str> = decisions.iter().map(|decision| decision.signature_hash.as_str()).collect();
     let decided_paths: HashSet<&str> = decisions.iter().map(|decision| decision.path.as_str()).collect();
+    let settled = settled(decisions);
+    let mut unsupported = 0;
     let mut summary = Summary::default();
     let mut items = Vec::with_capacity(functions.len());
     for function in functions {
@@ -291,6 +305,9 @@ pub fn items(functions: &[Function], renderer: &Renderer, verdict: impl Fn(&Func
             Status::Unresolved => summary.unresolved += 1,
             Status::Stale => summary.stale += 1,
         }
+        if status == Status::Resolved && !settled.contains(signature_hash.as_str()) {
+            unsupported += 1;
+        }
         if let Some(first) = verdict.reasons.first() {
             if matches!(status, Status::Unresolved | Status::Stale | Status::Excluded) {
                 *summary.reasons.entry(first.category.name().to_owned()).or_default() += 1;
@@ -311,7 +328,7 @@ pub fn items(functions: &[Function], renderer: &Renderer, verdict: impl Fn(&Func
     }
     let paths: HashSet<&str> = functions.iter().map(|function| function.path.as_str()).collect();
     summary.orphaned_decisions = decisions.iter().filter(|decision| !paths.contains(decision.path.as_str())).count();
-    summary.ready = summary.unresolved == 0 && summary.stale == 0 && summary.orphaned_decisions == 0;
+    summary.ready = summary.unresolved == 0 && summary.stale == 0 && summary.orphaned_decisions == 0 && unsupported == 0;
     (items, summary)
 }
 
@@ -369,6 +386,30 @@ mod tests {
         assert!(!summary.ready);
         assert_eq!(summary.reasons.get("mut_handle"), Some(&2));
         assert_eq!(summary.sole_blockers.get("mut_handle"), Some(&2));
+    }
+
+    #[test]
+    fn only_decisions_needing_no_code_leave_the_manifest_ready() {
+        let renderer = Renderer::from_paths([]);
+        let types = BTreeMap::from([("demo::Repo".to_owned(), Mapping::Handle)]);
+        let implementations = crate::classify::Implementations::default();
+        let classifier = Classifier::new(&renderer, &types, &[], &implementations);
+        let functions = vec![
+            function("demo::Repo::automatic", Receiver::Shared),
+            function("demo::Repo::decided", Receiver::Exclusive),
+        ];
+        let hash = signature_hash("demo::Repo::decided", &functions[1].signature(&renderer));
+        let ready = |kind| {
+            let decisions = [Decision { kind, ..decision("demo::Repo::decided", hash.clone()) }];
+            let (items, summary) = items(&functions, &renderer, |function| classifier.classify(function), &decisions);
+            assert_eq!(items[1].status, Status::Resolved);
+            (summary.ready, settled(&decisions).len())
+        };
+        assert_eq!(ready(DecisionKind::Exclude), (true, 1));
+        assert_eq!(ready(DecisionKind::Manual), (true, 1));
+        for kind in [DecisionKind::Handle, DecisionKind::Record, DecisionKind::Convert] {
+            assert_eq!(ready(kind), (false, 0), "{kind:?} is not generated yet");
+        }
     }
 
     #[test]

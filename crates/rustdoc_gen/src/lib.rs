@@ -93,7 +93,8 @@ pub enum ErrorCode {
     UnsupportedFormat,
     /// The manifest does not match the current surface; run `analyze` first.
     StaleManifest,
-    /// Items still need decisions and the request did not ask for partial generation.
+    /// Items are undecided, stale or decided with a kind generation does not support yet, and the
+    /// request did not ask for partial generation.
     NotReady,
     /// The subcommand is not implemented yet.
     NotImplemented,
@@ -222,8 +223,8 @@ pub struct GenerateResult {
     pub emitted: usize,
     /// Ready items left out, such as another handle type's duplicate of a method.
     pub dropped: Vec<Dropped>,
-    /// Items not generated yet: unresolved, or decided with a kind the emitter does not
-    /// support yet.
+    /// Items not generated yet: unresolved, stale, or decided with a kind the emitter does not
+    /// support yet. Items decided `exclude` or `manual` need no generated code.
     pub pending: usize,
 }
 
@@ -346,9 +347,16 @@ pub fn generate(request: &GenerateRequest) -> Result<GenerateResult, EngineError
     }
     let ready: BTreeSet<&str> =
         items.iter().filter(|item| item.class == Class::Automatic && item.status == Status::Ready).map(|item| item.path.as_str()).collect();
-    let pending = items.iter().filter(|item| item.status != Status::Excluded && !ready.contains(item.path.as_str())).count();
+    let settled = manifest::settled(&manifest.decisions);
+    let pending = items
+        .iter()
+        .filter(|item| item.status != Status::Excluded && !ready.contains(item.path.as_str()) && !settled.contains(item.signature_hash.as_str()))
+        .count();
     if pending > 0 && !request.partial {
-        return Err(EngineError::new(ErrorCode::NotReady, format!("{pending} items are not ready; resolve them or request partial generation")));
+        return Err(EngineError::new(
+            ErrorCode::NotReady,
+            format!("{pending} items are undecided, stale or decided with a kind generation does not support yet; decide them or request partial generation"),
+        ));
     }
     let selected: Vec<&surface::Function> = functions.iter().filter(|function| ready.contains(function.path.as_str())).collect();
     let crate_name = krate.index.get(&krate.root).and_then(|root| root.name.clone()).unwrap_or_default();
@@ -797,6 +805,24 @@ pub fn open(path: impl AsRef<std::path::Path>) -> Result<Repo, std::io::Error> {
             .status()
             .expect("cargo runs");
         assert!(clippy.success(), "the generated facade passes clippy");
+
+        let mut manifest = Manifest::read(&manifest_path).expect("the manifest reads back");
+        manifest.decisions = manifest
+            .items
+            .iter()
+            .filter(|item| item.status == Status::Unresolved)
+            .map(|item| Decision { path: item.path.clone(), signature_hash: item.signature_hash.clone(), kind: DecisionKind::Exclude, details: BTreeMap::new() })
+            .collect();
+        manifest.decisions[0].kind = DecisionKind::Handle;
+        manifest.write(&manifest_path).expect("the manifest can be written");
+        assert!(!analyze(&analysis).expect("the decisions are analyzed").summary.ready, "a handle decision is not generated yet");
+        assert_eq!(generate(&complete).unwrap_err().code, ErrorCode::NotReady, "the handle decision is pending");
+        let mut manifest = Manifest::read(&manifest_path).expect("the manifest reads back");
+        manifest.decisions[0].kind = DecisionKind::Manual;
+        manifest.write(&manifest_path).expect("the manifest can be written");
+        assert!(analyze(&analysis).expect("the decisions are analyzed again").summary.ready, "exclude and manual need no generated code");
+        let decided = generate(&complete).expect("a ready manifest generates without partial");
+        assert_eq!((decided.emitted, decided.pending, decided.written), (11, 0, false), "the decided items stay out of the facade");
 
         let mut manifest = Manifest::read(&manifest_path).expect("the manifest reads back");
         manifest.items[0].status = Status::Excluded;
