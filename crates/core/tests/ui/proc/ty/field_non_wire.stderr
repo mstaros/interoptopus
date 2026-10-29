@@ -19,7 +19,4 @@ help: the trait `WireIO` is not implemented for `Bar`
              (A, B, C, D, E)
              (A, B, C, D, E, F)
            and $N others
-help: add `#![feature(trivial_bounds)]` to the crate attributes to enable
-   |
- 1 + #![feature(trivial_bounds)]
-   |
+   = help: see issue #48214

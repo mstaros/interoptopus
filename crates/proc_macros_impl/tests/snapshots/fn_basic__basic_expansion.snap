@@ -1,6 +1,5 @@
 ---
 source: crates/proc_macros_impl/tests/fn_basic.rs
-assertion_line: 13
 expression: expand_ffi!(item)
 ---
 #[unsafe(export_name = "foo")]
@@ -36,11 +35,15 @@ unsafe impl ::interoptopus::lang::function::FunctionInfo for foo {
             emission: ::interoptopus::lang::meta::Emission::FileEmission(
                 ::interoptopus::lang::meta::FileEmission::Default,
             ),
-            signature: Self::signature(),
+            signature: <Self as ::interoptopus::lang::function::FunctionInfo>::signature(),
         }
     }
     fn register(inventory: &mut impl ::interoptopus::inventory::Inventory) {
         <() as ::interoptopus::lang::types::TypeInfo>::register(inventory);
-        inventory.register_function(Self::id(), Self::function());
+        inventory
+            .register_function(
+                <Self as ::interoptopus::lang::function::FunctionInfo>::id(),
+                <Self as ::interoptopus::lang::function::FunctionInfo>::function(),
+            );
     }
 }

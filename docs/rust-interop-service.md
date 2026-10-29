@@ -37,9 +37,6 @@ facade needs, the fix is discussed and made in interoptopus, not worked around i
 
 Interoptopus fixes to discuss:
 
-- Service constructors taking `&Self`: the service macro copies constructor parameters into a
-  free function, where `Self` is unknown, so the facade names the service type instead (a
-  workaround in `facade.rs` until this is fixed).
 - The forbidden-name list lives in the proc-macro crate, which cannot export it, so the engine
   keeps a copy that a test checks against the source (`forbidden.rs`). interoptopus could
   expose it from a regular crate.
@@ -49,10 +46,16 @@ Interoptopus fixes to discuss:
   should add if not, is decided in interoptopus.
 - Services returned only from constructors, never from methods or inside `Option` and `Vec`
   (see Handles): this is what keeps keyed handles from becoming per-type services.
-- Macro-emitted trait impls call `Self::kind()`, `Self::id()` and `Self::ty()` unqualified (the
-  `types`, `service`, `function` and `constant` emitters of `proc_macros_impl`), so an `#[ffi]`
-  type or service with an inherent item of that name does not compile; gix's
-  `Repository::kind` hits it (2026-10-29). The fix is qualified calls, such as
+
+Fixed in interoptopus on 2026-10-29, not released yet (needs 0.19.1):
+
+- `Self` in service parameter types: the service macro copied parameters into a free function,
+  where `Self` is unknown. It now writes the service type there, for constructors and methods,
+  also inside references, pointers, slices, arrays and tuples. The facade still names the service
+  type instead (`facade.rs`); that workaround goes once gix-ffi builds against 0.19.1.
+- Unqualified trait calls: macro-emitted trait impls called `Self::kind()`, `Self::id()`,
+  `Self::ty()` and the like, so an `#[ffi]` type or service with an inherent item of that name
+  did not compile (gix's `Repository::kind`). Every emitter now names the trait, such as
   `<Self as TypeInfo>::kind()`.
 
 ## Engine

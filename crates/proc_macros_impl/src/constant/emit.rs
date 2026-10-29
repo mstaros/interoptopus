@@ -36,7 +36,7 @@ impl ConstantModel {
 
                 fn register(inventory: &mut impl ::interoptopus::inventory::Inventory) {
                     <#ty as ::interoptopus::lang::types::TypeInfo>::register(inventory);
-                    inventory.register_constant(Self::id(), Self::constant());
+                    inventory.register_constant(<Self as ::interoptopus::lang::constant::ConstantInfo>::id(), <Self as ::interoptopus::lang::constant::ConstantInfo>::constant());
                 }
             }
         };

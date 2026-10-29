@@ -167,17 +167,17 @@ impl ServiceModel {
         }
     }
 
-    /// Replace Self with the actual service type in a type expression
+    /// Replace Self with the actual service type in a type expression, also inside references,
+    /// pointers, slices, arrays, tuples and generic arguments.
     /// For const contexts, lifetime parameters are stripped
     fn replace_self_with_service_type(&self, ty: &Type) -> Type {
         use syn::{GenericArgument, PathArguments, Type};
 
-        match ty {
+        let mut ty = ty.clone();
+        match &mut ty {
             Type::Path(type_path) => {
-                let mut new_path = type_path.clone();
-
                 // Process each segment of the path
-                for segment in &mut new_path.path.segments {
+                for segment in &mut type_path.path.segments {
                     if segment.ident == "Self" {
                         // Replace Self with the base service type name (no generics for const contexts)
                         segment.ident = self.service_name.clone();
@@ -194,11 +194,21 @@ impl ServiceModel {
                         }
                     }
                 }
-
-                Type::Path(new_path)
             }
-            _ => ty.clone(),
+            Type::Reference(inner) => *inner.elem = self.replace_self_with_service_type(&inner.elem),
+            Type::Ptr(inner) => *inner.elem = self.replace_self_with_service_type(&inner.elem),
+            Type::Slice(inner) => *inner.elem = self.replace_self_with_service_type(&inner.elem),
+            Type::Array(inner) => *inner.elem = self.replace_self_with_service_type(&inner.elem),
+            Type::Paren(inner) => *inner.elem = self.replace_self_with_service_type(&inner.elem),
+            Type::Group(inner) => *inner.elem = self.replace_self_with_service_type(&inner.elem),
+            Type::Tuple(tuple) => {
+                for elem in &mut tuple.elems {
+                    *elem = self.replace_self_with_service_type(elem);
+                }
+            }
+            _ => {}
         }
+        ty
     }
 
     fn emit_constructor_function(&self, ctor: &ServiceMethod) -> TokenStream {
@@ -641,7 +651,8 @@ impl ServiceModel {
         } else {
             let params = inputs.iter().map(|param| {
                 let name = &param.name;
-                let ty = &param.ty;
+                // The generated function lives outside the impl, where `Self` is unknown.
+                let ty = self.replace_self_with_service_type(&param.ty);
                 quote_spanned! { name.span() => #name: #ty }
             });
 
@@ -784,7 +795,7 @@ impl ServiceModel {
                     )*
 
                     // Register the service itself
-                    inventory.register_service(Self::id(), Self::service());
+                    inventory.register_service(<Self as ::interoptopus::lang::service::ServiceInfo>::id(), <Self as ::interoptopus::lang::service::ServiceInfo>::service());
                 }
             }
         }

@@ -1,6 +1,5 @@
 ---
 source: crates/proc_macros_impl/tests/ty_module.rs
-assertion_line: 15
 expression: expand_ffi!(item)
 ---
 #[repr(C)]
@@ -47,12 +46,16 @@ unsafe impl ::interoptopus::lang::types::TypeInfo for Foo {
                     ::interoptopus::lang::meta::Module::from_string("foo"),
                 ),
             ),
-            kind: Self::kind(),
+            kind: <Self as ::interoptopus::lang::types::TypeInfo>::kind(),
         }
     }
     fn register(inventory: &mut impl ::interoptopus::inventory::Inventory) {
         <u8 as ::interoptopus::lang::types::TypeInfo>::register(inventory);
-        inventory.register_type(Self::id(), Self::ty());
+        inventory
+            .register_type(
+                <Self as ::interoptopus::lang::types::TypeInfo>::id(),
+                <Self as ::interoptopus::lang::types::TypeInfo>::ty(),
+            );
     }
 }
 #[allow(clippy::used_underscore_binding, clippy::type_repetition_in_bounds)]

@@ -393,14 +393,14 @@ impl TypeModel {
                 visibility: ::interoptopus::lang::meta::Visibility::Public,
                 docs: ::interoptopus::lang::meta::Docs::from_line(#docs_content),
                 emission: #emission,
-                kind: Self::kind(),
+                kind: <Self as ::interoptopus::lang::types::TypeInfo>::kind(),
             }
         }
     }
 
     fn generate_register(&self) -> TokenStream {
         let type_registration = quote_spanned! { self.name.span() =>
-            inventory.register_type(Self::id(), Self::ty());
+            inventory.register_type(<Self as ::interoptopus::lang::types::TypeInfo>::id(), <Self as ::interoptopus::lang::types::TypeInfo>::ty());
         };
 
         // For opaque and service types, inner fields are not emitted, so we don't register them

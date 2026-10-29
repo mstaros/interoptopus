@@ -1,6 +1,5 @@
 ---
 source: crates/proc_macros_impl/tests/svc_async.rs
-assertion_line: 25
 expression: expand_ffi!(item)
 ---
 #[allow(clippy::used_underscore_items)]
@@ -164,7 +163,11 @@ unsafe impl ::interoptopus::lang::service::ServiceInfo for Service {
         <service_compute2 as ::interoptopus::lang::function::FunctionInfo>::register(
             inventory,
         );
-        inventory.register_service(Self::id(), Self::service());
+        inventory
+            .register_service(
+                <Self as ::interoptopus::lang::service::ServiceInfo>::id(),
+                <Self as ::interoptopus::lang::service::ServiceInfo>::service(),
+            );
     }
 }
 unsafe impl ::interoptopus::pattern::asynk::AsyncRuntimeService for Service {}

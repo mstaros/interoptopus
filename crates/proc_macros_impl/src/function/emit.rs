@@ -141,7 +141,7 @@ impl FunctionModel {
                         visibility: #visibility,
                         docs: #docs_tokens,
                         emission: #emission,
-                        signature: Self::signature(),
+                        signature: <Self as ::interoptopus::lang::function::FunctionInfo>::signature(),
                     }
                 }
 
@@ -155,7 +155,7 @@ impl FunctionModel {
                     #return_type_registration;
 
                     // Register the function itself
-                    inventory.register_function(Self::id(), Self::function());
+                    inventory.register_function(<Self as ::interoptopus::lang::function::FunctionInfo>::id(), <Self as ::interoptopus::lang::function::FunctionInfo>::function());
                 }
             }
         }

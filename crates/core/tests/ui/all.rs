@@ -36,9 +36,11 @@ fn all_ui_tests() {
     t.compile_fail("tests/ui/proc/svc/ctor_rval_bad_self.rs");
     t.compile_fail("tests/ui/proc/svc/ctor_rval_omit.rs");
     t.pass("tests/ui/proc/svc/explicit_mut_self.rs");
+    t.pass("tests/ui/proc/svc/inherent_names.rs");
     t.pass("tests/ui/proc/svc/lifetime.rs");
     // t.compile_fail("tests/ui/proc/svc/module.rs"); TODO: later
     t.compile_fail("tests/ui/proc/svc/opaque.rs");
+    t.pass("tests/ui/proc/svc/self_param.rs");
 
     // proc/plugin
     t.compile_fail("tests/ui/proc/plugin/svc_static_method.rs");
@@ -52,6 +54,7 @@ fn all_ui_tests() {
     t.compile_fail("tests/ui/proc/ty/forbidden_field.rs");
     t.pass("tests/ui/proc/ty/generic_basic.rs");
     t.compile_fail("tests/ui/proc/ty/generic_no_typeinfo.rs");
+    t.pass("tests/ui/proc/ty/inherent_names.rs");
     t.pass("tests/ui/proc/ty/module.rs");
     t.pass("tests/ui/proc/ty/opaque_basic.rs");
     t.pass("tests/ui/proc/ty/opaque_no_typeinfo.rs");

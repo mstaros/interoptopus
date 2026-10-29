@@ -1,6 +1,5 @@
 ---
 source: crates/proc_macros_impl/tests/svc_lifetime.rs
-assertion_line: 26
 expression: expand_ffi!(item)
 ---
 #[allow(clippy::used_underscore_items)]
@@ -109,6 +108,10 @@ unsafe impl ::interoptopus::lang::service::ServiceInfo for Service {
         <service_return_slice as ::interoptopus::lang::function::FunctionInfo>::register(
             inventory,
         );
-        inventory.register_service(Self::id(), Self::service());
+        inventory
+            .register_service(
+                <Self as ::interoptopus::lang::service::ServiceInfo>::id(),
+                <Self as ::interoptopus::lang::service::ServiceInfo>::service(),
+            );
     }
 }

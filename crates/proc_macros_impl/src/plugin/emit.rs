@@ -257,9 +257,7 @@ impl PluginModel {
                 }
 
                 fn verify_api_guard(&self) -> Result<(), ::interoptopus::lang::plugin::PluginLoadError> {
-                    use ::interoptopus::lang::plugin::PluginInfo;
-
-                    let inventory = Self::inventory();
+                    let inventory = <Self as ::interoptopus::lang::plugin::PluginInfo>::inventory();
                     let expected = ::interoptopus::pattern::guard::Hash::from_plugin(&inventory).hash();
                     let actual = (self.query_trampoline)(::interoptopus::trampoline::QUERY_API_GUARD_HASH);
 
