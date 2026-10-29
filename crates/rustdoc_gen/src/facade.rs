@@ -25,6 +25,12 @@
 //! has the same fields, `to_<mirror>` copies them, and `from_<mirror>` builds an owned struct that
 //! is not `#[non_exhaustive]` from primitives, text, bytes, options and nested mirrors.
 //!
+//! A type mapped to `string` or `bytes` other than `String` (the convert kind) converts through the
+//! traits its crate's rustdoc lists: text in through `FromStr` or `TryFrom<&str>` and out through
+//! `Display`; bytes in through `From<&[u8]>` or `From<Vec<u8>>` and out through a `Deref` to bytes
+//! or `AsRef<[u8]>`. A direction without them is a decision. A type from a crate without rustdoc,
+//! such as bstr's, is assumed to parse and display, and to convert from and dereference to bytes.
+//!
 //! `verdict` runs the emitter on every function the classifier passes and turns what it does not
 //! generate into a decision, so an automatic item is a generated one by construction.
 //!
@@ -47,12 +53,15 @@ use std::fmt::Write as _;
 use rustdoc_types::{GenericBound, Path, Type};
 
 use crate::classify::{
-    Carrier, Class, Classifier, Conversion, EnumDef, KEY_PLACEHOLDER, Keyed, Mapping, REPO_PLACEHOLDER, Reason, StructDef, VALUE_PLACEHOLDER,
-    VariantFields, Verdict,
+    AS_REF_BYTES, Carrier, Class, Classifier, Conversion, DISPLAY, EnumDef, FROM_BYTE_VEC, FROM_BYTES, FROM_STR, KEY_PLACEHOLDER, Keyed, Mapping,
+    REPO_PLACEHOLDER, Reason, StructDef, TRY_FROM_STR, VALUE_PLACEHOLDER, VariantFields, Verdict,
 };
 use crate::forbidden::escaped;
 use crate::render::{Renderer, last_segment, type_args};
 use crate::surface::{Function, Receiver};
+
+/// The std text type, which `string` maps unchanged.
+const STRING: &str = "alloc::string::String";
 
 /// Primitives that cross the boundary unchanged.
 const PRIMITIVES: [&str; 13] = ["bool", "u8", "u16", "u32", "u64", "usize", "i8", "i16", "i32", "i64", "isize", "f32", "f64"];
@@ -150,6 +159,12 @@ enum Conv {
     BytesInto,
     /// `Vec<u8>`, which also converts into owned byte strings.
     BytesOwned,
+    /// A type mapped to `bytes`, built with `From<&[u8]>`, or with `From<Vec<u8>>` when `owned`;
+    /// `borrowed` passes a reference.
+    BytesFrom { owned: bool, borrowed: bool },
+    /// A type mapped to `string`, parsed with `FromStr`, or with `TryFrom<&str>` when `try_from`;
+    /// `borrowed` passes a reference.
+    Parse { try_from: bool, borrowed: bool },
     /// A path through the runtime; `borrowed` passes `&Path`.
     Path { borrowed: bool },
     /// A custom mapping through the runtime function it names; `borrowed` passes a reference.
@@ -389,6 +404,8 @@ impl Emitter<'_> {
                                 | Conv::BytesOwned
                                 | Conv::Path { .. }
                                 | Conv::Custom { .. }
+                                | Conv::BytesFrom { .. }
+                                | Conv::Parse { .. }
                                 | Conv::Mirror { borrowed: false, .. }
                         );
                         if !simple {
@@ -405,7 +422,7 @@ impl Emitter<'_> {
                         let inner = self.borrowed_input(function, inner)?;
                         Ok(Input { ffi: inner.ffi, conv: Conv::Cow(Box::new(inner.conv)) })
                     }
-                    _ => match self.mapped_input(self.mapping(&canonical), false)? {
+                    _ => match self.mapped_input(&canonical, self.mapping(&canonical), false)? {
                         Some(input) => Ok(input),
                         None => self.mirror_input(&canonical, false)?.ok_or_else(|| self.rendered(ty)),
                     },
@@ -422,7 +439,7 @@ impl Emitter<'_> {
             Type::Slice(element) if is_byte(element) => Ok(Input::new("ffi::Slice<u8>", Conv::Bytes)),
             Type::ResolvedPath(path) => {
                 let canonical = self.context.renderer.path(path);
-                match self.mapped_input(self.mapping(&canonical), true)? {
+                match self.mapped_input(&canonical, self.mapping(&canonical), true)? {
                     Some(input) => Ok(input),
                     None => self.mirror_input(&canonical, true)?.ok_or_else(|| format!("&{}", self.rendered(inner))),
                 }
@@ -487,11 +504,12 @@ impl Emitter<'_> {
     }
 
     /// A mapped type as a parameter, owned or borrowed; `None` when it does not cross.
-    fn mapped_input(&self, mapping: Option<Mapping>, borrowed: bool) -> Result<Option<Input>, String> {
+    fn mapped_input(&self, canonical: &str, mapping: Option<Mapping>, borrowed: bool) -> Result<Option<Input>, String> {
         Ok(Some(match mapping {
-            Some(Mapping::String) if borrowed => Input::new("ffi::String", Conv::TextRef),
-            Some(Mapping::String) => Input::new("ffi::String", Conv::Text),
-            Some(Mapping::Bytes) => Input::new("ffi::Slice<u8>", Conv::BytesInto),
+            Some(Mapping::String) if canonical == STRING && borrowed => Input::new("ffi::String", Conv::TextRef),
+            Some(Mapping::String) if canonical == STRING => Input::new("ffi::String", Conv::Text),
+            Some(Mapping::String) => return self.text_input(canonical, borrowed).map(Some),
+            Some(Mapping::Bytes) => return self.bytes_input(canonical, borrowed).map(Some),
             Some(Mapping::Path) => Input::new("ffi::Slice<u8>", Conv::Path { borrowed }),
             Some(Mapping::Custom(custom)) => Input::new(carrier_in(custom.ffi), Conv::Custom { function: custom.into_rust, borrowed }),
             Some(Mapping::Keyed(keyed)) => return self.keyed_input(&keyed, borrowed).map(Some),
@@ -506,8 +524,8 @@ impl Emitter<'_> {
 
     /// `Self` or `&Self` as a parameter, through the owner's mapping.
     fn owner_input(&self, function: &Function, borrowed: bool) -> Result<Input, String> {
-        let mapping = self.owner_canonical(function).and_then(|owner| self.mapping(owner));
-        self.mapped_input(mapping, borrowed)?.ok_or_else(|| if borrowed { "&Self".to_owned() } else { "Self".to_owned() })
+        let owner = self.owner_canonical(function).unwrap_or_default();
+        self.mapped_input(owner, self.mapping(owner), borrowed)?.ok_or_else(|| if borrowed { "&Self".to_owned() } else { "Self".to_owned() })
     }
 
     /// `Self` or `&Self` as a result, through the owner's mapping.
@@ -518,8 +536,8 @@ impl Emitter<'_> {
 
     fn mapped_output(&self, canonical: &str, value: &str, ty: &Type) -> Result<(String, String), String> {
         match self.mapping(canonical) {
-            Some(Mapping::String) => Ok(text_out(value)),
-            Some(Mapping::Bytes) => Ok(bytes_out(value)),
+            Some(Mapping::String) => self.text_output(canonical, value),
+            Some(Mapping::Bytes) => self.bytes_output(canonical, value),
             Some(Mapping::Path) => Ok(("ffi::Vec<u8>".to_owned(), format!("runtime::path_out(&{value})"))),
             Some(Mapping::Custom(custom)) => {
                 Ok((carrier_out(custom.ffi).to_owned(), format!("runtime::{}(&{value})", custom.into_ffi)))
@@ -527,6 +545,66 @@ impl Emitter<'_> {
             Some(Mapping::Keyed(keyed)) => self.key_output(&keyed, &keyed.key_of.replace(VALUE_PLACEHOLDER, &format!("({value})"))),
             Some(Mapping::Handle) => Err(self.rendered(ty)),
             None => self.mirror_output(canonical, value).unwrap_or_else(|| Err(self.rendered(ty))),
+        }
+    }
+
+    /// Text into a type mapped to `string`: parsed with `FromStr`, or with `TryFrom<&str>`.
+    /// Without rustdoc for its crate, `FromStr` is assumed.
+    fn text_input(&self, canonical: &str, borrowed: bool) -> Result<Input, String> {
+        let implementations = self.context.classifier.implementations();
+        let try_from = if !implementations.documents(canonical) || implementations.implements_reference(canonical, FROM_STR) {
+            false
+        } else if implementations.implements_reference(canonical, TRY_FROM_STR) {
+            true
+        } else {
+            return Err(format!("`{canonical}` maps to string but implements neither `FromStr` nor `TryFrom<&str>`"));
+        };
+        Ok(Input::new("ffi::String", Conv::Parse { try_from, borrowed }))
+    }
+
+    /// Bytes into a type mapped to `bytes`: `into()` when the parameter's own type implements
+    /// `From<&[u8]>` (as bstr's `&BStr` does), otherwise built with `From<&[u8]>` or
+    /// `From<Vec<u8>>`. Without rustdoc for its crate, `into()` is assumed.
+    fn bytes_input(&self, canonical: &str, borrowed: bool) -> Result<Input, String> {
+        let implementations = self.context.classifier.implementations();
+        let parameter = if borrowed { format!("&{canonical}") } else { canonical.to_owned() };
+        if !implementations.documents(canonical) || implementations.implements_exactly(&parameter, FROM_BYTES) {
+            return Ok(Input::new("ffi::Slice<u8>", Conv::BytesInto));
+        }
+        let owned = if implementations.implements_exactly(canonical, FROM_BYTES) {
+            false
+        } else if implementations.implements_exactly(canonical, FROM_BYTE_VEC) {
+            true
+        } else {
+            return Err(format!("`{canonical}` maps to bytes but implements neither `From<&[u8]>` nor `From<Vec<u8>>`"));
+        };
+        Ok(Input::new("ffi::Slice<u8>", Conv::BytesFrom { owned, borrowed }))
+    }
+
+    /// A type mapped to `string` as a result: its `Display` text. Without rustdoc for its crate,
+    /// `Display` is assumed.
+    fn text_output(&self, canonical: &str, value: &str) -> Result<(String, String), String> {
+        let implementations = self.context.classifier.implementations();
+        if canonical == STRING || !implementations.documents(canonical) || implementations.implements(canonical, DISPLAY) {
+            Ok(text_out(value))
+        } else {
+            Err(format!("`{canonical}` maps to string but does not implement `Display`"))
+        }
+    }
+
+    /// A type mapped to `bytes` as a result: copied through its `Deref` to bytes, or through
+    /// `AsRef<[u8]>`. Without rustdoc for its crate, a `Deref` to bytes is assumed.
+    fn bytes_output(&self, canonical: &str, value: &str) -> Result<(String, String), String> {
+        let implementations = self.context.classifier.implementations();
+        let derefs = implementations
+            .deref_target(canonical)
+            .is_some_and(|target| matches!(target, "[u8]" | "alloc::vec::Vec<u8>") || self.mapping(target) == Some(Mapping::Bytes));
+        if !implementations.documents(canonical) || derefs {
+            Ok(bytes_out(value))
+        } else if implementations.implements_reference(canonical, AS_REF_BYTES) {
+            Ok(("ffi::Vec<u8>".to_owned(), format!("ffi::Vec::from_vec(AsRef::<[u8]>::as_ref(&{value}).to_vec())")))
+        } else {
+            Err(format!("`{canonical}` maps to bytes but neither dereferences to bytes nor implements `AsRef<[u8]>`"))
         }
     }
 
@@ -647,7 +725,16 @@ impl Emitter<'_> {
                         Ok((format!("ffi::Option<{ffi}>"), option_map(binding, &convert)))
                     }
                     (_, []) => match self.mapping(&canonical) {
-                        Some(Mapping::Bytes) => Ok(("ffi::Vec<u8>".to_owned(), format!("{binding}.clone().into_vec().into()"))),
+                        Some(Mapping::Bytes) => {
+                            let implementations = self.context.classifier.implementations();
+                            if !implementations.documents(&canonical) || implementations.implements_exactly(&canonical, FROM_BYTE_VEC) {
+                                Ok(("ffi::Vec<u8>".to_owned(), format!("{binding}.clone().into_vec().into()")))
+                            } else if implementations.implements_exactly(&canonical, FROM_BYTES) {
+                                Ok(("ffi::Vec<u8>".to_owned(), format!("From::from({binding}.clone().into_vec().as_slice())")))
+                            } else {
+                                Err(format!("`{canonical}` maps to bytes but implements neither `From<&[u8]>` nor `From<Vec<u8>>`"))
+                            }
+                        }
                         Some(_) => Err(format!("{} cannot be built from a mirror yet", self.rendered(ty))),
                         None => match self.mirror_input(&canonical, false)? {
                             Some(Input { ffi, conv: Conv::Mirror { function, .. } }) => Ok((ffi, format!("{function}({binding})"))),
@@ -878,8 +965,9 @@ impl Emitter<'_> {
             return Ok(Input::new(&keyed.key, Conv::Same));
         }
         match self.mapping(&keyed.key) {
-            Some(Mapping::String) => Ok(Input::new("ffi::String", Conv::Text)),
-            Some(Mapping::Bytes) => Ok(Input::new("ffi::Slice<u8>", Conv::BytesInto)),
+            Some(Mapping::String) if keyed.key == STRING => Ok(Input::new("ffi::String", Conv::Text)),
+            Some(Mapping::String) => self.text_input(&keyed.key, false),
+            Some(Mapping::Bytes) => self.bytes_input(&keyed.key, false),
             Some(Mapping::Path) => Ok(Input::new("ffi::Slice<u8>", Conv::Path { borrowed: false })),
             Some(Mapping::Custom(custom)) => Ok(Input::new(carrier_in(custom.ffi), Conv::Custom { function: custom.into_rust, borrowed: false })),
             _ => Err(format!("the key `{}` of `{}`", keyed.key, keyed.name)),
@@ -892,8 +980,8 @@ impl Emitter<'_> {
             return Ok((keyed.key.clone(), value.to_owned()));
         }
         match self.mapping(&keyed.key) {
-            Some(Mapping::String) => Ok(text_out(value)),
-            Some(Mapping::Bytes) => Ok(bytes_out(value)),
+            Some(Mapping::String) => self.text_output(&keyed.key, value),
+            Some(Mapping::Bytes) => self.bytes_output(&keyed.key, value),
             Some(Mapping::Path) => Ok(("ffi::Vec<u8>".to_owned(), format!("runtime::path_out(&{value})"))),
             Some(Mapping::Custom(custom)) => Ok((carrier_out(custom.ffi).to_owned(), format!("runtime::{}(&{value})", custom.into_ffi))),
             _ => Err(format!("the key `{}` of `{}`", keyed.key, keyed.name)),
@@ -1058,6 +1146,8 @@ fn argument(name: &str, conv: &Conv, setup: &mut Vec<String>) -> String {
         Conv::Bytes => format!("{name}.as_slice()"),
         Conv::BytesInto => format!("{name}.as_slice().into()"),
         Conv::BytesOwned => format!("{name}.as_slice().to_vec()"),
+        Conv::BytesFrom { owned, borrowed } => format!("{}{}", if *borrowed { "&" } else { "" }, bytes_from(name, *owned)),
+        Conv::Parse { try_from, borrowed } => format!("{}{}.map_err(runtime::error)?", if *borrowed { "&" } else { "" }, parse_text(name, *try_from)),
         Conv::Path { borrowed } => format!("{}runtime::path(&{name})?", if *borrowed { "&" } else { "" }),
         Conv::Custom { function, borrowed } => format!("{}runtime::{function}(&{name})?", if *borrowed { "&" } else { "" }),
         Conv::Keyed { keyed, key, accessor, borrowed } => {
@@ -1077,17 +1167,22 @@ fn argument(name: &str, conv: &Conv, setup: &mut Vec<String>) -> String {
         Conv::Mirror { function, borrowed } => format!("{}{function}(&{name})", if *borrowed { "&" } else { "" }),
         Conv::Option(inner) => {
             setup.push(format!("let {name} = {name}.into_option();"));
-            let (body, fallible, borrowed) = match inner.as_ref() {
-                Conv::Same => ("*value".to_owned(), false, false),
-                Conv::Ref => ("value".to_owned(), false, false),
-                Conv::Str => ("value.as_str()".to_owned(), false, false),
-                Conv::Text => ("value.as_str().to_owned()".to_owned(), false, false),
-                Conv::Bytes => ("value.as_slice()".to_owned(), false, false),
-                Conv::BytesInto => ("value.as_slice().into()".to_owned(), false, false),
-                Conv::BytesOwned => ("value.as_slice().to_vec()".to_owned(), false, false),
-                Conv::Path { borrowed } => ("runtime::path(value)".to_owned(), true, *borrowed),
-                Conv::Custom { function, borrowed } => (format!("runtime::{function}(value)"), true, *borrowed),
-                Conv::Mirror { function, .. } => (format!("{function}(value)"), false, false),
+            // `after` turns the optional value into the reference a borrowed parameter takes.
+            let (body, fallible, after) = match inner.as_ref() {
+                Conv::Same => ("*value".to_owned(), false, ""),
+                Conv::Ref => ("value".to_owned(), false, ""),
+                Conv::Str => ("value.as_str()".to_owned(), false, ""),
+                Conv::Text => ("value.as_str().to_owned()".to_owned(), false, ""),
+                Conv::Bytes => ("value.as_slice()".to_owned(), false, ""),
+                Conv::BytesInto => ("value.as_slice().into()".to_owned(), false, ""),
+                Conv::BytesOwned => ("value.as_slice().to_vec()".to_owned(), false, ""),
+                Conv::BytesFrom { owned, borrowed } => (bytes_from("value", *owned), false, if *borrowed { ".as_ref()" } else { "" }),
+                Conv::Parse { try_from, borrowed } => {
+                    (format!("{}.map_err(runtime::error)", parse_text("value", *try_from)), true, if *borrowed { ".as_ref()" } else { "" })
+                }
+                Conv::Path { borrowed } => ("runtime::path(value)".to_owned(), true, if *borrowed { ".as_deref()" } else { "" }),
+                Conv::Custom { function, borrowed } => (format!("runtime::{function}(value)"), true, if *borrowed { ".as_deref()" } else { "" }),
+                Conv::Mirror { function, .. } => (format!("{function}(value)"), false, ""),
                 Conv::Option(_) => unreachable!("nested options are rejected when lowering"),
                 Conv::Keyed { .. } | Conv::TextRef | Conv::Boxed(_) | Conv::Cow(_) => {
                     unreachable!("only simple optional parameters pass lowering")
@@ -1096,13 +1191,21 @@ fn argument(name: &str, conv: &Conv, setup: &mut Vec<String>) -> String {
             let mut expression = option_map(name, &body);
             if fallible {
                 expression.push_str(".transpose()?");
-                if borrowed {
-                    expression.push_str(".as_deref()");
-                }
             }
+            expression.push_str(after);
             expression
         }
     }
+}
+
+/// Text in `name` parsed into the parameter's type, by inference.
+fn parse_text(name: &str, try_from: bool) -> String {
+    if try_from { format!("TryFrom::try_from({name}.as_str())") } else { format!("{name}.as_str().parse()") }
+}
+
+/// Bytes in `name` built into the parameter's type, by inference.
+fn bytes_from(name: &str, owned: bool) -> String {
+    if owned { format!("From::from({name}.as_slice().to_vec())") } else { format!("From::from({name}.as_slice())") }
 }
 
 /// Whether a lowered parameter is a keyed handle, directly or wrapped.
@@ -1209,6 +1312,12 @@ mod tests {
             (18, "demo::Shape"),
             (19, "demo::Stats"),
             (20, "demo::Label"),
+            (21, "demo::Name"),
+            (22, "demo::Tag"),
+            (23, "demo::Blob"),
+            (24, "demo::Chunk"),
+            (25, "demo::Opaque"),
+            (26, "other::Ext"),
         ])
     }
 
@@ -1355,6 +1464,54 @@ mod tests {
         assert!(!source.contains("fn from_label"), "a borrowed view crosses as a result only: {source}");
         assert!(source.contains("Ok(to_stats(&self.inner.repo().stats())?)"), "{source}");
         assert!(source.contains("self.inner.repo().set_stats(from_stats(&stats))"), "{source}");
+    }
+
+    #[test]
+    fn string_and_bytes_mappings_convert_through_trait_evidence() {
+        let mut types = types();
+        for (path, mapping) in [
+            ("demo::Name", Mapping::String),
+            ("demo::Tag", Mapping::String),
+            ("demo::Blob", Mapping::Bytes),
+            ("demo::Chunk", Mapping::Bytes),
+            ("demo::Opaque", Mapping::String),
+            ("other::Ext", Mapping::String),
+        ] {
+            types.insert(path.to_owned(), mapping);
+        }
+        let implementations = Implementations::from_pairs([
+            (FROM_STR, "demo::Name"),
+            (DISPLAY, "demo::Name"),
+            (TRY_FROM_STR, "demo::Tag"),
+            (FROM_BYTES, "demo::Blob"),
+            (AS_REF_BYTES, "demo::Blob"),
+            (FROM_BYTE_VEC, "demo::Chunk"),
+        ])
+        .with_facts([("demo::Chunk", "[u8]")], &[])
+        .with_crate("demo");
+        let renderer = renderer();
+        let classifier = Classifier::new(&renderer, &types, &[], &implementations);
+        let context = Context { renderer: &renderer, classifier: &classifier, runtime: "crate::runtime", provenance: "test" };
+        let repo = |name: &str, params: Vec<(&str, Type)>, output: Option<Type>| function(&format!("demo::Repo::{name}"), Some("demo::Repo"), Receiver::Shared, params, output);
+        let functions = [
+            repo("relabel", vec![("name", ty(21)), ("tag", shared(ty(22))), ("fallback", generic(8, vec![ty(21)]))], Some(ty(21))),
+            repo("store", vec![("blob", shared(ty(23))), ("chunk", ty(24))], Some(ty(23))),
+            repo("chunk", Vec::new(), Some(ty(24))),
+            repo("external", vec![("ext", ty(26))], Some(ty(26))),
+        ];
+        let functions: Vec<&Function> = functions.iter().collect();
+        let source = emit(&functions, &context).expect("the functions lower").source;
+        assert!(source.contains("self.inner.repo().relabel(name.as_str().parse().map_err(runtime::error)?, &TryFrom::try_from(tag.as_str()).map_err(runtime::error)?, fallback.as_ref().map(|value| value.as_str().parse().map_err(runtime::error)).transpose()?).to_string()"), "{source}");
+        assert!(source.contains("Ok(ffi::Vec::from_vec(AsRef::<[u8]>::as_ref(&self.inner.repo().store(&From::from(blob.as_slice()), From::from(chunk.as_slice().to_vec()))).to_vec()))"), "{source}");
+        assert!(source.contains("Ok(ffi::Vec::from_vec(self.inner.repo().chunk().to_vec()))"), "a `Deref` to bytes: {source}");
+        assert!(source.contains("Ok(ffi::String::from_string(self.inner.repo().external(ext.as_str().parse().map_err(runtime::error)?).to_string()))"), "a crate without rustdoc is assumed to parse: {source}");
+        let opaque_in = repo("opaque", vec![("value", ty(25))], None);
+        let opaque_out = repo("opaque_out", Vec::new(), Some(ty(25)));
+        for (function, missing) in [(opaque_in, "implements neither `FromStr` nor `TryFrom<&str>`"), (opaque_out, "does not implement `Display`")] {
+            let verdict = verdict(&function, &context);
+            assert_eq!(verdict.reasons[0].category, crate::classify::Category::Lowering, "{verdict:?}");
+            assert!(verdict.reasons[0].detail.contains(missing), "{verdict:?}");
+        }
     }
 
     #[test]
