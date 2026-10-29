@@ -13,6 +13,14 @@
 //! functions and constructors taking a keyed handle are dropped, since they have no handle to
 //! rebuild from.
 //!
+//! A public enum crosses as an `#[ffi]` mirror named after its public path through the root
+//! crate (`RemoteDirection` for `gix::remote::Direction`), with explicit discriminants copied
+//! and empty tuple or struct variants as unit variants. `to_<mirror>` copies a result into the
+//! mirror, converting payloads from references (primitives, text, bytes, paths, custom mappings,
+//! keys and nested enums); an open enum's unknown variant becomes
+//! `runtime::error(UnknownVariant(..))`. `from_<mirror>` turns a fieldless mirror back for
+//! parameters. Enum parameters with data and other payloads are not generated yet.
+//!
 //! `verdict` runs the emitter on every function the classifier passes and turns what it does not
 //! generate into a decision, so an automatic item is a generated one by construction.
 //!
@@ -28,13 +36,15 @@
 //! - for each custom mapping, its `into_rust(&ffi value) -> Result<T, Error>` and
 //!   `into_ffi(&T) -> ffi value` functions.
 
-use std::collections::BTreeMap;
+use std::cell::RefCell;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
-use rustdoc_types::{GenericBound, Type};
+use rustdoc_types::{GenericBound, Path, Type};
 
 use crate::classify::{
-    Carrier, Class, Classifier, Conversion, KEY_PLACEHOLDER, Keyed, Mapping, REPO_PLACEHOLDER, Reason, VALUE_PLACEHOLDER, Verdict,
+    Carrier, Class, Classifier, Conversion, EnumDef, KEY_PLACEHOLDER, Keyed, Mapping, REPO_PLACEHOLDER, Reason, VALUE_PLACEHOLDER,
+    VariantFields, Verdict,
 };
 use crate::forbidden::escaped;
 use crate::render::{Renderer, last_segment, type_args};
@@ -42,6 +52,23 @@ use crate::surface::{Function, Receiver};
 
 /// Primitives that cross the boundary unchanged.
 const PRIMITIVES: [&str; 13] = ["bool", "u8", "u16", "u32", "u64", "usize", "i8", "i16", "i32", "i64", "isize", "f32", "f64"];
+
+/// Rust keywords, which need a raw identifier in a pattern and another name in a mirror.
+const RUST_KEYWORDS: &[&str] = &[
+    "as", "break", "const", "continue", "crate", "else", "enum", "extern", "false", "fn", "for", "if", "impl", "in", "let", "loop", "match",
+    "mod", "move", "mut", "pub", "ref", "return", "self", "Self", "static", "struct", "super", "trait", "true", "type", "unsafe", "use",
+    "where", "while", "async", "await", "dyn", "abstract", "become", "box", "do", "final", "macro", "override", "priv", "typeof",
+    "unsized", "virtual", "yield", "try", "gen",
+];
+
+/// Which conversion a mirror needs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum Flow {
+    /// Into the mirror, for results.
+    Out,
+    /// Back from the mirror, for parameters.
+    In,
+}
 
 /// What the emitter needs besides the functions.
 pub struct Context<'a> {
@@ -83,6 +110,8 @@ struct Member {
     rank: u8,
     path: String,
     source: String,
+    /// The mirrors it uses, with the conversion each needs.
+    mirrors: BTreeSet<(String, Flow)>,
 }
 
 /// A function's fate.
@@ -123,6 +152,9 @@ enum Conv {
     Boxed(Box<Self>),
     /// A `Cow` borrowing the value.
     Cow(Box<Self>),
+    /// A fieldless enum turned back from its mirror by the named conversion; `borrowed` passes a
+    /// reference.
+    Enum { function: String, borrowed: bool },
 }
 
 /// A lowered parameter: the FFI type and how it converts.
@@ -143,7 +175,7 @@ impl Input {
 ///
 /// The path of a function the emitter cannot lower, with the reason.
 pub fn emit(functions: &[&Function], context: &Context<'_>) -> Result<Facade, (String, String)> {
-    let emitter = Emitter { context, service: service_name(context.classifier) };
+    let emitter = Emitter { context, service: service_name(context.classifier), used: RefCell::default() };
     let mut kept: BTreeMap<(Place, String), Member> = BTreeMap::new();
     let mut dropped = Vec::new();
     for function in functions {
@@ -170,7 +202,7 @@ pub fn emit(functions: &[&Function], context: &Context<'_>) -> Result<Facade, (S
     let mut paths: Vec<String> = kept.values().map(|member| member.path.clone()).collect();
     paths.sort();
     let members: Vec<&Member> = kept.values().collect();
-    Ok(Facade { source: emitter.module(&members), emitted: paths, dropped })
+    Ok(Facade { source: emitter.module(&members)?, emitted: paths, dropped })
 }
 
 /// The classifier's verdict, with an automatic function the emitter does not generate turned
@@ -181,7 +213,7 @@ pub fn verdict(function: &Function, context: &Context<'_>) -> Verdict {
     if verdict.class != Class::Automatic {
         return verdict;
     }
-    let emitter = Emitter { context, service: service_name(context.classifier) };
+    let emitter = Emitter { context, service: service_name(context.classifier), used: RefCell::default() };
     match emitter.member(function) {
         Ok(Planned::Member(_)) => verdict,
         Ok(Planned::Dropped(why)) | Err(why) => Verdict { class: Class::Decision, reasons: vec![Reason::lowering(why)] },
@@ -201,6 +233,8 @@ fn service_name(classifier: &Classifier<'_>) -> String {
 struct Emitter<'a> {
     context: &'a Context<'a>,
     service: String,
+    /// The mirrors the member being lowered uses.
+    used: RefCell<BTreeSet<(String, Flow)>>,
 }
 
 impl Emitter<'_> {
@@ -237,6 +271,7 @@ impl Emitter<'_> {
     }
 
     fn member(&self, function: &Function) -> Result<Planned, String> {
+        self.used.borrow_mut().clear();
         let owner = self.handle_owner(function);
         // Associated functions of a keyed type have no key to rebuild from; they are free functions.
         let keyed_owner = self.keyed_owner(function).filter(|_| function.receiver != Receiver::None);
@@ -316,7 +351,8 @@ impl Emitter<'_> {
             parameters.insert(0, receiver.to_owned());
         }
         let source = wrapper(place, &function.path, &name, &parameters, &returns, &setup, &value);
-        Ok(Planned::Member(Box::new(Member { place, name, rank, path: function.path.clone(), source })))
+        let mirrors = self.used.take();
+        Ok(Planned::Member(Box::new(Member { place, name, rank, path: function.path.clone(), source, mirrors })))
     }
 
     fn input(&self, function: &Function, ty: &Type) -> Result<Input, String> {
@@ -333,7 +369,16 @@ impl Emitter<'_> {
                         let inner = self.input(function, inner)?;
                         let simple = matches!(
                             inner.conv,
-                            Conv::Same | Conv::Ref | Conv::Str | Conv::Text | Conv::Bytes | Conv::BytesInto | Conv::BytesOwned | Conv::Path { .. } | Conv::Custom { .. }
+                            Conv::Same
+                                | Conv::Ref
+                                | Conv::Str
+                                | Conv::Text
+                                | Conv::Bytes
+                                | Conv::BytesInto
+                                | Conv::BytesOwned
+                                | Conv::Path { .. }
+                                | Conv::Custom { .. }
+                                | Conv::Enum { borrowed: false, .. }
                         );
                         if !simple {
                             return Err(format!("an optional {}", self.rendered(ty)));
@@ -349,7 +394,10 @@ impl Emitter<'_> {
                         let inner = self.borrowed_input(function, inner)?;
                         Ok(Input { ffi: inner.ffi, conv: Conv::Cow(Box::new(inner.conv)) })
                     }
-                    _ => self.mapped_input(self.mapping(&canonical), false)?.ok_or_else(|| self.rendered(ty)),
+                    _ => match self.mapped_input(self.mapping(&canonical), false)? {
+                        Some(input) => Ok(input),
+                        None => self.enum_input(&canonical, false)?.ok_or_else(|| self.rendered(ty)),
+                    },
                 }
             }
             _ => Err(self.rendered(ty)),
@@ -362,7 +410,11 @@ impl Emitter<'_> {
             Type::Primitive(name) if PRIMITIVES.contains(&name.as_str()) => Ok(Input::new(name, Conv::Ref)),
             Type::Slice(element) if is_byte(element) => Ok(Input::new("ffi::Slice<u8>", Conv::Bytes)),
             Type::ResolvedPath(path) => {
-                self.mapped_input(self.mapping(&self.context.renderer.path(path)), true)?.ok_or_else(|| format!("&{}", self.rendered(inner)))
+                let canonical = self.context.renderer.path(path);
+                match self.mapped_input(self.mapping(&canonical), true)? {
+                    Some(input) => Ok(input),
+                    None => self.enum_input(&canonical, true)?.ok_or_else(|| format!("&{}", self.rendered(inner))),
+                }
             }
             Type::Generic(name) if name == "Self" => self.owner_input(function, true),
             _ => Err(format!("&{}", self.rendered(inner))),
@@ -401,10 +453,15 @@ impl Emitter<'_> {
                 match (canonical.as_str(), type_args(path).as_slice()) {
                     ("core::option::Option", [inner]) => {
                         let (ffi, convert) = self.output(function, inner, "value")?;
-                        if convert.contains('?') {
+                        let mapped = if convert == "value" {
+                            value.to_owned()
+                        } else if !convert.contains('?') {
+                            format!("{value}.map(|value| {convert})")
+                        } else if self.is_result(inner) {
                             return Err("an Option of a Result".to_owned());
-                        }
-                        let mapped = if convert == "value" { value.to_owned() } else { format!("{value}.map(|value| {convert})") };
+                        } else {
+                            format!("{value}.map(|value| Ok::<_, runtime::Error>({convert})).transpose()?")
+                        };
                         Ok((format!("ffi::Option<{ffi}>"), format!("ffi::Option::from({mapped})")))
                     }
                     ("core::result::Result", [ok, _]) => self.output(function, ok, &format!("{value}.map_err(runtime::error)?")),
@@ -457,8 +514,187 @@ impl Emitter<'_> {
                 Ok((carrier_out(custom.ffi).to_owned(), format!("runtime::{}(&{value})", custom.into_ffi)))
             }
             Some(Mapping::Keyed(keyed)) => self.key_output(&keyed, &keyed.key_of.replace(VALUE_PLACEHOLDER, &format!("({value})"))),
-            Some(Mapping::Handle) | None => Err(self.rendered(ty)),
+            Some(Mapping::Handle) => Err(self.rendered(ty)),
+            None => self.enum_output(canonical, value).unwrap_or_else(|| Err(self.rendered(ty))),
         }
+    }
+
+    fn is_result(&self, ty: &Type) -> bool {
+        matches!(ty, Type::ResolvedPath(path) if self.context.renderer.path(path) == "core::result::Result")
+    }
+
+    /// The mirror's name, unless it would take the service's.
+    fn mirror_name(&self, canonical: &str) -> Result<String, String> {
+        let name = self.context.classifier.implementations().mirror(canonical).ok_or_else(|| format!("`{canonical}` has no mirror name"))?;
+        if name == self.service {
+            return Err(format!("the mirror of `{canonical}` would take the service's name"));
+        }
+        Ok(name.to_owned())
+    }
+
+    /// A fieldless enum parameter, crossing as its mirror; `None` when `canonical` is no public enum.
+    fn enum_input(&self, canonical: &str, borrowed: bool) -> Result<Option<Input>, String> {
+        let Some(def) = self.context.classifier.implementations().enum_def(canonical) else { return Ok(None) };
+        let name = self.mirror_name(canonical)?;
+        if def.variants.iter().any(|variant| !variant.fields.is_empty() || !variant.constructible) {
+            return Err(format!("`{canonical}` carries data; enum parameters with data are not generated yet"));
+        }
+        self.used.borrow_mut().insert((canonical.to_owned(), Flow::In));
+        Ok(Some(Input::new(&name, Conv::Enum { function: format!("from_{}", snake(&name)), borrowed })))
+    }
+
+    /// An enum result, copied into its mirror; `None` when `canonical` is no public enum.
+    fn enum_output(&self, canonical: &str, value: &str) -> Option<Result<(String, String), String>> {
+        let def = self.context.classifier.implementations().enum_def(canonical)?;
+        let lowered = self.mirror_name(canonical).and_then(|name| {
+            for variant in &def.variants {
+                if variant.fields == VariantFields::Hidden {
+                    return Err(format!("`{canonical}`, variant `{}`: hidden fields", variant.name));
+                }
+                for (index, ty) in variant.fields.types().into_iter().enumerate() {
+                    self.payload_out(ty, &format!("field{index}")).map_err(|why| format!("`{canonical}`, variant `{}`: {why}", variant.name))?;
+                }
+            }
+            self.used.borrow_mut().insert((canonical.to_owned(), Flow::Out));
+            Ok((name.clone(), format!("to_{}(&{value})?", snake(&name))))
+        });
+        Some(lowered)
+    }
+
+    /// The FFI type of a payload field and its conversion from `binding`, a reference to it.
+    fn payload_out(&self, ty: &Type, binding: &str) -> Result<(String, String), String> {
+        match ty {
+            Type::Primitive(name) if PRIMITIVES.contains(&name.as_str()) => Ok((name.clone(), format!("*{binding}"))),
+            Type::BorrowedRef { is_mutable: false, type_, .. } => match type_.as_ref() {
+                Type::Primitive(name) if name == "str" => Ok(text_out(binding)),
+                Type::Primitive(name) if PRIMITIVES.contains(&name.as_str()) => Ok((name.clone(), format!("**{binding}"))),
+                Type::Slice(element) if is_byte(element) => Ok(bytes_out(binding)),
+                Type::ResolvedPath(path) => self.payload_path(path, binding, ty),
+                _ => Err(self.rendered(ty)),
+            },
+            Type::ResolvedPath(path) => self.payload_path(path, binding, ty),
+            _ => Err(self.rendered(ty)),
+        }
+    }
+
+    fn payload_path(&self, path: &Path, binding: &str, ty: &Type) -> Result<(String, String), String> {
+        let canonical = self.context.renderer.path(path);
+        match (canonical.as_str(), type_args(path).as_slice()) {
+            ("alloc::vec::Vec", [Type::Primitive(byte)]) if byte == "u8" => Ok(bytes_out(binding)),
+            (_, []) => self.mapped_output(&canonical, binding, ty),
+            _ => Err(self.rendered(ty)),
+        }
+    }
+
+    /// The mirror enums `members` use, with the conversions each needs.
+    fn mirror_items(&self, members: &[&Member]) -> Result<String, (String, String)> {
+        let implementations = self.context.classifier.implementations();
+        let mut flows: BTreeMap<&str, BTreeSet<Flow>> = BTreeMap::new();
+        for (canonical, flow) in members.iter().flat_map(|member| member.mirrors.iter()) {
+            flows.entry(canonical.as_str()).or_default().insert(*flow);
+        }
+        let mut mirrors = Vec::new();
+        for (canonical, flows) in flows {
+            let failed = |why: String| (canonical.to_owned(), why);
+            let def = implementations.enum_def(canonical).ok_or_else(|| failed("not a public enum".to_owned()))?;
+            let name = self.mirror_name(canonical).map_err(failed)?;
+            let path = implementations.nameable(canonical).ok_or_else(|| failed("not nameable through the root crate".to_owned()))?;
+            mirrors.push((name, def, path, flows));
+        }
+        mirrors.sort_by(|a, b| a.0.cmp(&b.0));
+        let mut out = String::new();
+        if mirrors.iter().any(|(_, def, _, flows)| def.open && flows.contains(&Flow::Out)) {
+            let _ = writeln!(out);
+            let _ = writeln!(out, "/// A variant this facade does not know: the enum is `#[non_exhaustive]` or hides variants.");
+            let _ = writeln!(out, "#[derive(Debug)]");
+            let _ = writeln!(out, "struct UnknownVariant(&'static str);");
+            let _ = writeln!(out);
+            let _ = writeln!(out, "impl std::fmt::Display for UnknownVariant {{");
+            let _ = writeln!(out, "    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{");
+            let _ = writeln!(out, "        write!(f, \"a variant of `{{}}` this facade does not know\", self.0)");
+            let _ = writeln!(out, "    }}");
+            let _ = writeln!(out, "}}");
+            let _ = writeln!(out);
+            let _ = writeln!(out, "impl std::error::Error for UnknownVariant {{}}");
+        }
+        for (name, def, path, flows) in &mirrors {
+            self.mirror_enum(&mut out, name, def, path).map_err(|why| (path.clone(), why))?;
+            if flows.contains(&Flow::Out) {
+                self.mirror_out(&mut out, name, def, path).map_err(|why| (path.clone(), why))?;
+            }
+            if flows.contains(&Flow::In) {
+                mirror_in(&mut out, name, def, path);
+            }
+        }
+        Ok(out)
+    }
+
+    /// The `#[ffi]` mirror of an enum.
+    fn mirror_enum(&self, out: &mut String, name: &str, def: &EnumDef, path: &str) -> Result<(), String> {
+        let _ = writeln!(out);
+        let _ = writeln!(out, "/// Mirrors `{path}`.");
+        let _ = writeln!(out, "#[ffi]");
+        let _ = writeln!(out, "pub enum {name} {{");
+        for variant in &def.variants {
+            let discriminant = variant.discriminant.as_ref().map_or_else(String::new, |value| format!(" = {value}"));
+            let payload = match &variant.fields {
+                fields if fields.is_empty() => String::new(),
+                VariantFields::Tuple(types) => {
+                    let types = types.iter().map(|ty| self.payload_out(ty, "field").map(|(ffi, _)| ffi)).collect::<Result<Vec<_>, _>>()?;
+                    format!("({})", types.join(", "))
+                }
+                VariantFields::Named(fields) => {
+                    let fields = fields
+                        .iter()
+                        .map(|(field, ty)| self.payload_out(ty, "field").map(|(ffi, _)| format!("{}: {ffi}", mirror_field(field))))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    format!(" {{ {} }}", fields.join(", "))
+                }
+                VariantFields::Unit | VariantFields::Hidden => return Err(format!("variant `{}`: hidden fields", variant.name)),
+            };
+            let _ = writeln!(out, "    {}{payload}{discriminant},", escaped(&variant.name));
+        }
+        let _ = writeln!(out, "}}");
+        Ok(())
+    }
+
+    /// `to_<mirror>`, which copies a value into the mirror.
+    fn mirror_out(&self, out: &mut String, name: &str, def: &EnumDef, path: &str) -> Result<(), String> {
+        let _ = writeln!(out);
+        let _ = writeln!(out, "/// Copies a `{path}` into its mirror.");
+        let _ = writeln!(out, "fn to_{}(value: &{path}) -> Result<{name}, runtime::Error> {{", snake(name));
+        let _ = writeln!(out, "    Ok(match value {{");
+        for variant in &def.variants {
+            let source = format!("{path}::{}", variant.name);
+            let target = format!("{name}::{}", escaped(&variant.name));
+            let (pattern, value) = match &variant.fields {
+                VariantFields::Unit => (source, target),
+                VariantFields::Tuple(types) if types.is_empty() => (format!("{source}()"), target),
+                VariantFields::Named(fields) if fields.is_empty() => (format!("{source} {{ .. }}"), target),
+                VariantFields::Tuple(types) => {
+                    let bindings: Vec<String> = (0..types.len()).map(|index| format!("field{index}")).collect();
+                    let values = types.iter().zip(&bindings).map(|(ty, binding)| self.payload_out(ty, binding).map(|(_, value)| value)).collect::<Result<Vec<_>, _>>()?;
+                    (format!("{source}({}, ..)", bindings.join(", ")), format!("{target}({})", values.join(", ")))
+                }
+                VariantFields::Named(fields) => {
+                    let patterns: Vec<String> = fields.iter().enumerate().map(|(index, (field, _))| format!("{}: field{index}", raw(field))).collect();
+                    let values = fields
+                        .iter()
+                        .enumerate()
+                        .map(|(index, (field, ty))| self.payload_out(ty, &format!("field{index}")).map(|(_, value)| format!("{}: {value}", mirror_field(field))))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    (format!("{source} {{ {}, .. }}", patterns.join(", ")), format!("{target} {{ {} }}", values.join(", ")))
+                }
+                VariantFields::Hidden => return Err(format!("variant `{}`: hidden fields", variant.name)),
+            };
+            let _ = writeln!(out, "        {pattern} => {value},");
+        }
+        if def.open {
+            let _ = writeln!(out, "        _ => return Err(runtime::error(UnknownVariant(\"{path}\"))),");
+        }
+        let _ = writeln!(out, "    }})");
+        let _ = writeln!(out, "}}");
+        Ok(())
     }
 
     /// The owning keyed type and its mapping, if the function belongs to one.
@@ -505,7 +741,7 @@ impl Emitter<'_> {
     }
 
     /// The whole module.
-    fn module(&self, members: &[&Member]) -> String {
+    fn module(&self, members: &[&Member]) -> Result<String, (String, String)> {
         let service: Vec<&&Member> = members.iter().filter(|member| member.place == Place::Service).collect();
         let free: Vec<&&Member> = members.iter().filter(|member| member.place == Place::Free).collect();
         let mut out = String::new();
@@ -513,7 +749,10 @@ impl Emitter<'_> {
         let _ = writeln!(out, "//!");
         let _ = writeln!(out, "//! The runtime contract is documented in `crates/rustdoc_gen/src/facade.rs` of interoptopus.");
         let _ = writeln!(out);
-        let _ = writeln!(out, "#![allow(clippy::needless_question_mark, clippy::unit_arg, reason = \"generated wrappers share one shape\")]");
+        let _ = writeln!(
+            out,
+            "#![allow(clippy::needless_question_mark, clippy::unit_arg, clippy::unnecessary_wraps, clippy::enum_variant_names, clippy::upper_case_acronyms, clippy::large_enum_variant, reason = \"generated wrappers and mirrors share one shape\")]"
+        );
         let _ = writeln!(out);
         let _ = writeln!(out, "use interoptopus::inventory::RustInventory;");
         let mut imports = vec!["ffi"];
@@ -538,6 +777,7 @@ impl Emitter<'_> {
         let _ = writeln!(out, "        Err(error) => ffi::Err(error),");
         let _ = writeln!(out, "    }}");
         let _ = writeln!(out, "}}");
+        out.push_str(&self.mirror_items(members)?);
         if !service.is_empty() {
             let _ = writeln!(out);
             let _ = writeln!(out, "/// The repository handle.");
@@ -571,8 +811,39 @@ impl Emitter<'_> {
             let _ = writeln!(out, "        .register(function!({}))", member.name);
         }
         let _ = writeln!(out, "}}");
-        out
+        Ok(out)
     }
+}
+
+/// `from_<mirror>`, which turns a fieldless mirror back into the enum.
+fn mirror_in(out: &mut String, name: &str, def: &EnumDef, path: &str) {
+    let _ = writeln!(out);
+    let _ = writeln!(out, "/// Turns the mirror back into a `{path}`.");
+    let _ = writeln!(out, "fn from_{}(value: &{name}) -> {path} {{", snake(name));
+    let _ = writeln!(out, "    match value {{");
+    for variant in &def.variants {
+        let source = format!("{path}::{}", variant.name);
+        let construct = match &variant.fields {
+            VariantFields::Tuple(_) => format!("{source}()"),
+            VariantFields::Named(_) => format!("{source} {{}}"),
+            VariantFields::Unit | VariantFields::Hidden => source,
+        };
+        let _ = writeln!(out, "        {name}::{} => {construct},", escaped(&variant.name));
+    }
+    let _ = writeln!(out, "    }}");
+    let _ = writeln!(out, "}}");
+}
+
+/// A field name usable in a pattern: Rust keywords become raw identifiers.
+fn raw(name: &str) -> String {
+    let bare = name.trim_start_matches("r#");
+    if RUST_KEYWORDS.contains(&bare) { format!("r#{bare}") } else { bare.to_owned() }
+}
+
+/// A mirror field's name: Rust keywords and names interoptopus forbids get a trailing underscore.
+fn mirror_field(name: &str) -> String {
+    let bare = name.trim_start_matches("r#");
+    if RUST_KEYWORDS.contains(&bare) { format!("{bare}_") } else { escaped(bare) }
 }
 
 /// A wrapper's source: its doc comment, signature and body.
@@ -625,6 +896,7 @@ fn argument(name: &str, conv: &Conv, setup: &mut Vec<String>) -> String {
         }
         Conv::Boxed(inner) => format!("Box::new({})", argument(name, inner, setup)),
         Conv::Cow(inner) => format!("std::borrow::Cow::Borrowed({})", argument(name, inner, setup)),
+        Conv::Enum { function, borrowed } => format!("{}{function}(&{name})", if *borrowed { "&" } else { "" }),
         Conv::Option(inner) => {
             setup.push(format!("let {name} = {name}.into_option();"));
             let (body, fallible, borrowed) = match inner.as_ref() {
@@ -637,6 +909,7 @@ fn argument(name: &str, conv: &Conv, setup: &mut Vec<String>) -> String {
                 Conv::BytesOwned => ("value.as_slice().to_vec()".to_owned(), false, false),
                 Conv::Path { borrowed } => ("runtime::path(value)".to_owned(), true, *borrowed),
                 Conv::Custom { function, borrowed } => (format!("runtime::{function}(value)"), true, *borrowed),
+                Conv::Enum { function, .. } => (format!("{function}(value)"), false, false),
                 Conv::Option(_) => unreachable!("nested options are rejected when lowering"),
                 Conv::Keyed { .. } | Conv::TextRef | Conv::Boxed(_) | Conv::Cow(_) => {
                     unreachable!("only simple optional parameters pass lowering")
@@ -732,7 +1005,7 @@ fn snake(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::classify::{Custom, Implementations};
+    use crate::classify::{Custom, Implementations, VariantDef};
     use crate::render::tests::{bound, resolved, shared};
     use rustdoc_types::GenericArg;
 
@@ -753,6 +1026,9 @@ mod tests {
             (13, "alloc::boxed::Box"),
             (14, "alloc::borrow::Cow"),
             (15, "alloc::vec::Vec"),
+            (16, "demo::Mode"),
+            (17, "demo::inner::Event"),
+            (18, "demo::Shape"),
         ])
     }
 
@@ -805,13 +1081,80 @@ mod tests {
     }
 
     fn facade(functions: &[Function]) -> Facade {
+        facade_with(functions, &Implementations::default())
+    }
+
+    fn unit(name: &str) -> VariantDef {
+        VariantDef { name: name.to_owned(), discriminant: None, fields: VariantFields::Unit, constructible: true }
+    }
+
+    /// A fieldless enum with an explicit discriminant and an empty tuple variant, an open data enum
+    /// and a data enum whose payload the emitter does not lower yet.
+    fn enums() -> Implementations {
+        let mode = EnumDef {
+            public: "demo::Mode".to_owned(),
+            variants: vec![unit("Read"), VariantDef { discriminant: Some("5".to_owned()), ..unit("Write") }, VariantDef { fields: VariantFields::Tuple(Vec::new()), ..unit("Admin") }],
+            open: false,
+            generic: false,
+        };
+        let event = EnumDef {
+            public: "demo::Event".to_owned(),
+            variants: vec![
+                VariantDef { fields: VariantFields::Tuple(vec![Type::Primitive("u32".to_owned()), ty(11)]), ..unit("Opened") },
+                VariantDef { fields: VariantFields::Named(vec![("from".to_owned(), ty(1)), ("type".to_owned(), ty(16))]), ..unit("Renamed") },
+                unit("Closed"),
+            ],
+            open: true,
+            generic: false,
+        };
+        let shape = EnumDef { public: "demo::Shape".to_owned(), variants: vec![VariantDef { fields: VariantFields::Tuple(vec![generic(8, vec![ty(1)])]), ..unit("Maybe") }], open: false, generic: false };
+        Implementations::default().with_root("demo").with_enum("demo::Mode", mode).with_enum("demo::inner::Event", event).with_enum("demo::Shape", shape)
+    }
+
+    fn facade_with(functions: &[Function], implementations: &Implementations) -> Facade {
         let renderer = renderer();
         let types = types();
-        let implementations = Implementations::default();
-        let classifier = Classifier::new(&renderer, &types, &[], &implementations);
+        let classifier = Classifier::new(&renderer, &types, &[], implementations);
         let context = Context { renderer: &renderer, classifier: &classifier, runtime: "crate::runtime", provenance: "test" };
         let functions: Vec<&Function> = functions.iter().collect();
         emit(&functions, &context).expect("the functions lower")
+    }
+
+    #[test]
+    fn enums_cross_as_mirrors() {
+        let mode = function("demo::Repo::mode", Some("demo::Repo"), Receiver::Shared, Vec::new(), Some(ty(16)));
+        let set_mode = function("demo::Repo::set_mode", Some("demo::Repo"), Receiver::Shared, vec![("mode", ty(16)), ("fallback", generic(8, vec![ty(16)]))], None);
+        let event = function("demo::Repo::last_event", Some("demo::Repo"), Receiver::Shared, Vec::new(), Some(generic(8, vec![ty(17)])));
+        let source = facade_with(&[mode, set_mode, event], &enums()).source;
+        assert!(source.contains("/// Mirrors `demo::Mode`.\n#[ffi]\npub enum Mode {\n    Read,\n    Write = 5,\n    Admin,\n}\n"), "{source}");
+        assert!(source.contains("fn to_mode(value: &demo::Mode) -> Result<Mode, runtime::Error> {\n    Ok(match value {\n        demo::Mode::Read => Mode::Read,\n        demo::Mode::Write => Mode::Write,\n        demo::Mode::Admin() => Mode::Admin,\n    })\n}\n"), "{source}");
+        assert!(source.contains("fn from_mode(value: &Mode) -> demo::Mode {\n    match value {\n        Mode::Read => demo::Mode::Read,\n        Mode::Write => demo::Mode::Write,\n        Mode::Admin => demo::Mode::Admin(),\n    }\n}\n"), "{source}");
+        assert!(source.contains("pub enum Event {\n    Opened(u32, ffi::String),\n    Renamed { from_: ffi::String, type_: Mode },\n    Closed,\n}\n"), "`from` is a name interoptopus forbids: {source}");
+        assert!(source.contains("        demo::Event::Opened(field0, field1, ..) => Event::Opened(*field0, runtime::oid_out(&field1)),\n"), "{source}");
+        assert!(source.contains("        demo::Event::Renamed { from: field0, r#type: field1, .. } => Event::Renamed { from_: ffi::String::from_string(field0.to_string()), type_: to_mode(&field1)? },\n"), "{source}");
+        assert!(source.contains("        _ => return Err(runtime::error(UnknownVariant(\"demo::Event\"))),\n"), "an open enum falls back: {source}");
+        assert!(source.contains("struct UnknownVariant(&'static str);"), "{source}");
+        assert!(source.contains("Ok(to_mode(&self.inner.repo().mode())?)"), "{source}");
+        assert!(source.contains("pub fn set_mode(&self, mode: Mode, fallback: ffi::Option<Mode>)"), "{source}");
+        assert!(source.contains("self.inner.repo().set_mode(from_mode(&mode), fallback.as_ref().map(|value| from_mode(value)))"), "{source}");
+        assert!(source.contains("Ok(ffi::Option::from(self.inner.repo().last_event().map(|value| Ok::<_, runtime::Error>(to_event(&value)?)).transpose()?))"), "{source}");
+    }
+
+    #[test]
+    fn enum_parameters_with_data_and_unlowered_payloads_are_decisions() {
+        let renderer = renderer();
+        let types = types();
+        let implementations = enums();
+        let classifier = Classifier::new(&renderer, &types, &[], &implementations);
+        let context = Context { renderer: &renderer, classifier: &classifier, runtime: "crate::runtime", provenance: "test" };
+        let replay = function("demo::Repo::replay", Some("demo::Repo"), Receiver::Shared, vec![("event", ty(17))], None);
+        let shape = function("demo::Repo::shape", Some("demo::Repo"), Receiver::Shared, Vec::new(), Some(ty(18)));
+        for (function, detail) in [(replay, "carries data"), (shape, "`demo::Shape`, variant `Maybe`")] {
+            assert_eq!(classifier.classify(&function).class, Class::Automatic, "the classifier passes `{}`", function.path);
+            let verdict = verdict(&function, &context);
+            assert_eq!(verdict.reasons[0].category, crate::classify::Category::Lowering, "{verdict:?}");
+            assert!(verdict.reasons[0].detail.contains(detail), "{verdict:?}");
+        }
     }
 
     #[test]

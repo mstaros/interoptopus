@@ -130,7 +130,7 @@ pub fn public_to_canonical(krate: &Crate) -> HashMap<String, String> {
 }
 
 /// Public paths of local items, shortest first, following public modules and re-exports.
-fn public_paths(krate: &Crate) -> HashMap<Id, String> {
+pub fn public_paths(krate: &Crate) -> HashMap<Id, String> {
     let mut paths = HashMap::new();
     let root_name = krate.index.get(&krate.root).and_then(|root| root.name.clone()).unwrap_or_default();
     let mut visited = HashSet::from([krate.root]);

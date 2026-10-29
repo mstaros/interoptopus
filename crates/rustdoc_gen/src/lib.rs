@@ -406,11 +406,11 @@ fn type_map(krate: &Crate, configuration: &Configuration) -> BTreeMap<String, Ma
         .collect()
 }
 
-/// The trait implementations of the root crate and of the dependency crates' JSON, with a digest
-/// of each dependency's JSON for provenance.
+/// The trait implementations and enums of the root crate and of the dependency crates' JSON, with
+/// a digest of each dependency's JSON for provenance.
 fn dependencies(krate: &Crate, dependency_json: &[PathBuf]) -> Result<(classify::Implementations, Vec<String>), EngineError> {
     let mut implementations = classify::Implementations::default();
-    implementations.add(krate);
+    implementations.add_root(krate);
     let mut digests = Vec::with_capacity(dependency_json.len());
     for path in dependency_json {
         let text = fs::read_to_string(path).map_err(|e| EngineError::new(ErrorCode::Io, format!("cannot read {}: {e}", path.display())))?;
@@ -419,6 +419,7 @@ fn dependencies(krate: &Crate, dependency_json: &[PathBuf]) -> Result<(classify:
         digest.field(text.as_bytes());
         digests.push(digest.hex());
     }
+    implementations.finish();
     Ok((implementations, digests))
 }
 
@@ -566,11 +567,14 @@ mod tests {
 
         let first = analyze(&request).expect("the surface is analyzed");
         assert!(first.manifest_updated);
-        assert_eq!((first.public_methods, first.public_free_functions), (5, 1));
+        assert_eq!((first.public_methods, first.public_free_functions), (8, 1));
         let manifest = Manifest::read(&manifest_path).expect("the manifest reads back");
         let state = |path: &str| manifest.items.iter().find(|item| item.path == path).map(|item| (item.class, item.status));
         assert_eq!(state("demo::Repo::name"), Some((Class::Automatic, Status::Ready)));
         assert_eq!(state("demo::open"), Some((Class::Automatic, Status::Ready)), "public type-map names reach canonical paths");
+        for mirrored in ["demo::Repo::mode", "demo::Repo::set_mode", "demo::Repo::last_event"] {
+            assert_eq!(state(mirrored), Some((Class::Automatic, Status::Ready)), "{mirrored} crosses through enum mirrors");
+        }
         assert_eq!(state("demo::Repo::rename"), Some((Class::Decision, Status::Unresolved)));
         assert_eq!(state("demo::Repo::find"), Some((Class::Decision, Status::Unresolved)));
         assert_eq!(state("demo::Item::id"), Some((Class::Decision, Status::Unresolved)));
@@ -600,12 +604,40 @@ mod inner {
             None
         }
 
+        pub fn mode(&self) -> crate::mode::Mode {
+            crate::mode::Mode::Read
+        }
+
+        pub fn set_mode(&self, mode: crate::mode::Mode) {
+            let _ = mode;
+        }
+
+        pub fn last_event(&self) -> Option<crate::Event> {
+            None
+        }
+
         #[deprecated]
         pub fn old(&self) {}
     }
 }
 
 pub use inner::Repo;
+
+pub mod mode {
+    #[repr(u8)]
+    pub enum Mode {
+        Read,
+        Write = 5,
+        Admin(),
+    }
+}
+
+#[non_exhaustive]
+pub enum Event {
+    Opened(u32),
+    Renamed { from: String, to: String },
+    Closed,
+}
 
 pub struct Item;
 
@@ -692,7 +724,9 @@ pub fn open(path: impl AsRef<std::path::Path>) -> Result<Repo, std::io::Error> {
 
         let generated = generate(&request).expect("the facade is generated");
         assert!(generated.written);
-        assert_eq!((generated.emitted, generated.pending), (2, 3), "demo::open and demo::Repo::name; three items await decisions");
+        assert_eq!((generated.emitted, generated.pending), (5, 3), "demo::open and four Repo methods; three items await decisions");
+        let source = fs::read_to_string(&generated.rust_module).expect("the facade reads back");
+        assert!(source.contains("pub enum ModeMode {") && source.contains("pub enum Event {"), "mirrors of a fieldless and a data enum: {source}");
         assert!(!generate(&request).expect("the facade is generated again").written, "regenerating changes nothing");
         assert!(cargo(&["test", "--offline", "-p", "facade"]), "the generated facade builds and registers with an inventory");
 

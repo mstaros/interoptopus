@@ -49,6 +49,11 @@ Interoptopus fixes to discuss:
   should add if not, is decided in interoptopus.
 - Services returned only from constructors, never from methods or inside `Option` and `Vec`
   (see Handles): this is what keeps keyed handles from becoming per-type services.
+- Macro-emitted trait impls call `Self::kind()`, `Self::id()` and `Self::ty()` unqualified (the
+  `types`, `service`, `function` and `constant` emitters of `proc_macros_impl`), so an `#[ffi]`
+  type or service with an inherent item of that name does not compile; gix's
+  `Repository::kind` hits it (2026-10-29). The fix is qualified calls, such as
+  `<Self as TypeInfo>::kind()`.
 
 ## Engine
 
@@ -98,16 +103,18 @@ scripts should run them asynchronously.
 One JSON file per target repository.
 
 - **configuration**: workspace `Cargo.toml`, root crate, crate prefix, features, toolchain;
-  interoptopus version and facade crate; output folders for generated Rust and C#; path of
-  the hand-written runtime module; managed and native namespaces; library name; type-map
-  overrides.
-- **items**: item path, signature hash, class, status, reason.
-- **decisions**, checked against the item's signature hash; a `handle` answer may instead
-  name a type and cover all its `&self` methods, and a per-item decision overrides it.
-  Payloads are structured, and Rust fragments use only the placeholders `{value}`, `{repo}`
-  and `{key}`:
-  - `handle`: the type, its key mapping, `to_key` (such as `{value}.id`) and `from_key` (such
-    as `{repo}.find_commit({key})`);
+  interoptopus version and facade crate; the output folder for generated Rust; path of the
+  hand-written runtime module; library name; type-map entries (see Type map); excluded path
+  prefixes.
+- **items**: item path, canonical signature and its hash, class, status, and every blocker
+  (`reasons`).
+- **summary**, **provenance** (digests of the rustdoc JSON, dependencies included, and of the
+  configuration), **proposals** and **handle_candidates**, written by `analyze`.
+- **decisions**, checked against the item's signature hash. A per-type handle answer is a
+  `keyed` type-map entry (see Handles), and a per-item decision overrides it. Payloads are
+  structured, and Rust fragments use only the placeholders `{value}`, `{repo}` and `{key}`:
+  - `handle`: the fields of a `keyed` entry (`repo`, `key`, `rebuild`, `fallible`, `key_of`),
+    for one item;
   - `record`: field paths, checked against rustdoc;
   - `convert`: a source mapping and one fragment (such as
     `gix::refs::FullName::try_from({value})`);
@@ -116,9 +123,9 @@ One JSON file per target repository.
 
 ## Classification (v1)
 
-- **Automatic**: every type is in the type map; borrowed results only for handle types that
-  have a decision; generic arguments only when a mapped type satisfies their bounds (see Type
-  map).
+- **Automatic**: every type is in the type map or is a public enum the facade mirrors (see
+  Enums); borrowed results only for handle types that have a decision; generic arguments only
+  when a mapped type satisfies their bounds (see Type map).
 - **Needs a decision**: unmapped borrowed results and other generics; results implementing
   `Iterator` until a cursor template exists; `&mut self` methods on the runtime handle, which
   need the persistent holder. Categories come from trait implementations (`Iterator`, `Fn*`,
@@ -176,11 +183,11 @@ interoptopus itself needs no change for this.
 The generated facade calls a runtime module (configuration `runtime_module`, default
 `crate::runtime`) that provides:
 
-- `Error`, an FFI type, and `error(e)`, which maps any error a wrapped call returns (the planned
-  error contract, P0b in the GixSharp handoff);
-- the repository holder, named like the generated service (a mutex-guarded repository or a
-  pool), with `From` for each type mapped to `repository` and one accessor per such type, named
-  after it in snake case (`repository()`, `thread_safe_repository()`);
+- `Error`, an FFI type, and `error(e)`, which maps any error a wrapped call returns and the
+  facade's own `UnknownVariant` (the planned error contract, P0b in the GixSharp handoff);
+- the handle holder, named like the generated service (a mutex-guarded repository or a pool),
+  with `From` for each type mapped to `handle` and one accessor per such type, named after it
+  in snake case (`repository()`, `thread_safe_repository()`);
 - `path` and `path_out`, and the two conversion functions each custom mapping names (for gix,
   object ids);
 - later, the cursor template.
@@ -237,6 +244,29 @@ Every call rebuilds the object, so bulk reads, such as a 10,000-commit log readi
 each (50,000 lookups), should use a per-item `record` override that returns the fields
 together.
 
+## Enums
+
+A public enum crosses as an `#[ffi]` mirror without a type-map entry, named after its shortest
+public path through the root crate without the root segment (`gix::remote::Direction` becomes
+`RemoteDirection`). An enum without such a path, or whose mirror name another enum or the
+service claims, gets no mirror, and its items need a decision. Variants and fields keep their
+Rust names (escaped like other names interoptopus rejects), explicit discriminants are copied
+as literals, and empty tuple and struct variants become unit variants. The mirror declares no
+`#[repr]`: the discriminant type and the C# shape (a plain enum or a union) are interoptopus'.
+
+- Fieldless enums cross both ways: `to_<mirror>` copies results, `from_<mirror>` converts
+  parameters.
+- Enums with data cross as results only. Payloads convert like results, from references:
+  primitives, text, bytes, paths, custom mappings, keys and nested enums. Enum parameters with
+  data, and other payloads, are `lowering` decisions.
+- A `#[non_exhaustive]` enum, or one with hidden variants, maps a variant the facade does not
+  know to `runtime::error(UnknownVariant(..))`.
+- Generic and recursive enums, enums without variants and enums with hidden fields need a
+  decision.
+- Definitions come from the root crate's and the dependencies' rustdoc JSON. Paths through glob
+  re-exports are not followed yet, so such enums get no mirror (gix: `gix_imara_diff::Algorithm`,
+  public as `gix::diff::blob::Algorithm`).
+
 ## Determinism and safety
 
 - Stable ordering; generated file headers record the engine version, rustdoc format version
@@ -279,6 +309,10 @@ together.
   Handle candidates measured as keyed: `gix::Object` 11 unblocked and 35 reduced, `Submodule`
   10 and 18, `Reference` 7 and 21, `Worktree` 7 and 13, `config::Snapshot` 7 and 11, `Head` 6
   and 14.
+- Enum kind (2026-10-29): 61 automatic items (from 56) and 56 generated members (from 51)
+  through 5 mirrors: `HashKind`, `RemoteDirection`, `RepositoryKind`, `SecTrust` and
+  `StateInProgress`. First blockers: receiver 365, unmapped 125 (from 130); blockers inside
+  enums name the payload, such as `gix_ref::FullName` in `PreviousValue`.
 
 ## Open decisions
 
@@ -314,7 +348,7 @@ type-map proposals ranked by impact (see Type map).
 - [x] E3b Report every blocker per item. Done: items list `reasons` in order (receiver, parameters, result), the summary adds `sole_blockers`, and items ignore fields that older engine versions wrote. On gix only 70 of the 405 receiver-first items are blocked by the receiver alone (see Reference measurements).
 - [ ] E3c `analyze` proposes type-map entries ranked by how many items each unblocks (with G3). First increment (report only): the manifest carries `proposals` and `handle_candidates`, ranked by unblocks and reduces (see Type map; gix numbers under Reference measurements). Open: accepted string and bytes mappings need the emitter's convert kind (E5). Handle candidates are measured and labeled as `keyed` (2026-10-28).
 - [ ] E4 Decision validation: structured payloads (see Manifest), per-type handle answers covering `&self` methods only with per-item overrides, and the check that builds the generated facade with the target's features. Needs E3a, and a buildable runtime: G2's minimal runtime or a stub of the runtime contract. First part (2026-10-28): `analyze` and `generate` check keyed payloads (placeholders, `repo` mapped as a handle, a primitive key or one with a data mapping); the build check is the target's build of the generated facade. Open: per-item decision payloads, and running the build from the service.
-- [ ] E5 Rust facade emitter (automatic, handle, convert and record kinds) plus inventory registration; handles cross the boundary as keys (see Handles). Facade types get unique module-qualified names (see Naming and namespaces). First increment, the automatic kind: `generate` emits one service for all types mapped to the runtime handle (functions returning the handle become constructors, including `&self` methods as constructors taking `&Self`; free functions and the handle's own type win name clashes; conversions between handle types are dropped), its `&self` methods, and free functions named after their module path. Every member returns `ffi::Result`. It refuses a stale manifest (provenance or items differ from a fresh analysis) and, unless the request sets `partial`, one that is not ready; it rejects output folders outside the worktree and writes `mod.rs` into `rust_output` only when it changes. An end-to-end test builds the generated facade for a demo crate and validates its inventory. Keyed handles (2026-10-28) are the handle kind: see Handles. The first keyed generation for gix moved two cases from automatic to blocked, since the emitter cannot lower them yet: parameters `impl IntoIterator<Item = …>` ("waits for slice parameters") and parameters borrowing the runtime handle ("takes the runtime handle as a parameter"). Automatic means generated (2026-10-28): `facade::verdict` runs the emitter on every function the classifier passes, and `analyze`, `generate` and `propose` use it, so what the emitter does not generate is a decision with category `lowering` and the emitter's reason, and `generate` cannot fail on an automatic item. The emitter lowers `Box<T>` and `Cow<T>` parameters and results, `&String` parameters, and `Self`/`&Self` through the owner's mapping. Open: `Vec<T>` and `IntoIterator` parameters (slices), nested options and options of results. The first real generation (gix, `dfe25025`) added two fixes: names interoptopus forbids get a trailing underscore (`init` becomes `init_`), and constructors taking the service name its type, because interoptopus copies their parameters into a free function where `Self` is unknown. The second is a workaround to fix in interoptopus (see Boundary with interoptopus).
+- [ ] E5 Rust facade emitter (automatic, handle, convert and record kinds) plus inventory registration; handles cross the boundary as keys (see Handles). Facade types get unique module-qualified names (see Naming and namespaces). First increment, the automatic kind: `generate` emits one service for all types mapped to the runtime handle (functions returning the handle become constructors, including `&self` methods as constructors taking `&Self`; free functions and the handle's own type win name clashes; conversions between handle types are dropped), its `&self` methods, and free functions named after their module path. Every member returns `ffi::Result`. It refuses a stale manifest (provenance or items differ from a fresh analysis) and, unless the request sets `partial`, one that is not ready; it rejects output folders outside the worktree and writes `mod.rs` into `rust_output` only when it changes. An end-to-end test builds the generated facade for a demo crate and validates its inventory. Keyed handles (2026-10-28) are the handle kind: see Handles. The first keyed generation for gix moved two cases from automatic to blocked, since the emitter cannot lower them yet: parameters `impl IntoIterator<Item = …>` ("waits for slice parameters") and parameters borrowing the runtime handle ("takes the runtime handle as a parameter"). Automatic means generated (2026-10-28): `facade::verdict` runs the emitter on every function the classifier passes, and `analyze`, `generate` and `propose` use it, so what the emitter does not generate is a decision with category `lowering` and the emitter's reason, and `generate` cannot fail on an automatic item. The emitter lowers `Box<T>` and `Cow<T>` parameters and results, `&String` parameters, and `Self`/`&Self` through the owner's mapping. Open: `Vec<T>` and `IntoIterator` parameters (slices), nested options and options of results. The first real generation (gix, `dfe25025`) added two fixes: names interoptopus forbids get a trailing underscore (`init` becomes `init_`), and constructors taking the service name its type, because interoptopus copies their parameters into a free function where `Self` is unknown. The second is a workaround to fix in interoptopus (see Boundary with interoptopus). Enum kind (2026-10-29): public enums cross as `#[ffi]` mirrors (see Enums): fieldless enums both ways, enums with data as results, unknown variants of open enums as runtime errors; on gix 5 mirrors make 5 more items automatic (see Reference measurements). gix-ffi does not build with them yet: the service gains `kind`, which interoptopus' unqualified `Self::kind()` resolves to (see Boundary with interoptopus).
 - [x] E6 Names sidecar in the C# backend. Not needed: the engine writes no C# (2026-10-29, see Boundary with interoptopus).
 - [x] E7 Public C# layer: out of the engine (2026-10-29, see Boundary with interoptopus). A first increment (2026-10-28) emitted `{ManagedNamespace}.g.cs` with its own names, conversions and keyed classes, re-implementing interoptopus' member naming; it was removed with its settings (`csharp_output`, `csharp_runtime`, `managed_namespace`, `native_namespace`) and the keyed payload's `key_name`.
 - [ ] E8 Release with `publish_localcargo`; package the binary with `package_rust_binary`.

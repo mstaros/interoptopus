@@ -3,16 +3,18 @@
 //! from the manifest's type map, and generic bounds are matched against it and against the trait
 //! implementations rustdoc reports.
 
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use rustdoc_types::{
-    AssocItemConstraintKind, Crate, Enum, GenericArgs, GenericBound, GenericParamDefKind, Impl, ItemEnum, Path, Struct, Term, Type, Union,
+    AssocItemConstraintKind, Attribute, Crate, Enum, GenericArg, GenericArgs, GenericBound, GenericParamDefKind, Id, Impl, Item, ItemEnum,
+    ItemKind, Path, Struct, Term, Type, Union, VariantKind,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::render::{Renderer, type_args};
-use crate::surface::{Function, Receiver};
+use crate::surface::{self, Function, Receiver};
 
 /// How a mapped Rust type crosses the boundary.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -239,6 +241,72 @@ enum Position {
     Output,
 }
 
+/// A public enum that can cross as an `#[ffi]` mirror (the enum kind in `facade.rs`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EnumDef {
+    /// Its public path in its own crate, such as `gix_object::Kind`.
+    pub public: String,
+    /// Its variants, in declaration order.
+    pub variants: Vec<VariantDef>,
+    /// Whether another crate must match it with a wildcard arm: it is `#[non_exhaustive]` or
+    /// hides variants.
+    pub open: bool,
+    /// Whether it has type or const parameters.
+    pub generic: bool,
+}
+
+/// One variant of an enum.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VariantDef {
+    /// The variant's name.
+    pub name: String,
+    /// The evaluated discriminant, when the source writes one.
+    pub discriminant: Option<String>,
+    /// Its fields. Payload types name items by canonical path under an id no renderer knows, so
+    /// any crate's renderer reads them.
+    pub fields: VariantFields,
+    /// Whether another crate may construct it: `#[non_exhaustive]` on a variant forbids it.
+    pub constructible: bool,
+}
+
+/// The fields of a variant.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum VariantFields {
+    /// `A`.
+    Unit,
+    /// `A(..)`, possibly empty.
+    Tuple(Vec<Type>),
+    /// `A { .. }`, possibly empty.
+    Named(Vec<(String, Type)>),
+    /// Fields hidden from the documentation.
+    Hidden,
+}
+
+impl VariantFields {
+    /// The payload types, in declaration order.
+    #[must_use]
+    pub fn types(&self) -> Vec<&Type> {
+        match self {
+            Self::Unit | Self::Hidden => Vec::new(),
+            Self::Tuple(types) => types.iter().collect(),
+            Self::Named(fields) => fields.iter().map(|(_, ty)| ty).collect(),
+        }
+    }
+
+    /// Whether the variant carries no data.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Self::Unit => true,
+            Self::Tuple(types) => types.is_empty(),
+            Self::Named(fields) => fields.is_empty(),
+            Self::Hidden => false,
+        }
+    }
+}
+
+/// An id no renderer knows: a path under it renders as its written, canonical text.
+const UNKNOWN_ID: Id = Id(u32::MAX);
 /// Trait implementations listed in rustdoc JSON, plus the type facts proposals need.
 ///
 /// Each trait keeps its implementing types as the renderer writes them. Blanket and negative
@@ -252,13 +320,29 @@ pub struct Implementations {
     deref_targets: BTreeMap<String, String>,
     /// Types declared with a lifetime parameter.
     with_lifetime: BTreeSet<String>,
+    /// Public enums by canonical path.
+    enums: BTreeMap<String, EnumDef>,
+    /// The root crate's name.
+    root: Option<String>,
+    /// Public module paths of the dependency crates the root crate re-exports, by crate name.
+    crate_paths: BTreeMap<String, String>,
+    /// Mirror names by canonical path; enums whose name another enum also claims have none.
+    mirrors: BTreeMap<String, String>,
 }
 
 impl Implementations {
-    /// Adds the trait implementations and lifetime-generic types one crate's JSON lists.
+    /// Adds the trait implementations, lifetime-generic types and public enums one crate's JSON
+    /// lists.
     pub fn add(&mut self, krate: &Crate) {
         let renderer = Renderer::new(krate);
+        let public_paths = surface::public_paths(krate);
         for item in krate.index.values() {
+            if let ItemEnum::Enum(enumeration) = &item.inner
+                && let (Some(summary), Some(public)) = (krate.paths.get(&item.id), public_paths.get(&item.id))
+                && summary.crate_id == 0
+            {
+                self.enums.insert(summary.path.join("::"), enum_def(krate, &renderer, item, enumeration, public));
+            }
             match &item.inner {
                 ItemEnum::Impl(implementation) => self.implementation(krate, &renderer, implementation),
                 ItemEnum::Struct(Struct { generics, .. }) | ItemEnum::Enum(Enum { generics, .. }) | ItemEnum::Union(Union { generics, .. }) => {
@@ -323,6 +407,63 @@ impl Implementations {
         self.with_lifetime.contains(path)
     }
 
+    /// Adds the root crate: what `add` collects, plus its name and the dependency crates it
+    /// re-exports as modules, through which their enums are nameable.
+    pub fn add_root(&mut self, krate: &Crate) {
+        self.add(krate);
+        self.root = krate.index.get(&krate.root).and_then(|root| root.name.clone());
+        for (id, public) in surface::public_paths(krate) {
+            let Some(summary) = krate.paths.get(&id) else { continue };
+            if let [krate_name] = summary.path.as_slice()
+                && summary.crate_id != 0
+                && summary.kind == ItemKind::Module
+            {
+                let entry = self.crate_paths.entry(krate_name.clone()).or_insert_with(|| public.clone());
+                if public.len() < entry.len() {
+                    *entry = public;
+                }
+            }
+        }
+    }
+
+    /// Names every mirror, once all crates are added; two enums claiming one name both go
+    /// without.
+    pub fn finish(&mut self) {
+        let mut claims: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        for canonical in self.enums.keys() {
+            if let Some(name) = self.nameable(canonical).as_deref().and_then(mirror_name) {
+                claims.entry(name).or_default().push(canonical.clone());
+            }
+        }
+        self.mirrors = claims.into_iter().filter_map(|(name, owners)| match owners.as_slice() {
+            [owner] => Some((owner.clone(), name)),
+            _ => None,
+        }).collect();
+    }
+
+    /// The public enum at `canonical`.
+    #[must_use]
+    pub fn enum_def(&self, canonical: &str) -> Option<&EnumDef> {
+        self.enums.get(canonical)
+    }
+
+    /// The mirror name of the enum at `canonical`, if it has one.
+    #[must_use]
+    pub fn mirror(&self, canonical: &str) -> Option<&str> {
+        self.mirrors.get(canonical).map(String::as_str)
+    }
+
+    /// The path that names the enum at `canonical` through the root crate's public API.
+    #[must_use]
+    pub fn nameable(&self, canonical: &str) -> Option<String> {
+        let public = &self.enums.get(canonical)?.public;
+        let (krate, rest) = public.split_once("::")?;
+        if Some(krate) == self.root.as_deref() {
+            return Some(public.clone());
+        }
+        self.crate_paths.get(krate).map(|prefix| format!("{prefix}::{rest}"))
+    }
+
     /// Implementations from (trait, implementing type) pairs.
     #[cfg(test)]
     pub(crate) fn from_pairs<'p>(pairs: impl IntoIterator<Item = (&'p str, &'p str)>) -> Self {
@@ -342,6 +483,21 @@ impl Implementations {
         self.with_lifetime.extend(lifetimes.iter().map(|path| (*path).to_owned()));
         self
     }
+
+    /// Sets the root crate's name.
+    #[cfg(test)]
+    pub(crate) fn with_root(mut self, root: &str) -> Self {
+        self.root = Some(root.to_owned());
+        self
+    }
+
+    /// Adds an enum and names the mirrors again.
+    #[cfg(test)]
+    pub(crate) fn with_enum(mut self, canonical: &str, def: EnumDef) -> Self {
+        self.enums.insert(canonical.to_owned(), def);
+        self.finish();
+        self
+    }
 }
 
 /// Classifies surface functions against a type map and exclusion rules.
@@ -350,6 +506,8 @@ pub struct Classifier<'a> {
     types: BTreeMap<String, Mapping>,
     exclude_paths: &'a [String],
     implementations: &'a Implementations,
+    /// The enums whose payloads are being checked, against recursion.
+    visiting: RefCell<Vec<String>>,
 }
 
 impl<'a> Classifier<'a> {
@@ -363,7 +521,7 @@ impl<'a> Classifier<'a> {
     ) -> Self {
         let mut types: BTreeMap<String, Mapping> = STD_TYPES.iter().map(|(path, mapping)| ((*path).to_owned(), mapping.clone())).collect();
         types.extend(overrides.iter().map(|(path, mapping)| (path.clone(), mapping.clone())));
-        Self { renderer, types, exclude_paths, implementations }
+        Self { renderer, types, exclude_paths, implementations, visiting: RefCell::default() }
     }
 
     /// This classifier with one more type-map entry, for measuring a proposal.
@@ -371,7 +529,13 @@ impl<'a> Classifier<'a> {
     pub fn with(&self, canonical: &str, mapping: Mapping) -> Self {
         let mut types = self.types.clone();
         types.insert(canonical.to_owned(), mapping);
-        Self { renderer: self.renderer, types, exclude_paths: self.exclude_paths, implementations: self.implementations }
+        Self { renderer: self.renderer, types, exclude_paths: self.exclude_paths, implementations: self.implementations, visiting: RefCell::default() }
+    }
+
+    /// The trait implementations and type facts this classifier reads.
+    #[must_use]
+    pub const fn implementations(&self) -> &'a Implementations {
+        self.implementations
     }
 
     /// The verdict for one function.
@@ -582,7 +746,9 @@ impl<'a> Classifier<'a> {
                     Err(Reason::new(Category::Receiver, format!("takes the runtime handle `{canonical}` by value")))
                 }
                 Some(_) => Ok(()),
-                None => Err(self.unmapped(&canonical, &self.renderer.ty(&Type::ResolvedPath(path.clone())))),
+                None => self
+                    .mirrored(&canonical, function)
+                    .unwrap_or_else(|| Err(self.unmapped(&canonical, &self.renderer.ty(&Type::ResolvedPath(path.clone()))))),
             },
         }
     }
@@ -599,9 +765,41 @@ impl<'a> Classifier<'a> {
                 }
                 _ => Ok(()),
             },
+            Type::ResolvedPath(path) if self.implementations.enum_def(&self.renderer.path(path)).is_some() => {
+                self.mirrored(&self.renderer.path(path), function).unwrap_or(Ok(()))
+            }
             Type::Generic(name) if name == "Self" => self.owner_value(function),
             _ => Err(self.blocked(inner, Category::Borrowed)),
         }
+    }
+
+    /// Whether an enum crosses as its mirror: it needs a mirror name, no type parameters, at
+    /// least one variant, no hidden fields and no recursion, and every payload must cross as a
+    /// result. `None` when `canonical` is no public enum.
+    fn mirrored(&self, canonical: &str, function: &Function) -> Option<Result<(), Reason>> {
+        let def = self.implementations.enum_def(canonical)?;
+        let blocked = |category: Category, detail: &str| Some(Err(Reason::new(category, format!("{canonical}: {detail}")).about(Some(canonical))));
+        if def.generic {
+            return blocked(Category::Generic, "a generic enum");
+        }
+        if self.implementations.mirror(canonical).is_none() {
+            return blocked(Category::Unmapped, "not nameable through the root crate, or another enum claims its mirror name");
+        }
+        if def.variants.is_empty() {
+            return blocked(Category::Unsupported, "an enum without variants");
+        }
+        if def.variants.iter().any(|variant| variant.fields == VariantFields::Hidden) {
+            return blocked(Category::Unsupported, "hidden fields");
+        }
+        if self.visiting.borrow().iter().any(|path| path == canonical) || def.variants.iter().flat_map(|variant| variant.fields.types()).any(mentions_self) {
+            return blocked(Category::Unsupported, "a recursive enum");
+        }
+        self.visiting.borrow_mut().push(canonical.to_owned());
+        let checked = def.variants.iter().flat_map(|variant| variant.fields.types()).try_for_each(|ty| {
+            self.value(ty, function, Position::Output).map_err(|reason| Reason { detail: format!("{canonical}: {}", reason.detail), ..reason })
+        });
+        self.visiting.borrow_mut().pop();
+        Some(checked)
     }
 
     fn owner_value(&self, function: &Function) -> Result<(), Reason> {
@@ -675,6 +873,118 @@ fn base(rendered: &str) -> &str {
     unborrowed.split('<').next().unwrap_or(unborrowed)
 }
 
+/// The enum definition of `item`, whose public path in its own crate is `public`.
+fn enum_def(krate: &Crate, renderer: &Renderer, item: &Item, enumeration: &Enum, public: &str) -> EnumDef {
+    let field_type = |id: &Id| match krate.index.get(id).map(|field| &field.inner) {
+        Some(ItemEnum::StructField(ty)) => Some(portable(ty, renderer)),
+        _ => None,
+    };
+    let variants = enumeration
+        .variants
+        .iter()
+        .filter_map(|id| krate.index.get(id))
+        .filter_map(|variant_item| {
+            let ItemEnum::Variant(variant) = &variant_item.inner else { return None };
+            let fields = match &variant.kind {
+                VariantKind::Plain => VariantFields::Unit,
+                VariantKind::Tuple(ids) => ids
+                    .iter()
+                    .map(|id| id.as_ref().and_then(field_type))
+                    .collect::<Option<Vec<_>>>()
+                    .map_or(VariantFields::Hidden, VariantFields::Tuple),
+                VariantKind::Struct { has_stripped_fields: true, .. } => VariantFields::Hidden,
+                VariantKind::Struct { fields, .. } => fields
+                    .iter()
+                    .map(|id| Some((krate.index.get(id)?.name.clone()?, field_type(id)?)))
+                    .collect::<Option<Vec<_>>>()
+                    .map_or(VariantFields::Hidden, VariantFields::Named),
+            };
+            Some(VariantDef {
+                name: variant_item.name.clone()?,
+                discriminant: variant.discriminant.as_ref().map(|discriminant| discriminant.value.clone()),
+                fields,
+                constructible: !non_exhaustive(&variant_item.attrs),
+            })
+        })
+        .collect();
+    EnumDef {
+        public: public.to_owned(),
+        variants,
+        open: enumeration.has_stripped_variants || non_exhaustive(&item.attrs),
+        generic: enumeration.generics.params.iter().any(|param| !matches!(param.kind, GenericParamDefKind::Lifetime { .. })),
+    }
+}
+
+fn non_exhaustive(attrs: &[Attribute]) -> bool {
+    attrs.iter().any(|attribute| matches!(attribute, Attribute::NonExhaustive))
+}
+
+/// `ty` with every path written canonically under an id no renderer knows.
+fn portable(ty: &Type, renderer: &Renderer) -> Type {
+    match ty {
+        Type::ResolvedPath(path) => Type::ResolvedPath(portable_path(path, renderer)),
+        Type::BorrowedRef { lifetime, is_mutable, type_ } => {
+            Type::BorrowedRef { lifetime: lifetime.clone(), is_mutable: *is_mutable, type_: Box::new(portable(type_, renderer)) }
+        }
+        Type::RawPointer { is_mutable, type_ } => Type::RawPointer { is_mutable: *is_mutable, type_: Box::new(portable(type_, renderer)) },
+        Type::Slice(inner) => Type::Slice(Box::new(portable(inner, renderer))),
+        Type::Array { type_, len } => Type::Array { type_: Box::new(portable(type_, renderer)), len: len.clone() },
+        Type::Tuple(types) => Type::Tuple(types.iter().map(|ty| portable(ty, renderer)).collect()),
+        other => other.clone(),
+    }
+}
+
+fn portable_path(path: &Path, renderer: &Renderer) -> Path {
+    let args = path.args.as_deref().map(|args| {
+        Box::new(match args {
+            GenericArgs::AngleBracketed { args, constraints } => GenericArgs::AngleBracketed {
+                args: args
+                    .iter()
+                    .map(|arg| match arg {
+                        GenericArg::Type(ty) => GenericArg::Type(portable(ty, renderer)),
+                        other => other.clone(),
+                    })
+                    .collect(),
+                constraints: constraints.clone(),
+            },
+            other => other.clone(),
+        })
+    });
+    Path { path: renderer.path(path), id: UNKNOWN_ID, args }
+}
+
+/// The mirror name of a public path through the root crate: `gix::remote::Direction` becomes
+/// `RemoteDirection`.
+fn mirror_name(path: &str) -> Option<String> {
+    let mut segments = path.split("::");
+    segments.next()?;
+    let name: String = segments.map(pascal).collect();
+    (!name.is_empty()).then_some(name)
+}
+
+/// `tree_diff` becomes `TreeDiff`; names already in Pascal case stay.
+fn pascal(segment: &str) -> String {
+    segment
+        .trim_start_matches("r#")
+        .split('_')
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let mut chars = part.chars();
+            chars.next().map(|first| first.to_uppercase().chain(chars).collect::<String>()).unwrap_or_default()
+        })
+        .collect()
+}
+
+/// Whether `ty` mentions `Self`, as a recursive enum's payload does.
+fn mentions_self(ty: &Type) -> bool {
+    match ty {
+        Type::Generic(name) => name == "Self",
+        Type::BorrowedRef { type_, .. } | Type::RawPointer { type_, .. } | Type::Slice(type_) | Type::Array { type_, .. } => mentions_self(type_),
+        Type::Tuple(types) => types.iter().any(mentions_self),
+        Type::ResolvedPath(path) => type_args(path).iter().any(|arg| mentions_self(arg)),
+        _ => false,
+    }
+}
 /// The specific category of a std trait, if it has one.
 fn trait_category(canonical: &str) -> Option<Category> {
     match canonical {
@@ -729,6 +1039,10 @@ mod tests {
             (12, "demo::AsBytes"),
             (13, "demo::Platform"),
             (14, "demo::Repo"),
+            (15, "demo::Mode"),
+            (16, "demo::Event"),
+            (17, "demo::List"),
+            (18, "demo::Pair"),
         ])
     }
 
@@ -762,6 +1076,55 @@ mod tests {
 
     fn category(function: &Function) -> Option<Category> {
         classify(function).reasons.first().map(|reason| reason.category)
+    }
+
+    fn unit(name: &str) -> VariantDef {
+        VariantDef { name: name.to_owned(), discriminant: None, fields: VariantFields::Unit, constructible: true }
+    }
+
+    fn enum_def(public: &str, variants: Vec<VariantDef>) -> EnumDef {
+        EnumDef { public: public.to_owned(), variants, open: false, generic: false }
+    }
+
+    /// A fieldless enum, a data enum, a recursive one and a generic one, all under `demo`.
+    fn enums() -> Implementations {
+        let renamed = VariantDef { fields: VariantFields::Named(vec![("to".to_owned(), resolved(1, Vec::new()))]), ..unit("Renamed") };
+        let next = VariantDef { fields: VariantFields::Tuple(vec![resolved(17, Vec::new())]), ..unit("Next") };
+        Implementations::from_pairs([(ITERATOR, "demo::Iter")])
+            .with_root("demo")
+            .with_enum("demo::Mode", enum_def("demo::Mode", vec![unit("Read"), unit("Write")]))
+            .with_enum("demo::Event", EnumDef { open: true, ..enum_def("demo::Event", vec![renamed, unit("Closed")]) })
+            .with_enum("demo::List", enum_def("demo::List", vec![next, unit("End")]))
+            .with_enum("demo::Pair", EnumDef { generic: true, ..enum_def("demo::Pair", vec![unit("Left")]) })
+    }
+
+    #[test]
+    fn enums_cross_as_mirrors_unless_recursive_generic_or_unnamed() {
+        let renderer = renderer();
+        let implementations = enums();
+        let overrides = BTreeMap::from([("demo::Repo".to_owned(), Mapping::Handle)]);
+        let classifier = Classifier::new(&renderer, &overrides, &[], &implementations);
+        let category = |output: Type| classifier.classify(&method(Receiver::Shared, Vec::new(), Some(output))).reasons.first().map(|reason| reason.category);
+        assert_eq!(category(resolved(15, Vec::new())), None, "a fieldless enum");
+        assert_eq!(category(resolved(16, Vec::new())), None, "a data enum whose payload maps");
+        assert_eq!(category(shared(resolved(16, Vec::new()))), None, "a borrowed data enum");
+        assert_eq!(category(resolved(17, Vec::new())), Some(Category::Unsupported), "a recursive enum");
+        assert_eq!(category(resolved(18, Vec::new())), Some(Category::Generic), "a generic enum");
+        let parameter = classifier.classify(&method(Receiver::Shared, vec![("mode", resolved(15, Vec::new()))], None));
+        assert_eq!(parameter.class, Class::Automatic);
+        assert_eq!(implementations.mirror("demo::Mode"), Some("Mode"));
+        assert_eq!(implementations.nameable("demo::Mode").as_deref(), Some("demo::Mode"));
+    }
+
+    #[test]
+    fn mirror_names_follow_the_public_path_and_drop_clashes() {
+        assert_eq!(mirror_name("gix::remote::Direction").as_deref(), Some("RemoteDirection"));
+        assert_eq!(mirror_name("gix::tree_diff::r#Change").as_deref(), Some("TreeDiffChange"));
+        let clash = Implementations::default()
+            .with_root("demo")
+            .with_enum("demo::a::B", enum_def("demo::a::B", vec![unit("X")]))
+            .with_enum("demo::inner::AB", enum_def("demo::AB", vec![unit("Y")]));
+        assert_eq!((clash.mirror("demo::a::B"), clash.mirror("demo::inner::AB")), (None, None));
     }
 
     fn as_ref(target: Type) -> Type {
