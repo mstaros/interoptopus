@@ -930,37 +930,13 @@ A unit-only enum has no payload. Its case types are empty, its `Value` is nothin
 that has no use for it, and that holds for one such enum as much as for a hundred.
 
 **The population count is evidence of payoff, not justification.** An earlier version of this
-issue reasoned the other way and reached the wrong conclusion by doing so; see below.
+issue reasoned the other way and reached the wrong conclusion by doing so.
 
 ### How much of the population this is
 
 **Reference project: 4 of 6.** `EnumDocumented`, `EnumRenamedXYZ`, `EnumNegative`,
 `EnumExplicitThenImplicit` are unit-only; `EnumPayload` and `EnumExplicitPayload` carry payloads.
 `docs/csharp-unions.md` notes `_hasValue` currently trips CS0169 on **eight** generated types.
-
-**gitoxide `gix` crate — measured, and it corrects the earlier claim.** A syn visitor over
-`gix/src` (251 files, `pub` enums, excluding those named `Error`) classified 36 enums:
-
-| Class | Count | Representable |
-|---|---|---|
-| Pure unit | 15 | 15 |
-| Mixed | 4 | 2 |
-| Pure payload | 17 | 6 |
-| **Total** | **36** | **23** |
-
-"Representable" excludes what `VariantKind::Tuple(TypeId)` cannot carry — named-field variants,
-multi-field tuples, generics.
-
-**Unit-only is therefore 15 of 23 (65%), or 15 of 21 (71%) once `AsError` and `CleanupError` are
-dropped as error enums the name filter missed.** A previous version of this section reported
-"8 unit-only, 12 with payload — so *not* 'mostly unit-only' as first assumed" from a 20-enum
-sample filtered to files named `types.rs`. That sample counted the unrepresentable population
-alongside the representable one. **The first assumption was right; the sample misled it.**
-
-Caveat on scope: this is the `gix` porcelain crate only, not the `gix-*` plumbing crates or
-`gitoxide-core`, and **no `#[ffi]` annotation exists anywhere in gitoxide** — so it is a
-projection of what binding it would produce, not a count of what is bound. A count over another
-wrapped crate would change the payoff. It would not change the rule.
 
 ### The public surface changed deliberately
 
@@ -1090,14 +1066,7 @@ projection rule.
 ### Related — folding mixed enums, DROPPED
 
 The idea: for a *mixed* enum, fold its unit variants into one nested C# enum used as a single
-union case, leaving case types only for payload variants. Dropped on three grounds, one of them
-measured.
-
-**Measured: it has almost no population.** Of the four mixed enums in `gix`, only two are
-representable — `TrackRenames` (2 unit of 3) and `SubSectionRequirement` (1 unit of 2). Folding
-would apply to two enums and save three case types. The best candidate by far, `Mode` in
-`remote/connection/fetch/update_refs/update.rs` at 8 unit variants of 10, is **not**
-representable: its two named-field variants cannot reach the backend.
+union case, leaving case types only for payload variants. Dropped on two grounds.
 
 **It weakens exhaustiveness rather than strengthening it.** A switch over the folded union sees
 two cases — the nested enum and the payload case — and is exhaustive once both are covered, even
