@@ -339,6 +339,17 @@ const UNNAMED: &str = "not nameable through the root crate, or another type clai
 
 /// An id no renderer knows: a path under it renders as its written, canonical text.
 const UNKNOWN_ID: Id = Id(u32::MAX);
+
+/// A type alias: its type parameters with their defaults, and the type it stands for, written
+/// like `StructDef::fields`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Alias {
+    params: Vec<(String, Option<Type>)>,
+    target: Type,
+}
+
+/// The canonical paths of std's `io::Result`.
+const IO_RESULT: [&str; 2] = ["core::io::error::Result", "std::io::error::Result"];
 /// Trait implementations listed in rustdoc JSON, plus the type facts proposals need.
 ///
 /// Each trait keeps its implementing types as the renderer writes them. Blanket and negative
@@ -367,6 +378,8 @@ pub struct Implementations {
     crate_paths: BTreeMap<String, String>,
     /// Mirror names by canonical path; types whose name another type also claims have none.
     mirrors: BTreeMap<String, String>,
+    /// Type aliases by canonical path.
+    aliases: BTreeMap<String, Alias>,
 }
 
 impl Implementations {
@@ -399,6 +412,18 @@ impl Implementations {
                     if let Some(def) = struct_def(krate, &renderer, item, structure, public) {
                         self.structs.insert(summary.path.join("::"), def);
                     }
+                }
+                (ItemEnum::TypeAlias(alias), Some((summary, _))) => {
+                    let params = alias
+                        .generics
+                        .params
+                        .iter()
+                        .filter_map(|param| match &param.kind {
+                            GenericParamDefKind::Type { default, .. } => Some((param.name.clone(), default.as_ref().map(|ty| portable(ty, &renderer)))),
+                            _ => None,
+                        })
+                        .collect();
+                    self.aliases.insert(summary.path.join("::"), Alias { params, target: portable(&alias.type_, &renderer) });
                 }
                 _ => {}
             }
@@ -489,6 +514,7 @@ impl Implementations {
     /// Resolves the paths through the root crate and names every mirror, once all crates are
     /// added; two types claiming one name both go without.
     pub fn finish(&mut self) {
+        self.resolve_fields();
         self.crate_paths = self.crate_prefixes();
         let mut claims: BTreeMap<String, Vec<String>> = BTreeMap::new();
         for canonical in self.enums.keys().chain(self.structs.keys()) {
@@ -500,6 +526,49 @@ impl Implementations {
             [owner] => Some((owner.clone(), name)),
             _ => None,
         }).collect();
+    }
+
+    /// `ty` with every type alias replaced by the type it stands for, its arguments or their
+    /// defaults substituted: the aliases of the documented crates, and std's `io::Result`.
+    #[must_use]
+    pub fn resolve(&self, ty: &Type, renderer: &Renderer) -> Type {
+        match ty {
+            Type::ResolvedPath(path) => {
+                let path = map_args(path, &|arg| self.resolve(arg, renderer));
+                let canonical = renderer.path(&path);
+                let Some(alias) = self.aliases.get(&canonical).cloned().or_else(|| io_result(&canonical)) else {
+                    return Type::ResolvedPath(path);
+                };
+                let args = type_args(&path);
+                let bindings = alias
+                    .params
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, (name, default))| Some((name.clone(), args.get(index).copied().cloned().or_else(|| default.clone())?)))
+                    .collect();
+                self.resolve(&substitute(&alias.target, &bindings), renderer)
+            }
+            other => map_children(other, &|ty| self.resolve(ty, renderer)),
+        }
+    }
+
+    /// Sees through the aliases in the enums' and structs' fields.
+    fn resolve_fields(&mut self) {
+        let renderer = Renderer::default();
+        let mut structs = std::mem::take(&mut self.structs);
+        for (_, ty) in structs.values_mut().flat_map(|def| def.fields.iter_mut()) {
+            *ty = self.resolve(ty, &renderer);
+        }
+        self.structs = structs;
+        let mut enums = std::mem::take(&mut self.enums);
+        for variant in enums.values_mut().flat_map(|def| def.variants.iter_mut()) {
+            match &mut variant.fields {
+                VariantFields::Tuple(types) => types.iter_mut().for_each(|ty| *ty = self.resolve(ty, &renderer)),
+                VariantFields::Named(fields) => fields.iter_mut().for_each(|(_, ty)| *ty = self.resolve(ty, &renderer)),
+                VariantFields::Unit | VariantFields::Hidden => {}
+            }
+        }
+        self.enums = enums;
     }
 
     /// The public path through the root crate of every crate it reaches through re-exports,
@@ -593,6 +662,15 @@ impl Implementations {
         self
     }
 
+    /// Adds a type alias and sees through the aliases again.
+    #[cfg(test)]
+    pub(crate) fn with_alias(mut self, canonical: &str, params: Vec<(&str, Option<Type>)>, target: Type) -> Self {
+        let params = params.into_iter().map(|(name, default)| (name.to_owned(), default)).collect();
+        self.aliases.insert(canonical.to_owned(), Alias { params, target });
+        self.finish();
+        self
+    }
+
     /// Adds an enum and names the mirrors again.
     #[cfg(test)]
     pub(crate) fn with_enum(mut self, canonical: &str, def: EnumDef) -> Self {
@@ -666,9 +744,21 @@ impl<'a> Classifier<'a> {
         if let Some(prefix) = self.exclude_paths.iter().find(|prefix| is_under(&function.path, prefix)) {
             return Verdict { class: Class::Excluded, reasons: vec![Reason::new(Category::ExcludedPath, prefix.clone())] };
         }
-        let reasons = self.blockers(function);
+        let reasons = self.blockers(&self.transparent(function));
         let class = if reasons.is_empty() { Class::Automatic } else { Class::Decision };
         Verdict { class, reasons }
+    }
+
+    /// `function` with its parameter and result types seen through aliases (see
+    /// [`Implementations::resolve`]).
+    #[must_use]
+    pub fn transparent(&self, function: &Function) -> Function {
+        let mut function = function.clone();
+        for (_, ty) in &mut function.params {
+            *ty = self.implementations.resolve(ty, self.renderer);
+        }
+        function.output = function.output.map(|output| self.implementations.resolve(&output, self.renderer));
+        function
     }
 
     /// The mapping of a canonical type path, if any.
@@ -1121,26 +1211,33 @@ fn non_exhaustive(attrs: &[Attribute]) -> bool {
 /// `ty` with every path written canonically under an id no renderer knows.
 fn portable(ty: &Type, renderer: &Renderer) -> Type {
     match ty {
-        Type::ResolvedPath(path) => Type::ResolvedPath(portable_path(path, renderer)),
-        Type::BorrowedRef { lifetime, is_mutable, type_ } => {
-            Type::BorrowedRef { lifetime: lifetime.clone(), is_mutable: *is_mutable, type_: Box::new(portable(type_, renderer)) }
-        }
-        Type::RawPointer { is_mutable, type_ } => Type::RawPointer { is_mutable: *is_mutable, type_: Box::new(portable(type_, renderer)) },
-        Type::Slice(inner) => Type::Slice(Box::new(portable(inner, renderer))),
-        Type::Array { type_, len } => Type::Array { type_: Box::new(portable(type_, renderer)), len: len.clone() },
-        Type::Tuple(types) => Type::Tuple(types.iter().map(|ty| portable(ty, renderer)).collect()),
+        Type::ResolvedPath(path) => Type::ResolvedPath(Path { path: renderer.path(path), id: UNKNOWN_ID, ..map_args(path, &|ty| portable(ty, renderer)) }),
+        other => map_children(other, &|ty| portable(ty, renderer)),
+    }
+}
+
+/// `ty` with `f` applied to the types it holds through a reference, pointer, slice, array or
+/// tuple; other types come back unchanged.
+fn map_children(ty: &Type, f: &dyn Fn(&Type) -> Type) -> Type {
+    match ty {
+        Type::BorrowedRef { lifetime, is_mutable, type_ } => Type::BorrowedRef { lifetime: lifetime.clone(), is_mutable: *is_mutable, type_: Box::new(f(type_)) },
+        Type::RawPointer { is_mutable, type_ } => Type::RawPointer { is_mutable: *is_mutable, type_: Box::new(f(type_)) },
+        Type::Slice(inner) => Type::Slice(Box::new(f(inner))),
+        Type::Array { type_, len } => Type::Array { type_: Box::new(f(type_)), len: len.clone() },
+        Type::Tuple(types) => Type::Tuple(types.iter().map(f).collect()),
         other => other.clone(),
     }
 }
 
-fn portable_path(path: &Path, renderer: &Renderer) -> Path {
+/// `path` with `f` applied to its type arguments.
+fn map_args(path: &Path, f: &dyn Fn(&Type) -> Type) -> Path {
     let args = path.args.as_deref().map(|args| {
         Box::new(match args {
             GenericArgs::AngleBracketed { args, constraints } => GenericArgs::AngleBracketed {
                 args: args
                     .iter()
                     .map(|arg| match arg {
-                        GenericArg::Type(ty) => GenericArg::Type(portable(ty, renderer)),
+                        GenericArg::Type(ty) => GenericArg::Type(f(ty)),
                         other => other.clone(),
                     })
                     .collect(),
@@ -1149,7 +1246,30 @@ fn portable_path(path: &Path, renderer: &Renderer) -> Path {
             other => other.clone(),
         })
     });
-    Path { path: renderer.path(path), id: UNKNOWN_ID, args }
+    Path { path: path.path.clone(), id: path.id, args }
+}
+
+/// `ty` with the type parameters in `bindings` replaced.
+fn substitute(ty: &Type, bindings: &BTreeMap<String, Type>) -> Type {
+    match ty {
+        Type::Generic(name) => bindings.get(name).cloned().unwrap_or_else(|| ty.clone()),
+        Type::ResolvedPath(path) => Type::ResolvedPath(map_args(path, &|arg| substitute(arg, bindings))),
+        other => map_children(other, &|ty| substitute(ty, bindings)),
+    }
+}
+
+/// std's `io::Result<T>`, an alias of `Result<T, io::Error>`; std has no rustdoc JSON to read it
+/// from.
+fn io_result(canonical: &str) -> Option<Alias> {
+    IO_RESULT.contains(&canonical).then(|| {
+        let written = |path: &str, args: Vec<GenericArg>| {
+            let args = (!args.is_empty()).then(|| Box::new(GenericArgs::AngleBracketed { args, constraints: Vec::new() }));
+            Type::ResolvedPath(Path { path: path.to_owned(), id: UNKNOWN_ID, args })
+        };
+        let ok = GenericArg::Type(Type::Generic("T".to_owned()));
+        let error = GenericArg::Type(written("core::io::error::Error", Vec::new()));
+        Alias { params: vec![("T".to_owned(), None)], target: written("core::result::Result", vec![ok, error]) }
+    })
 }
 
 /// The mirror name of a public path through the root crate: `gix::remote::Direction` becomes
@@ -1246,6 +1366,10 @@ mod tests {
             (20, "demo::Label"),
             (21, "demo::Holder"),
             (22, "demo::Open"),
+            (23, "demo::Count"),
+            (24, "demo::Res"),
+            (25, "core::io::error::Result"),
+            (26, "demo::Counted"),
         ])
     }
 
@@ -1376,6 +1500,33 @@ mod tests {
         let holder = result(21);
         assert_eq!((holder[0].category, holder[0].detail.as_str()), (Category::Unmapped, "demo::Holder: field `repo` holds the runtime handle"));
         assert_eq!(implementations.mirror("demo::Stats"), Some("Stats"));
+    }
+
+    #[test]
+    fn aliases_are_transparent() {
+        let renderer = renderer();
+        let written = |path: &str| Type::ResolvedPath(Path { path: path.to_owned(), id: UNKNOWN_ID, args: None });
+        let counted = StructDef {
+            public: "demo::Counted".to_owned(),
+            fields: vec![("count".to_owned(), written("demo::Count"))],
+            borrows: false,
+            constructible: true,
+            generic: false,
+        };
+        let result = resolved(5, vec![GenericArg::Type(Type::Generic("T".to_owned())), GenericArg::Type(Type::Generic("E".to_owned()))]);
+        let implementations = records()
+            .with_alias("demo::Count", Vec::new(), Type::Primitive("u32".to_owned()))
+            .with_alias("demo::Res", vec![("T", None), ("E", Some(resolved(7, Vec::new())))], result)
+            .with_struct("demo::Counted", counted);
+        let overrides = BTreeMap::from([("demo::Repo".to_owned(), Mapping::Handle)]);
+        let classifier = Classifier::new(&renderer, &overrides, &[], &implementations);
+        let reasons = |output: Type| classifier.classify(&method(Receiver::Shared, Vec::new(), Some(output))).reasons;
+        let count = || resolved(23, Vec::new());
+        assert!(reasons(count()).is_empty(), "an alias of a primitive");
+        assert!(reasons(resolved(26, Vec::new())).is_empty(), "a record with an aliased field");
+        assert!(reasons(resolved(24, vec![GenericArg::Type(count())])).is_empty(), "a generic alias with a default argument");
+        assert!(reasons(resolved(25, vec![GenericArg::Type(count())])).is_empty(), "std's io::Result");
+        assert_eq!(implementations.struct_def("demo::Counted").map(|def| def.fields[0].1.clone()), Some(Type::Primitive("u32".to_owned())));
     }
 
     fn as_ref(target: Type) -> Type {

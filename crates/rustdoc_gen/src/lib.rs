@@ -645,7 +645,7 @@ mod inner {
             let _ = name;
         }
 
-        pub fn reopen(&self) -> Result<Repo, std::io::Error> {
+        pub fn reopen(&self) -> std::io::Result<Repo> {
             Ok(Repo)
         }
 
@@ -673,8 +673,10 @@ pub enum Event {
 }
 
 pub mod stats {
+    pub type Count = u32;
+
     pub struct Stats {
-        pub count: u32,
+        pub count: Count,
         pub name: String,
         pub mode: crate::mode::Mode,
         pub note: Option<String>,

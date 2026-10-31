@@ -297,6 +297,7 @@ impl Emitter<'_> {
     }
 
     fn member(&self, function: &Function) -> Result<Planned, String> {
+        let function = &self.context.classifier.transparent(function);
         self.used.borrow_mut().clear();
         let owner = self.handle_owner(function);
         // Associated functions of a keyed type have no key to rebuild from; they are free functions.

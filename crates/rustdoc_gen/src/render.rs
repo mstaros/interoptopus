@@ -7,7 +7,9 @@ use rustdoc_types::{
     AssocItemConstraintKind, Crate, GenericArg, GenericArgs, GenericBound, Id, Path, Term, TraitBoundModifier, Type,
 };
 
-/// Renders rustdoc types using canonical item paths.
+/// Renders rustdoc types using canonical item paths. The default renderer knows no ids, so every
+/// path renders as written.
+#[derive(Default)]
 pub struct Renderer {
     paths: HashMap<Id, String>,
 }
