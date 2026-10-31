@@ -56,16 +56,16 @@ pub struct Custom {
     pub into_ffi: String,
 }
 
-/// A type that crosses as its key: every call rebuilds it from the handle `repo` names and the
+/// A type that crosses as its key: every call rebuilds it from the handle `handle` names and the
 /// key (see the design doc's Handles section).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Keyed {
-    /// The handle type `{repo}` refers to; it must be mapped as `handle`.
-    pub repo: String,
+    /// The handle type `{handle}` refers to; it must be mapped as `handle`.
+    pub handle: String,
     /// The key's type: a primitive, or a type with a mapping that is neither a handle nor keyed.
     pub key: String,
-    /// Rust expression rebuilding the value from `{repo}`, a reference to the handle, and `{key}`.
+    /// Rust expression rebuilding the value from `{handle}`, a reference to the handle, and `{key}`.
     pub rebuild: String,
     /// Whether `rebuild` returns a `Result`.
     #[serde(default)]
@@ -78,10 +78,10 @@ pub struct Keyed {
 }
 
 /// The placeholders of a keyed payload: the handle reference, the key and the value.
-pub const REPO_PLACEHOLDER: &str = "{repo}";
-/// See [`REPO_PLACEHOLDER`].
+pub const HANDLE_PLACEHOLDER: &str = "{handle}";
+/// See [`HANDLE_PLACEHOLDER`].
 pub const KEY_PLACEHOLDER: &str = "{key}";
-/// See [`REPO_PLACEHOLDER`].
+/// See [`HANDLE_PLACEHOLDER`].
 pub const VALUE_PLACEHOLDER: &str = "{value}";
 
 /// The FFI form of a custom mapping.
@@ -257,7 +257,7 @@ enum Position {
 /// A public enum that can cross as an `#[ffi]` mirror (the enum kind in `facade.rs`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EnumDef {
-    /// Its public path in its own crate, such as `gix_object::Kind`.
+    /// Its public path in its own crate, such as `demo_object::Kind`.
     pub public: String,
     /// Its variants, in declaration order.
     pub variants: Vec<VariantDef>,
@@ -322,7 +322,7 @@ impl VariantFields {
 /// record kind in `facade.rs`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StructDef {
-    /// Its public path in its own crate, such as `gix::create::Options`.
+    /// Its public path in its own crate, such as `demo::create::Options`.
     pub public: String,
     /// Its fields in declaration order, typed like `VariantDef::fields`.
     pub fields: Vec<(String, Type)>,
@@ -372,7 +372,7 @@ pub struct Implementations {
     /// The root crate's name.
     root: Option<String>,
     /// For each crate, the crates it re-exports as modules, with the shortest path in the
-    /// re-exporting crate: `pub use gix_hash as hash`, or a glob such as `pub use gix_diff::*`.
+    /// re-exporting crate: `pub use demo_hash as hash`, or a glob such as `pub use demo_diff::*`.
     reexports: BTreeMap<String, BTreeMap<String, String>>,
     /// The public path through the root crate of each crate it reaches through re-exports.
     crate_paths: BTreeMap<String, String>,
@@ -572,9 +572,9 @@ impl Implementations {
     }
 
     /// The public path through the root crate of every crate it reaches through re-exports,
-    /// shortest first: directly (`gix_hash` at `gix::hash`), through a glob (`gix::diff`
-    /// glob-imports `gix_diff`) or through another crate (`gix_diff::blob` glob-imports
-    /// `gix_imara_diff`, so `gix` reaches it at `gix::diff::blob`).
+    /// shortest first: directly (`demo_hash` at `demo::hash`), through a glob (`demo::diff`
+    /// glob-imports `demo_diff`) or through another crate (`demo_diff::blob` glob-imports
+    /// `demo_text_diff`, so `demo` reaches it at `demo::diff::blob`).
     fn crate_prefixes(&self) -> BTreeMap<String, String> {
         let Some(root) = &self.root else { return BTreeMap::new() };
         let mut prefixes = BTreeMap::from([(root.clone(), root.clone())]);
@@ -767,7 +767,7 @@ impl<'a> Classifier<'a> {
         self.types.get(canonical).cloned()
     }
 
-    /// Checks the type map's keyed mappings: their placeholders, a handle behind `repo`, and a
+    /// Checks the type map's keyed mappings: their placeholders, a handle behind `handle`, and a
     /// primitive key or one with a mapping that is neither a handle nor keyed (E4).
     ///
     /// # Errors
@@ -776,12 +776,12 @@ impl<'a> Classifier<'a> {
     pub fn validate(&self) -> Result<(), String> {
         for (path, mapping) in &self.types {
             let Mapping::Keyed(keyed) = mapping else { continue };
-            let problem = if !keyed.rebuild.contains(REPO_PLACEHOLDER) || !keyed.rebuild.contains(KEY_PLACEHOLDER) {
-                Some("`rebuild` needs `{repo}` and `{key}`".to_owned())
+            let problem = if !keyed.rebuild.contains(HANDLE_PLACEHOLDER) || !keyed.rebuild.contains(KEY_PLACEHOLDER) {
+                Some("`rebuild` needs `{handle}` and `{key}`".to_owned())
             } else if !keyed.key_of.contains(VALUE_PLACEHOLDER) {
                 Some("`key_of` needs `{value}`".to_owned())
-            } else if self.types.get(&keyed.repo) != Some(&Mapping::Handle) {
-                Some(format!("`repo` names `{}`, which is not mapped as `handle`", keyed.repo))
+            } else if self.types.get(&keyed.handle) != Some(&Mapping::Handle) {
+                Some(format!("`handle` names `{}`, which is not mapped as `handle`", keyed.handle))
             } else if !PRIMITIVES.contains(&keyed.key.as_str()) && !self.types.get(&keyed.key).is_some_and(Mapping::is_data) {
                 Some(format!("`key` names `{}`, which needs a primitive type or a mapping that is neither a handle nor keyed", keyed.key))
             } else {
@@ -1272,7 +1272,7 @@ fn io_result(canonical: &str) -> Option<Alias> {
     })
 }
 
-/// The mirror name of a public path through the root crate: `gix::remote::Direction` becomes
+/// The mirror name of a public path through the root crate: `demo::remote::Direction` becomes
 /// `RemoteDirection`.
 fn mirror_name(path: &str) -> Option<String> {
     let mut segments = path.split("::");
@@ -1445,8 +1445,8 @@ mod tests {
 
     #[test]
     fn mirror_names_follow_the_public_path_and_drop_clashes() {
-        assert_eq!(mirror_name("gix::remote::Direction").as_deref(), Some("RemoteDirection"));
-        assert_eq!(mirror_name("gix::tree_diff::r#Change").as_deref(), Some("TreeDiffChange"));
+        assert_eq!(mirror_name("demo::remote::Direction").as_deref(), Some("RemoteDirection"));
+        assert_eq!(mirror_name("demo::tree_diff::r#Change").as_deref(), Some("TreeDiffChange"));
         let clash = Implementations::default()
             .with_root("demo")
             .with_enum("demo::a::B", enum_def("demo::a::B", vec![unit("X")]))
@@ -1457,15 +1457,15 @@ mod tests {
     #[test]
     fn mirror_names_follow_reexports_through_globs_and_other_crates() {
         let implementations = Implementations::default()
-            .with_root("gix")
-            .with_reexport("gix", "gix_diff", "gix::diff")
-            .with_reexport("gix_diff", "gix_imara_diff", "gix_diff::blob")
-            .with_reexport("gix", "gix_hash", "gix::hash")
-            .with_enum("gix_imara_diff::Algorithm", enum_def("gix_imara_diff::Algorithm", vec![unit("Myers")]))
-            .with_enum("gix_hash::Kind", enum_def("gix_hash::Kind", vec![unit("Sha1")]));
-        assert_eq!(implementations.nameable("gix_imara_diff::Algorithm").as_deref(), Some("gix::diff::blob::Algorithm"));
-        assert_eq!(implementations.mirror("gix_imara_diff::Algorithm"), Some("DiffBlobAlgorithm"));
-        assert_eq!(implementations.mirror("gix_hash::Kind"), Some("HashKind"));
+            .with_root("demo")
+            .with_reexport("demo", "demo_diff", "demo::diff")
+            .with_reexport("demo_diff", "demo_text_diff", "demo_diff::blob")
+            .with_reexport("demo", "demo_hash", "demo::hash")
+            .with_enum("demo_text_diff::Algorithm", enum_def("demo_text_diff::Algorithm", vec![unit("Myers")]))
+            .with_enum("demo_hash::Kind", enum_def("demo_hash::Kind", vec![unit("Sha1")]));
+        assert_eq!(implementations.nameable("demo_text_diff::Algorithm").as_deref(), Some("demo::diff::blob::Algorithm"));
+        assert_eq!(implementations.mirror("demo_text_diff::Algorithm"), Some("DiffBlobAlgorithm"));
+        assert_eq!(implementations.mirror("demo_hash::Kind"), Some("HashKind"));
     }
 
     /// A record, a borrowed view, a struct holding the runtime handle and a `#[non_exhaustive]` one.
@@ -1579,7 +1579,7 @@ mod tests {
 
     fn keyed_classifier<'a>(renderer: &'a Renderer, implementations: &'a Implementations, rebuild: &str) -> Classifier<'a> {
         let keyed = Keyed {
-            repo: "demo::Repo".to_owned(),
+            handle: "demo::Repo".to_owned(),
             key: "u64".to_owned(),
             rebuild: rebuild.to_owned(),
             fallible: true,
@@ -1594,7 +1594,7 @@ mod tests {
     fn keyed_types_take_self_by_reference_or_value_but_not_mut() {
         let renderer = renderer();
         let implementations = implementations();
-        let classifier = keyed_classifier(&renderer, &implementations, "{repo}.find({key})");
+        let classifier = keyed_classifier(&renderer, &implementations, "{handle}.find({key})");
         let on_commit = |receiver: Receiver, output: Option<Type>| {
             let mut function = method(receiver, Vec::new(), output);
             function.owner = Some("demo::Commit".to_owned());
@@ -1619,10 +1619,10 @@ mod tests {
     fn keyed_payloads_are_checked() {
         let renderer = renderer();
         let implementations = implementations();
-        assert_eq!(keyed_classifier(&renderer, &implementations, "{repo}.find({key})").validate(), Ok(()));
-        let missing = keyed_classifier(&renderer, &implementations, "{repo}.find(7)").validate();
+        assert_eq!(keyed_classifier(&renderer, &implementations, "{handle}.find({key})").validate(), Ok(()));
+        let missing = keyed_classifier(&renderer, &implementations, "{handle}.find(7)").validate();
         assert!(missing.is_err_and(|why| why.contains("`rebuild` needs")));
-        let mut overrides = BTreeMap::from([("demo::Commit".to_owned(), keyed_classifier(&renderer, &implementations, "{repo}.find({key})").mapping("demo::Commit").expect("keyed"))]);
+        let mut overrides = BTreeMap::from([("demo::Commit".to_owned(), keyed_classifier(&renderer, &implementations, "{handle}.find({key})").mapping("demo::Commit").expect("keyed"))]);
         overrides.insert("demo::Repo".to_owned(), Mapping::Bytes);
         let wrong_repo = Classifier::new(&renderer, &overrides, &[], &implementations).validate();
         assert!(wrong_repo.is_err_and(|why| why.contains("not mapped as `handle`")));

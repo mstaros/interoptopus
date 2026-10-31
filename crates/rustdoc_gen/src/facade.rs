@@ -14,7 +14,7 @@
 //! rebuild from.
 //!
 //! A public enum crosses as an `#[ffi]` mirror named after its public path through the root
-//! crate (`RemoteDirection` for `gix::remote::Direction`), with explicit discriminants copied
+//! crate (`RemoteDirection` for `demo::remote::Direction`), with explicit discriminants copied
 //! and empty tuple or struct variants as unit variants. `to_<mirror>` copies a result into the
 //! mirror, converting payloads from references (primitives, text, bytes, paths, custom mappings,
 //! keys, options and nested mirrors); an open enum's unknown variant becomes
@@ -40,8 +40,8 @@
 //!
 //! - `Error`, an FFI type, and `error(e) -> Error` for every error a wrapped call returns;
 //! - the handle holder, named like the service, with `From` for each type mapped to `handle`
-//!   and one accessor per such type, named after it in snake case (for gix `repository()` and
-//!   `thread_safe_repository()`), whose result dereferences to that type;
+//!   and one accessor per such type, named after it in snake case (a type `Store` gives
+//!   `store()`), whose result dereferences to that type;
 //! - `path(&ffi::Slice<u8>) -> Result<PathBuf, Error>` and `path_out(&Path) -> ffi::Vec<u8>`;
 //! - for each custom mapping, its `into_rust(&ffi value) -> Result<T, Error>` and
 //!   `into_ffi(&T) -> ffi value` functions.
@@ -53,8 +53,8 @@ use std::fmt::Write as _;
 use rustdoc_types::{GenericBound, Path, Type};
 
 use crate::classify::{
-    AS_REF_BYTES, Carrier, Class, Classifier, Conversion, DISPLAY, EnumDef, FROM_BYTE_VEC, FROM_BYTES, FROM_STR, KEY_PLACEHOLDER, Keyed, Mapping,
-    REPO_PLACEHOLDER, Reason, StructDef, TRY_FROM_STR, VALUE_PLACEHOLDER, VariantFields, Verdict,
+    AS_REF_BYTES, Carrier, Class, Classifier, Conversion, DISPLAY, EnumDef, FROM_BYTE_VEC, FROM_BYTES, FROM_STR, HANDLE_PLACEHOLDER, KEY_PLACEHOLDER,
+    Keyed, Mapping, Reason, StructDef, TRY_FROM_STR, VALUE_PLACEHOLDER, VariantFields, Verdict,
 };
 use crate::forbidden::escaped;
 use crate::render::{Renderer, last_segment, type_args};
@@ -246,13 +246,13 @@ pub fn verdict(function: &Function, context: &Context<'_>) -> Verdict {
     }
 }
 
-/// The service is named after the shortest type mapped to the repository handle.
+/// The service is named after the shortest type mapped to the runtime handle.
 fn service_name(classifier: &Classifier<'_>) -> String {
     classifier
         .handles()
         .map(last_segment)
         .min_by(|a, b| a.len().cmp(&b.len()).then_with(|| a.cmp(b)))
-        .unwrap_or("Repository")
+        .unwrap_or("Handle")
         .to_owned()
 }
 
@@ -340,7 +340,7 @@ impl Emitter<'_> {
             let parameter = format!("{}_key", snake(last_segment(path)));
             let key = self.key_input(keyed).map_err(|why| format!("receiver: {why}"))?;
             declarations.insert(0, format!("{parameter}: {}", key.ffi));
-            let conv = Conv::Keyed { keyed: Box::new(keyed.clone()), key: Box::new(key.conv), accessor: snake(last_segment(&keyed.repo)), borrowed: false };
+            let conv = Conv::Keyed { keyed: Box::new(keyed.clone()), key: Box::new(key.conv), accessor: snake(last_segment(&keyed.handle)), borrowed: false };
             let receiver = argument(&parameter, &conv, &mut setup);
             format!("{receiver}.{}({})", function.name, arguments.join(", "))
         } else {
@@ -954,7 +954,7 @@ impl Emitter<'_> {
     /// A keyed handle parameter: its key's FFI form, rebuilt in the body.
     fn keyed_input(&self, keyed: &Keyed, borrowed: bool) -> Result<Input, String> {
         let key = self.key_input(keyed)?;
-        let accessor = snake(last_segment(&keyed.repo));
+        let accessor = snake(last_segment(&keyed.handle));
         Ok(Input { ffi: key.ffi, conv: Conv::Keyed { keyed: Box::new(keyed.clone()), key: Box::new(key.conv), accessor, borrowed } })
     }
 
@@ -1027,7 +1027,7 @@ impl Emitter<'_> {
         out.push_str(&self.mirror_items(members)?);
         if !service.is_empty() {
             let _ = writeln!(out);
-            let _ = writeln!(out, "/// The repository handle.");
+            let _ = writeln!(out, "/// The runtime handle.");
             let _ = writeln!(out, "#[ffi(service)]");
             let _ = writeln!(out, "pub struct {} {{", self.service);
             let _ = writeln!(out, "    inner: runtime::{},", self.service);
@@ -1093,8 +1093,8 @@ fn option_map(binding: &str, body: &str) -> String {
     }
 }
 
-/// A path usable in Rust code: segments that are keywords, such as gix's
-/// `worktree_admin::move` module, become raw identifiers.
+/// A path usable in Rust code: segments that are keywords, such as a module named `move`,
+/// become raw identifiers.
 fn rust_path(path: &str) -> String {
     path.split("::").map(raw).collect::<Vec<_>>().join("::")
 }
@@ -1151,12 +1151,12 @@ fn argument(name: &str, conv: &Conv, setup: &mut Vec<String>) -> String {
         Conv::Custom { function, borrowed } => format!("{}runtime::{function}(&{name})?", if *borrowed { "&" } else { "" }),
         Conv::Keyed { keyed, key, accessor, borrowed } => {
             let key = argument(name, key, setup);
-            // A reference to the holder's temporary, kept alive for the body; `{repo}` names it.
+            // A reference to the holder's temporary, kept alive for the body; `{handle}` names it.
             let holder = format!("let {accessor} = &self.inner.{accessor}();");
             if !setup.contains(&holder) {
                 setup.push(holder);
             }
-            let rebuilt = keyed.rebuild.replace(REPO_PLACEHOLDER, accessor).replace(KEY_PLACEHOLDER, &key);
+            let rebuilt = keyed.rebuild.replace(HANDLE_PLACEHOLDER, accessor).replace(KEY_PLACEHOLDER, &key);
             let fallible = if keyed.fallible { ".map_err(runtime::error)?" } else { "" };
             setup.push(format!("let {name} = {rebuilt}{fallible};"));
             if *borrowed { format!("&{name}") } else { name.to_owned() }
@@ -1254,7 +1254,7 @@ fn item_path(path: &str) -> &str {
     path.split('#').next().unwrap_or(path)
 }
 
-/// The free-function name for a surface path, such as `gix_env_agent` for `gix::env::agent`.
+/// The free-function name for a surface path, such as `demo_env_agent` for `demo::env::agent`.
 fn free_name(path: &str) -> String {
     let base = item_path(path).replace("::", "_");
     path.split_once('#').map_or_else(|| base.clone(), |(_, suffix)| format!("{base}_{suffix}"))
@@ -1266,7 +1266,7 @@ fn parameter_name(name: &str, index: usize) -> String {
     if valid { escaped(name) } else { format!("arg{index}") }
 }
 
-/// `ThreadSafeRepository` becomes `thread_safe_repository`.
+/// `ThreadSafeStore` becomes `thread_safe_store`.
 fn snake(name: &str) -> String {
     let mut out = String::new();
     for (index, c) in name.chars().enumerate() {
@@ -1348,9 +1348,9 @@ mod tests {
     fn types() -> BTreeMap<String, Mapping> {
         let oid = Mapping::Custom(Custom { ffi: Carrier::String, into_rust: "oid".to_owned(), into_ffi: "oid_out".to_owned() });
         let commit = Mapping::Keyed(Keyed {
-            repo: "demo::Repo".to_owned(),
+            handle: "demo::Repo".to_owned(),
             key: "demo::Oid".to_owned(),
-            rebuild: "{repo}.find_commit({key})".to_owned(),
+            rebuild: "{handle}.find_commit({key})".to_owned(),
             fallible: true,
             key_of: "{value}.id".to_owned(),
             name: "demo::Commit".to_owned(),
@@ -1542,7 +1542,7 @@ mod tests {
         assert!(source.contains("    pub fn commit_tree(&self, commit_key: ffi::String) -> ffi::Result<ffi::String, runtime::Error> {\n        finish(|| {\n            let repo = &self.inner.repo();\n            let commit_key = repo.find_commit(runtime::oid(&commit_key)?).map_err(runtime::error)?;\n            Ok(runtime::oid_out(&(commit_key.tree().map_err(runtime::error)?).id))\n"), "{source}");
         assert!(source.contains("Ok(runtime::oid_out(&commit_key.detach()))"), "by-value methods consume the rebuilt value: {source}");
         assert!(source.contains("Ok(ffi::Option::from(self.inner.repo().head_commit().map(|value| runtime::oid_out(&(value).id))))"), "{source}");
-        assert!(source.contains("            let commit = repo.find_commit(runtime::oid(&commit)?).map_err(runtime::error)?;\n            Ok(ffi::String::from_string(repo.describe(&commit).to_string()))\n"), "keyed parameters reuse the repository they were rebuilt from: {source}");
+        assert!(source.contains("            let commit = repo.find_commit(runtime::oid(&commit)?).map_err(runtime::error)?;\n            Ok(ffi::String::from_string(repo.describe(&commit).to_string()))\n"), "keyed parameters reuse the handle they were rebuilt from: {source}");
         assert!(facade.dropped.iter().any(|(path, why)| path == "demo::describe" && why.starts_with("takes a keyed handle")), "{:?}", facade.dropped);
     }
 
@@ -1694,10 +1694,10 @@ mod tests {
 
     #[test]
     fn names_follow_rust_paths() {
-        assert_eq!(free_name("gix::env::agent"), "gix_env_agent");
-        assert_eq!(free_name("gix::open#2"), "gix_open_2");
-        assert_eq!(rust_path("gix::worktree_admin::move::Options"), "gix::worktree_admin::r#move::Options");
-        assert_eq!(snake("ThreadSafeRepository"), "thread_safe_repository");
+        assert_eq!(free_name("demo::env::agent"), "demo_env_agent");
+        assert_eq!(free_name("demo::open#2"), "demo_open_2");
+        assert_eq!(rust_path("demo::admin::move::Options"), "demo::admin::r#move::Options");
+        assert_eq!(snake("ThreadSafeStore"), "thread_safe_store");
         assert_eq!(parameter_name("_", 3), "arg3");
     }
 }

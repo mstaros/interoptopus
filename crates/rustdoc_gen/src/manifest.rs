@@ -98,7 +98,7 @@ pub struct Configuration {
     /// Type-map entries by canonical or public type path, extending and overriding the defaults.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub type_map: BTreeMap<String, Mapping>,
-    /// Item path prefixes excluded by rule, such as `gix::config::tree`.
+    /// Item path prefixes excluded by rule, such as `demo::internal`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub exclude_paths: Vec<String>,
 }

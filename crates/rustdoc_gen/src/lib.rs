@@ -402,7 +402,7 @@ fn type_map(krate: &Crate, configuration: &Configuration) -> BTreeMap<String, Ma
         .map(|(path, mapping)| {
             let mapping = match mapping {
                 Mapping::Keyed(keyed) => Mapping::Keyed(classify::Keyed {
-                    repo: canonical(&keyed.repo),
+                    handle: canonical(&keyed.handle),
                     key: canonical(&keyed.key),
                     name: path.clone(),
                     ..keyed.clone()

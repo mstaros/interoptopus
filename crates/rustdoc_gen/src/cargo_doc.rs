@@ -25,7 +25,7 @@ const MANIFEST: &str = "extract.json";
 pub struct ExtractRequest {
     /// The workspace `Cargo.toml` that contains the root crate.
     pub workspace_manifest: PathBuf,
-    /// The crate whose public API is documented, for example `gix`.
+    /// The crate whose public API is documented, for example `demo`.
     pub root_crate: String,
     /// Dependencies are documented only when their package name starts with this prefix.
     pub crate_prefix: String,
@@ -54,7 +54,7 @@ pub struct ExtractResult {
 /// One documented crate.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CrateJson {
-    /// Package name, for example `gix-hash`.
+    /// Package name, for example `demo-hash`.
     pub name: String,
     /// The crate's rustdoc JSON file inside the cache entry.
     pub json: PathBuf,
@@ -356,10 +356,10 @@ mod tests {
 
     const METADATA: &str = r#"{
         "packages": [
-            {"id": "root", "name": "gix", "version": "1.0.0", "manifest_path": "/w/gix/Cargo.toml", "targets": [{"name": "gix", "kind": ["lib"]}]},
-            {"id": "hash", "name": "gix-hash", "version": "1.0.0", "manifest_path": "/w/gix-hash/Cargo.toml", "targets": [{"name": "gix_hash", "kind": ["lib"]}]},
-            {"id": "feat", "name": "gix-features", "version": "1.0.0", "manifest_path": "/w/gix-features/Cargo.toml", "targets": [{"name": "gix_features", "kind": ["lib"]}]},
-            {"id": "tools", "name": "gix-testtools", "version": "1.0.0", "manifest_path": "/w/tests/tools/Cargo.toml", "targets": [{"name": "gix_testtools", "kind": ["lib"]}]},
+            {"id": "root", "name": "demo", "version": "1.0.0", "manifest_path": "/w/demo/Cargo.toml", "targets": [{"name": "demo", "kind": ["lib"]}]},
+            {"id": "hash", "name": "demo-hash", "version": "1.0.0", "manifest_path": "/w/demo-hash/Cargo.toml", "targets": [{"name": "demo_hash", "kind": ["lib"]}]},
+            {"id": "feat", "name": "demo-features", "version": "1.0.0", "manifest_path": "/w/demo-features/Cargo.toml", "targets": [{"name": "demo_features", "kind": ["lib"]}]},
+            {"id": "tools", "name": "demo-testtools", "version": "1.0.0", "manifest_path": "/w/tests/tools/Cargo.toml", "targets": [{"name": "demo_testtools", "kind": ["lib"]}]},
             {"id": "bstr", "name": "bstr", "version": "1.0.0", "manifest_path": "/r/bstr/Cargo.toml", "targets": [{"name": "bstr", "kind": ["lib"]}]}
         ],
         "workspace_members": ["root", "hash", "feat", "tools"],
@@ -393,16 +393,16 @@ mod tests {
 
     #[test]
     fn selects_the_root_and_prefixed_normal_dependencies() {
-        let crates = select_crates(&metadata(), "gix", "gix").unwrap();
+        let crates = select_crates(&metadata(), "demo", "demo").unwrap();
         let names: Vec<&str> = crates.iter().map(|krate| krate.name.as_str()).collect();
-        assert_eq!(names, ["gix", "gix-features", "gix-hash"], "dev and unprefixed dependencies are left out");
-        assert_eq!(crates[1].lib_name, "gix_features");
-        assert_eq!(crates[2].dir, PathBuf::from("/w/gix-hash"));
+        assert_eq!(names, ["demo", "demo-features", "demo-hash"], "dev and unprefixed dependencies are left out");
+        assert_eq!(crates[1].lib_name, "demo_features");
+        assert_eq!(crates[2].dir, PathBuf::from("/w/demo-hash"));
     }
 
     #[test]
     fn rejects_a_root_outside_the_workspace() {
-        let error = select_crates(&metadata(), "bstr", "gix").unwrap_err();
+        let error = select_crates(&metadata(), "bstr", "demo").unwrap_err();
         assert_eq!(error.code, ErrorCode::InvalidRequest);
     }
 

@@ -13,8 +13,8 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use rustdoc_types::Type;
 
 use crate::classify::{
-    AS_REF_BYTES, Category, Classifier, DISPLAY, FROM_BYTE_VEC, FROM_BYTES, FROM_STR, Implementations, KEY_PLACEHOLDER, Keyed, Mapping,
-    REPO_PLACEHOLDER, Reason, TRY_FROM_STR, VALUE_PLACEHOLDER,
+    AS_REF_BYTES, Category, Classifier, DISPLAY, FROM_BYTE_VEC, FROM_BYTES, FROM_STR, HANDLE_PLACEHOLDER, Implementations, KEY_PLACEHOLDER, Keyed,
+    Mapping, Reason, TRY_FROM_STR, VALUE_PLACEHOLDER,
 };
 use crate::facade;
 use crate::manifest::Proposal;
@@ -134,9 +134,9 @@ fn lowering<'a>(classifier: &'a Classifier<'a>, context: &'a Context<'a>) -> fac
 /// candidate, whose real rebuild and key a person supplies on acceptance.
 fn keyed_probe(ty: &str, context: &Context<'_>) -> Mapping {
     Mapping::Keyed(Keyed {
-        repo: context.classifier.handles().next().unwrap_or_default().to_owned(),
+        handle: context.classifier.handles().next().unwrap_or_default().to_owned(),
         key: "u64".to_owned(),
-        rebuild: [REPO_PLACEHOLDER, KEY_PLACEHOLDER].concat(),
+        rebuild: [HANDLE_PLACEHOLDER, KEY_PLACEHOLDER].concat(),
         fallible: false,
         key_of: VALUE_PLACEHOLDER.to_owned(),
         name: ty.to_owned(),

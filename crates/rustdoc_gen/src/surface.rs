@@ -28,7 +28,7 @@ pub enum Receiver {
 /// One function of the public surface.
 #[derive(Clone, Debug)]
 pub struct Function {
-    /// Public path, such as `gix::Repository::head_id`; duplicates carry a `#2`, `#3` suffix.
+    /// Public path, such as `demo::Repo::head_id`; duplicates carry a `#2`, `#3` suffix.
     pub path: String,
     /// The function name.
     pub name: String,
