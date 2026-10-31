@@ -403,7 +403,7 @@ fn type_map(krate: &Crate, configuration: &Configuration) -> BTreeMap<String, Ma
             let mapping = match mapping {
                 Mapping::Keyed(keyed) => Mapping::Keyed(classify::Keyed {
                     handle: canonical(&keyed.handle),
-                    key: canonical(&keyed.key),
+                    key: keyed.key.as_ref().map(canonical),
                     name: path.clone(),
                     ..keyed.clone()
                 }),
@@ -575,7 +575,7 @@ mod tests {
 
         let first = analyze(&request).expect("the surface is analyzed");
         assert!(first.manifest_updated);
-        assert_eq!((first.public_methods, first.public_free_functions), (14, 1));
+        assert_eq!((first.public_methods, first.public_free_functions), (16, 1));
         let manifest = Manifest::read(&manifest_path).expect("the manifest reads back");
         let state = |path: &str| manifest.items.iter().find(|item| item.path == path).map(|item| (item.class, item.status));
         assert_eq!(state("demo::Repo::name"), Some((Class::Automatic, Status::Ready)));
@@ -649,6 +649,10 @@ mod inner {
             Ok(Repo)
         }
 
+        pub fn config(&self) -> crate::Config<'_> {
+            crate::Config { repo: self }
+        }
+
         #[deprecated]
         pub fn old(&self) {}
     }
@@ -702,6 +706,17 @@ impl std::str::FromStr for Name {
 impl std::fmt::Display for Name {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
+    }
+}
+
+pub struct Config<'a> {
+    repo: &'a Repo,
+}
+
+impl Config<'_> {
+    pub fn depth(&self) -> u32 {
+        let _ = self.repo;
+        1
     }
 }
 
@@ -774,7 +789,7 @@ pub fn open(path: impl AsRef<std::path::Path>) -> Result<Repo, std::io::Error> {
         .expect("the workspace is documented");
         let manifest_path = root.join("manifest.json");
         let configuration =
-            r#"{"configuration": {"type_map": {"demo::Repo": "handle", "demo::Name": "string"}, "exclude_paths": ["demo::schema"], "rust_output": "facade/src/generated"}}"#;
+            r#"{"configuration": {"type_map": {"demo::Repo": "handle", "demo::Name": "string", "demo::Config": {"keyed": {"handle": "demo::Repo", "rebuild": "{handle}.config()"}}}, "exclude_paths": ["demo::schema"], "rust_output": "facade/src/generated"}}"#;
         fs::write(&manifest_path, configuration).expect("the manifest can be written");
         let rustdoc_json = extracted.crates[0].json.clone();
         let analysis = AnalyzeRequest { rustdoc_json: rustdoc_json.clone(), manifest: Some(manifest_path.clone()), dependency_json: Vec::new() };
@@ -787,17 +802,18 @@ pub fn open(path: impl AsRef<std::path::Path>) -> Result<Repo, std::io::Error> {
             dependency_json: Vec::new(),
         };
         let complete = GenerateRequest { partial: false, ..request.clone() };
-        assert_eq!(generate(&complete).unwrap_err().code, ErrorCode::NotReady, "three items await decisions");
+        assert_eq!(generate(&complete).unwrap_err().code, ErrorCode::NotReady, "four items await decisions");
 
         let generated = generate(&request).expect("the facade is generated");
         assert!(generated.written);
-        assert_eq!((generated.emitted, generated.pending), (11, 3), "demo::open and ten Repo methods; three items await decisions");
+        assert_eq!((generated.emitted, generated.pending), (12, 4), "demo::open, ten Repo methods and a keyless Config method; four items await decisions");
         let source = fs::read_to_string(&generated.rust_module).expect("the facade reads back");
         assert!(source.contains("pub enum ModeMode {") && source.contains("pub enum Event {"), "mirrors of a fieldless and a data enum: {source}");
         assert!(source.contains("pub struct StatsStats {") && source.contains("fn from_stats_stats("), "a record both ways: {source}");
         assert!(source.contains("pub struct Label {") && !source.contains("fn from_label("), "a borrowed view as a result only: {source}");
         assert!(source.contains("name.as_str().parse().map_err(runtime::error)?"), "a type mapped to string parses: {source}");
         assert!(source.contains("    pub fn reopen(repo: &Self) -> ffi::Result<Self, runtime::Error> {\n"), "a method returning the handle takes it as `&Self`: {source}");
+        assert!(source.contains("    pub fn config_depth(&self) -> ffi::Result<u32, runtime::Error> {\n        finish(|| {\n            let repo = &self.inner.repo();\n            let config = repo.config();\n            Ok(config.depth())\n"), "a keyless method rebuilds from the handle alone: {source}");
         assert!(!generate(&request).expect("the facade is generated again").written, "regenerating changes nothing");
         assert!(cargo(&["test", "--offline", "-p", "facade"]), "the generated facade builds and registers with an inventory");
         let clippy = std::process::Command::new("cargo")
@@ -824,7 +840,7 @@ pub fn open(path: impl AsRef<std::path::Path>) -> Result<Repo, std::io::Error> {
         manifest.write(&manifest_path).expect("the manifest can be written");
         assert!(analyze(&analysis).expect("the decisions are analyzed again").summary.ready, "exclude and manual need no generated code");
         let decided = generate(&complete).expect("a ready manifest generates without partial");
-        assert_eq!((decided.emitted, decided.pending, decided.written), (11, 0, false), "the decided items stay out of the facade");
+        assert_eq!((decided.emitted, decided.pending, decided.written), (12, 0, false), "the decided items stay out of the facade");
 
         let mut manifest = Manifest::read(&manifest_path).expect("the manifest reads back");
         manifest.items[0].status = Status::Excluded;

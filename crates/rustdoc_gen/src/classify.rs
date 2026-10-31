@@ -57,21 +57,26 @@ pub struct Custom {
 }
 
 /// A type that crosses as its key: every call rebuilds it from the handle `handle` names and the
-/// key (see the design doc's Handles section).
+/// key (see the design doc's Handles section). Without a key the type is keyless: there is one per
+/// handle, rebuilt from the handle alone.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Keyed {
     /// The handle type `{handle}` refers to; it must be mapped as `handle`.
     pub handle: String,
-    /// The key's type: a primitive, or a type with a mapping that is neither a handle nor keyed.
-    pub key: String,
-    /// Rust expression rebuilding the value from `{handle}`, a reference to the handle, and `{key}`.
+    /// The key's type: a primitive, or a type with a mapping that is neither a handle nor keyed;
+    /// absent for a keyless type.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    /// Rust expression rebuilding the value from `{handle}`, a reference to the handle, and `{key}`
+    /// (`{handle}` alone for a keyless type).
     pub rebuild: String,
     /// Whether `rebuild` returns a `Result`.
     #[serde(default)]
     pub fallible: bool,
-    /// Rust expression producing the key from `{value}`.
-    pub key_of: String,
+    /// Rust expression producing the key from `{value}`; absent for a keyless type.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_of: Option<String>,
     /// The type's path as the type map writes it; set when the type map is resolved.
     #[serde(skip)]
     pub name: String,
@@ -768,7 +773,8 @@ impl<'a> Classifier<'a> {
     }
 
     /// Checks the type map's keyed mappings: their placeholders, a handle behind `handle`, and a
-    /// primitive key or one with a mapping that is neither a handle nor keyed (E4).
+    /// primitive key or one with a mapping that is neither a handle nor keyed (E4). A keyless entry
+    /// has neither `key` nor `key_of`, and its `rebuild` has no `{key}`.
     ///
     /// # Errors
     ///
@@ -776,16 +782,23 @@ impl<'a> Classifier<'a> {
     pub fn validate(&self) -> Result<(), String> {
         for (path, mapping) in &self.types {
             let Mapping::Keyed(keyed) = mapping else { continue };
-            let problem = if !keyed.rebuild.contains(HANDLE_PLACEHOLDER) || !keyed.rebuild.contains(KEY_PLACEHOLDER) {
+            let keyless = keyed.key.is_none();
+            let problem = if keyless && (!keyed.rebuild.contains(HANDLE_PLACEHOLDER) || keyed.rebuild.contains(KEY_PLACEHOLDER)) {
+                Some("`rebuild` without `key` needs `{handle}` and no `{key}`".to_owned())
+            } else if !keyless && (!keyed.rebuild.contains(HANDLE_PLACEHOLDER) || !keyed.rebuild.contains(KEY_PLACEHOLDER)) {
                 Some("`rebuild` needs `{handle}` and `{key}`".to_owned())
-            } else if !keyed.key_of.contains(VALUE_PLACEHOLDER) {
+            } else if keyless && keyed.key_of.is_some() {
+                Some("`key_of` needs `key`".to_owned())
+            } else if !keyless && !keyed.key_of.as_deref().is_some_and(|key_of| key_of.contains(VALUE_PLACEHOLDER)) {
                 Some("`key_of` needs `{value}`".to_owned())
             } else if self.types.get(&keyed.handle) != Some(&Mapping::Handle) {
                 Some(format!("`handle` names `{}`, which is not mapped as `handle`", keyed.handle))
-            } else if !PRIMITIVES.contains(&keyed.key.as_str()) && !self.types.get(&keyed.key).is_some_and(Mapping::is_data) {
-                Some(format!("`key` names `{}`, which needs a primitive type or a mapping that is neither a handle nor keyed", keyed.key))
             } else {
-                None
+                keyed
+                    .key
+                    .as_deref()
+                    .filter(|key| !PRIMITIVES.contains(key) && !self.types.get(*key).is_some_and(Mapping::is_data))
+                    .map(|key| format!("`key` names `{key}`, which needs a primitive type or a mapping that is neither a handle nor keyed"))
             };
             if let Some(problem) = problem {
                 return Err(format!("type map entry `{path}`: {problem}"));
@@ -1580,10 +1593,10 @@ mod tests {
     fn keyed_classifier<'a>(renderer: &'a Renderer, implementations: &'a Implementations, rebuild: &str) -> Classifier<'a> {
         let keyed = Keyed {
             handle: "demo::Repo".to_owned(),
-            key: "u64".to_owned(),
+            key: Some("u64".to_owned()),
             rebuild: rebuild.to_owned(),
             fallible: true,
-            key_of: "{value}.id".to_owned(),
+            key_of: Some("{value}.id".to_owned()),
             name: "demo::Commit".to_owned(),
         };
         let overrides = BTreeMap::from([("demo::Repo".to_owned(), Mapping::Handle), ("demo::Commit".to_owned(), Mapping::Keyed(keyed))]);
@@ -1626,6 +1639,27 @@ mod tests {
         overrides.insert("demo::Repo".to_owned(), Mapping::Bytes);
         let wrong_repo = Classifier::new(&renderer, &overrides, &[], &implementations).validate();
         assert!(wrong_repo.is_err_and(|why| why.contains("not mapped as `handle`")));
+    }
+
+    #[test]
+    fn keyless_payloads_are_checked() {
+        let renderer = renderer();
+        let implementations = implementations();
+        let validate = |rebuild: &str, key_of: Option<&str>| {
+            let keyed = Keyed {
+                handle: "demo::Repo".to_owned(),
+                key: None,
+                rebuild: rebuild.to_owned(),
+                fallible: false,
+                key_of: key_of.map(str::to_owned),
+                name: "demo::Config".to_owned(),
+            };
+            let overrides = BTreeMap::from([("demo::Repo".to_owned(), Mapping::Handle), ("demo::Config".to_owned(), Mapping::Keyed(keyed))]);
+            Classifier::new(&renderer, &overrides, &[], &implementations).validate()
+        };
+        assert_eq!(validate("{handle}.config()", None), Ok(()));
+        assert!(validate("{handle}.config({key})", None).is_err_and(|why| why.contains("without `key`")));
+        assert!(validate("{handle}.config()", Some("{value}.id")).is_err_and(|why| why.contains("`key_of` needs `key`")));
     }
 
     #[test]

@@ -135,10 +135,10 @@ fn lowering<'a>(classifier: &'a Classifier<'a>, context: &'a Context<'a>) -> fac
 fn keyed_probe(ty: &str, context: &Context<'_>) -> Mapping {
     Mapping::Keyed(Keyed {
         handle: context.classifier.handles().next().unwrap_or_default().to_owned(),
-        key: "u64".to_owned(),
+        key: Some("u64".to_owned()),
         rebuild: [HANDLE_PLACEHOLDER, KEY_PLACEHOLDER].concat(),
         fallible: false,
-        key_of: VALUE_PLACEHOLDER.to_owned(),
+        key_of: Some(VALUE_PLACEHOLDER.to_owned()),
         name: ty.to_owned(),
     })
 }
