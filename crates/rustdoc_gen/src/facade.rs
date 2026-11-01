@@ -42,9 +42,10 @@
 //! `verdict` runs the emitter on every function the classifier passes and turns what it does not
 //! generate into a decision, so an automatic item is a generated one by construction.
 //!
-//! Every member returns `ffi::Result<T, runtime::Error>`. Text and bytes convert inline; the
-//! rest goes through the hand-written runtime module (configuration `runtime_module`, default
-//! `crate::runtime`), which provides:
+//! Every member returns `ffi::Result<T, runtime::Error>`, and an `Option<Result<T, E>>` result
+//! crosses inside it as `ffi::Option<T>`. Text and bytes convert inline; the rest goes through
+//! the hand-written runtime module (configuration `runtime_module`, default `crate::runtime`),
+//! which provides:
 //!
 //! - `Error`, an FFI type, and `error(e) -> Error` for every error a wrapped call returns;
 //! - the handle holder, named like the service, with `From` for each type mapped to `handle`
@@ -514,19 +515,11 @@ impl Emitter<'_> {
             Type::ResolvedPath(path) => {
                 let canonical = self.context.renderer.path(path);
                 match (canonical.as_str(), type_args(path).as_slice()) {
-                    ("core::option::Option", [inner]) => {
-                        let (ffi, convert) = self.output(function, inner, "value")?;
-                        let mapped = if convert == "value" {
-                            value.to_owned()
-                        } else if !convert.contains('?') {
-                            format!("{value}.map(|value| {convert})")
-                        } else if self.is_result(inner) {
-                            return Err("an Option of a Result".to_owned());
-                        } else {
-                            format!("{value}.map(|value| Ok::<_, runtime::Error>({convert})).transpose()?")
-                        };
-                        Ok((format!("ffi::Option<{ffi}>"), format!("ffi::Option::from({mapped})")))
-                    }
+                    ("core::option::Option", [inner]) => match self.result_ok(inner) {
+                        // An option of a result crosses like a result of an option.
+                        Some(ok) => self.option_output(function, ok, &format!("{value}.transpose().map_err(runtime::error)?")),
+                        None => self.option_output(function, inner, value),
+                    },
                     ("core::result::Result", [ok, _]) => self.output(function, ok, &format!("{value}.map_err(runtime::error)?")),
                     ("alloc::vec::Vec", [Type::Primitive(byte)]) if byte == "u8" => Ok(bytes_out(value)),
                     ("alloc::boxed::Box", [inner]) => self.output(function, inner, &format!("(*{value})")),
@@ -646,8 +639,26 @@ impl Emitter<'_> {
         }
     }
 
-    fn is_result(&self, ty: &Type) -> bool {
-        matches!(ty, Type::ResolvedPath(path) if self.context.renderer.path(path) == "core::result::Result")
+    /// The FFI option of `inner` and the conversion of the option `value` into it.
+    fn option_output(&self, function: &Function, inner: &Type, value: &str) -> Result<(String, String), String> {
+        let (ffi, convert) = self.output(function, inner, "value")?;
+        let mapped = if convert == "value" {
+            value.to_owned()
+        } else if !convert.contains('?') {
+            format!("{value}.map(|value| {convert})")
+        } else {
+            format!("{value}.map(|value| Ok::<_, runtime::Error>({convert})).transpose()?")
+        };
+        Ok((format!("ffi::Option<{ffi}>"), format!("ffi::Option::from({mapped})")))
+    }
+
+    /// The `Ok` type of a `Result`.
+    fn result_ok<'t>(&self, ty: &'t Type) -> Option<&'t Type> {
+        let Type::ResolvedPath(path) = ty else { return None };
+        match (self.context.renderer.path(path).as_str(), type_args(path).as_slice()) {
+            ("core::result::Result", [ok, _]) => Some(*ok),
+            _ => None,
+        }
     }
 
     /// The mirror's name, unless it would take the service's.
@@ -1740,6 +1751,16 @@ mod tests {
         let source = facade(&[open, reopen]).source;
         assert!(source.contains("    pub fn commit_open(repo: &Self, commit_key: ffi::String) -> ffi::Result<Self, runtime::Error> {\n        finish(|| {\n            let repo = &repo.inner.repo();\n            let commit_key = repo.find_commit(runtime::oid(&commit_key)?).map_err(runtime::error)?;\n            Ok(Self { inner: runtime::Repo::from(commit_key.open().map_err(runtime::error)?) })\n"), "{source}");
         assert!(source.contains("    pub fn head_reopen(repo: &Self) -> ffi::Result<Self, runtime::Error> {\n        finish(|| {\n            let repo = &repo.inner.repo();\n            let head = repo.head().map_err(runtime::error)?;\n            Ok(Self { inner: runtime::Repo::from(head.reopen()) })\n"), "{source}");
+    }
+
+    #[test]
+    fn options_of_results_cross_as_results_of_options() {
+        let upstream = function("demo::Repo::upstream", Some("demo::Repo"), Receiver::Shared, Vec::new(), Some(generic(8, vec![generic(3, vec![ty(1), ty(5)])])));
+        let parent = function("demo::Repo::parent", Some("demo::Repo"), Receiver::Shared, Vec::new(), Some(generic(8, vec![generic(3, vec![ty(12), ty(5)])])));
+        let source = facade(&[upstream, parent]).source;
+        assert!(source.contains("    pub fn upstream(&self) -> ffi::Result<ffi::Option<ffi::String>, runtime::Error> {\n"), "{source}");
+        assert!(source.contains("Ok(ffi::Option::from(self.inner.repo().upstream().transpose().map_err(runtime::error)?.map(|value| ffi::String::from_string(value.to_string()))))"), "{source}");
+        assert!(source.contains("Ok(ffi::Option::from(self.inner.repo().parent().transpose().map_err(runtime::error)?.map(|value| runtime::oid_out(&(value).id))))"), "keyed values return their key: {source}");
     }
 
     #[test]

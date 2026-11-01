@@ -575,7 +575,7 @@ mod tests {
 
         let first = analyze(&request).expect("the surface is analyzed");
         assert!(first.manifest_updated);
-        assert_eq!((first.public_methods, first.public_free_functions), (18, 1));
+        assert_eq!((first.public_methods, first.public_free_functions), (19, 1));
         let manifest = Manifest::read(&manifest_path).expect("the manifest reads back");
         let state = |path: &str| manifest.items.iter().find(|item| item.path == path).map(|item| (item.class, item.status));
         assert_eq!(state("demo::Repo::name"), Some((Class::Automatic, Status::Ready)));
@@ -655,6 +655,10 @@ mod inner {
 
         pub fn count_names(&self, names: impl IntoIterator<Item = impl AsRef<str>>) -> usize {
             names.into_iter().count()
+        }
+
+        pub fn upstream(&self) -> Option<std::io::Result<String>> {
+            None
         }
 
         #[deprecated]
@@ -815,7 +819,7 @@ pub fn open(path: impl AsRef<std::path::Path>) -> Result<Repo, std::io::Error> {
 
         let generated = generate(&request).expect("the facade is generated");
         assert!(generated.written);
-        assert_eq!((generated.emitted, generated.pending), (14, 4), "demo::open, eleven Repo methods, a keyless Config method and a constructor from Config; four items await decisions");
+        assert_eq!((generated.emitted, generated.pending), (15, 4), "demo::open, twelve Repo methods, a keyless Config method and a constructor from Config; four items await decisions");
         let source = fs::read_to_string(&generated.rust_module).expect("the facade reads back");
         assert!(source.contains("pub enum ModeMode {") && source.contains("pub enum Event {"), "mirrors of a fieldless and a data enum: {source}");
         assert!(source.contains("pub struct StatsStats {") && source.contains("fn from_stats_stats("), "a record both ways: {source}");
@@ -823,6 +827,7 @@ pub fn open(path: impl AsRef<std::path::Path>) -> Result<Repo, std::io::Error> {
         assert!(source.contains("name.as_str().parse().map_err(runtime::error)?"), "a type mapped to string parses: {source}");
         assert!(source.contains("    pub fn reopen(repo: &Self) -> ffi::Result<Self, runtime::Error> {\n"), "a method returning the handle takes it as `&Self`: {source}");
         assert!(source.contains("    pub fn config_reopen(repo: &Self) -> ffi::Result<Self, runtime::Error> {\n        finish(|| {\n            let repo = &repo.inner.repo();\n            let config = repo.config();\n            Ok(Self { inner: runtime::Repo::from(config.reopen().map_err(runtime::error)?) })\n"), "a keyless member returning the handle takes it as `&Self`: {source}");
+        assert!(source.contains("Ok(ffi::Option::from(self.inner.repo().upstream().transpose().map_err(runtime::error)?.map(|value| ffi::String::from_string(value.to_string()))))"), "an option of a result crosses as a result of an option: {source}");
         assert!(source.contains("    pub fn config_depth(&self) -> ffi::Result<u32, runtime::Error> {\n        finish(|| {\n            let repo = &self.inner.repo();\n            let config = repo.config();\n            Ok(config.depth())\n"), "a keyless method rebuilds from the handle alone: {source}");
         assert!(source.contains("names.as_slice().iter().map(|value| value.as_str()).collect::<Vec<_>>()"), "an iterable crosses as a slice: {source}");
         assert!(!generate(&request).expect("the facade is generated again").written, "regenerating changes nothing");
@@ -851,7 +856,7 @@ pub fn open(path: impl AsRef<std::path::Path>) -> Result<Repo, std::io::Error> {
         manifest.write(&manifest_path).expect("the manifest can be written");
         assert!(analyze(&analysis).expect("the decisions are analyzed again").summary.ready, "exclude and manual need no generated code");
         let decided = generate(&complete).expect("a ready manifest generates without partial");
-        assert_eq!((decided.emitted, decided.pending, decided.written), (14, 0, false), "the decided items stay out of the facade");
+        assert_eq!((decided.emitted, decided.pending, decided.written), (15, 0, false), "the decided items stay out of the facade");
 
         let mut manifest = Manifest::read(&manifest_path).expect("the manifest reads back");
         manifest.items[0].status = Status::Excluded;
