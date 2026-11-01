@@ -125,6 +125,8 @@ const TRY_INTO: &str = "core::convert::TryInto";
 
 /// The iterator trait; results implementing it wait for a cursor template.
 const ITERATOR: &str = "core::iter::traits::iterator::Iterator";
+/// `IntoIterator`, whose parameters cross as slices of their items.
+const INTO_ITERATOR: &str = "core::iter::traits::collect::IntoIterator";
 const DEREF: &str = "core::ops::deref::Deref";
 
 /// `Display`: a type mapped to `string` crosses out as its display text.
@@ -1130,22 +1132,23 @@ impl<'a> Classifier<'a> {
         })
     }
 
-    /// Whether some bound can be satisfied from a mapped value.
+    /// Whether some bound can be satisfied from a mapped value, or the bounds take an iterable
+    /// of convertible items, which crosses as a slice.
     fn convertible(&self, bounds: &[GenericBound], label: &str, function: &Function) -> Result<(), Reason> {
-        if self.conversion(bounds).is_some() {
+        if self.conversion(bounds).is_some() || self.iterable_item(bounds).is_some_and(|item| self.input(item, function).is_ok()) {
             return Ok(());
-        }
-        for bound in bounds {
-            let GenericBound::TraitBound { trait_, .. } = bound else { continue };
-            if self.renderer.path(trait_) == "core::iter::traits::collect::IntoIterator"
-                && iterator_item(trait_).is_some_and(|item| self.input(item, function).is_ok())
-            {
-                // The emitter has no slice parameters yet, so the item converting is not enough.
-                return Err(Reason::new(Category::Generic, format!("{label}: an iterable of convertible items waits for slice parameters")));
-            }
         }
         let rendered = self.renderer.bounds(bounds);
         Err(Reason::new(self.bounds_category(bounds, Category::Generic), format!("{label}: {rendered}")))
+    }
+
+    /// The `Item` of an `IntoIterator<Item = ...>` among `bounds`.
+    #[must_use]
+    pub fn iterable_item<'b>(&self, bounds: &'b [GenericBound]) -> Option<&'b Type> {
+        bounds.iter().find_map(|bound| match bound {
+            GenericBound::TraitBound { trait_, .. } if self.renderer.path(trait_) == INTO_ITERATOR => iterator_item(trait_),
+            _ => None,
+        })
     }
 
     /// The first specific category among the bounds, otherwise `fallback`.
@@ -1743,8 +1746,7 @@ mod tests {
             modifier: rustdoc_types::TraitBoundModifier::None,
         }]);
         let verdict = classify(&method(Receiver::None, vec![("names", names)], None));
-        assert_eq!(verdict.reasons.first().map(|reason| reason.category), Some(Category::Generic));
-        assert!(verdict.reasons[0].detail.ends_with("waits for slice parameters"), "{:?}", verdict.reasons);
+        assert_eq!(verdict, Verdict { class: Class::Automatic, reasons: Vec::new() }, "an iterable of convertible items crosses as a slice");
     }
 
     #[test]

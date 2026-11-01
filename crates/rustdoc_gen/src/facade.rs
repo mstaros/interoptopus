@@ -33,6 +33,10 @@
 //! or `AsRef<[u8]>`. A direction without them is a decision. A type from a crate without rustdoc,
 //! such as bstr's, is assumed to parse and display, and to convert from and dereference to bytes.
 //!
+//! An iterable parameter, `impl IntoIterator<Item = T>`, crosses as an `ffi::Slice` of `T`'s FFI
+//! form and is collected into a `Vec` before the call; items cross as primitives, text, parsed
+//! text and custom values, not as nested slices or mirrors.
+//!
 //! `verdict` runs the emitter on every function the classifier passes and turns what it does not
 //! generate into a decision, so an automatic item is a generated one by construction.
 //!
@@ -184,6 +188,8 @@ enum Conv {
     /// A fieldless enum or a record built back from its mirror by the named conversion; `borrowed`
     /// passes a reference.
     Mirror { function: String, borrowed: bool },
+    /// An iterable collected from a slice, each element converted by the inner conversion.
+    Slice(Box<Self>),
 }
 
 /// A lowered parameter: the FFI type and how it converts.
@@ -391,8 +397,8 @@ impl Emitter<'_> {
 
     fn input(&self, function: &Function, ty: &Type) -> Result<Input, String> {
         match ty {
-            Type::ImplTrait(bounds) => self.converted(bounds),
-            Type::Generic(name) if name != "Self" => self.converted(function.generics.get(name).map_or(&[][..], Vec::as_slice)),
+            Type::ImplTrait(bounds) => self.converted(function, bounds),
+            Type::Generic(name) if name != "Self" => self.converted(function, function.generics.get(name).map_or(&[][..], Vec::as_slice)),
             Type::Generic(_) => self.owner_input(function, false),
             Type::Primitive(name) if PRIMITIVES.contains(&name.as_str()) => Ok(Input::new(name, Conv::Same)),
             Type::BorrowedRef { is_mutable: false, type_, .. } => self.borrowed_input(function, type_),
@@ -457,10 +463,16 @@ impl Emitter<'_> {
         }
     }
 
-    /// A generic parameter, satisfied through a converting bound or a trait implementation.
-    fn converted(&self, bounds: &[GenericBound]) -> Result<Input, String> {
+    /// A generic parameter, satisfied through a converting bound or a trait implementation, or an
+    /// iterable, which crosses as a slice of its items.
+    fn converted(&self, function: &Function, bounds: &[GenericBound]) -> Result<Input, String> {
         let unsupported = || format!("generic parameter `{}`", self.context.renderer.bounds(bounds));
-        let Some(Conversion { mapping, borrowed }) = self.context.classifier.conversion(bounds) else { return Err(unsupported()) };
+        let Some(Conversion { mapping, borrowed }) = self.context.classifier.conversion(bounds) else {
+            return match self.context.classifier.iterable_item(bounds) {
+                Some(item) => self.slice_input(function, item),
+                None => Err(unsupported()),
+            };
+        };
         match mapping {
             Mapping::String => Ok(Input::new("ffi::String", if borrowed { Conv::Str } else { Conv::Text })),
             Mapping::Bytes => Ok(Input::new("ffi::Slice<u8>", if borrowed { Conv::Bytes } else { Conv::BytesOwned })),
@@ -468,6 +480,16 @@ impl Emitter<'_> {
             Mapping::Custom(custom) => Ok(Input::new(carrier_in(custom.ffi), Conv::Custom { function: custom.into_rust, borrowed: false })),
             Mapping::Handle | Mapping::Keyed(_) => Err(unsupported()),
         }
+    }
+
+    /// An iterable parameter: a slice of its items' FFI form, each converted on its own and
+    /// collected into a `Vec`.
+    fn slice_input(&self, function: &Function, item: &Type) -> Result<Input, String> {
+        let element = self.input(function, item)?;
+        if element_adapter(&element.conv).is_none() {
+            return Err(format!("an iterable of {}", self.rendered(item)));
+        }
+        Ok(Input { ffi: format!("ffi::Slice<{}>", element.ffi), conv: Conv::Slice(Box::new(element.conv)) })
     }
 
     /// The FFI type of a result and the conversion of `value` into it.
@@ -1181,6 +1203,11 @@ fn argument(name: &str, conv: &Conv, setup: &mut Vec<String>) -> String {
         Conv::Boxed(inner) => format!("Box::new({})", argument(name, inner, setup)),
         Conv::Cow(inner) => format!("std::borrow::Cow::Borrowed({})", argument(name, inner, setup)),
         Conv::Mirror { function, borrowed } => format!("{}{function}(&{name})", if *borrowed { "&" } else { "" }),
+        Conv::Slice(element) => {
+            let Some((adapter, fallible)) = element_adapter(element) else { unreachable!("only convertible elements pass lowering") };
+            let collect = if fallible { ".collect::<Result<Vec<_>, runtime::Error>>()?" } else { ".collect::<Vec<_>>()" };
+            format!("{name}.as_slice().iter(){adapter}{collect}")
+        }
         Conv::Option(inner) => {
             setup.push(format!("let {name} = {name}.into_option();"));
             // `after` turns the optional value into the reference a borrowed parameter takes.
@@ -1200,7 +1227,7 @@ fn argument(name: &str, conv: &Conv, setup: &mut Vec<String>) -> String {
                 Conv::Custom { function, borrowed } => (format!("runtime::{function}(value)"), true, if *borrowed { ".as_deref()" } else { "" }),
                 Conv::Mirror { function, .. } => (format!("{function}(value)"), false, ""),
                 Conv::Option(_) => unreachable!("nested options are rejected when lowering"),
-                Conv::Keyed { .. } | Conv::TextRef | Conv::Boxed(_) | Conv::Cow(_) => {
+                Conv::Keyed { .. } | Conv::TextRef | Conv::Boxed(_) | Conv::Cow(_) | Conv::Slice(_) => {
                     unreachable!("only simple optional parameters pass lowering")
                 }
             };
@@ -1212,6 +1239,20 @@ fn argument(name: &str, conv: &Conv, setup: &mut Vec<String>) -> String {
             expression
         }
     }
+}
+
+/// The iterator adapter converting each element of a slice, and whether it yields `Result`s; the
+/// elements are references to the FFI items. Items that would cross as nested slices (bytes,
+/// paths) or need setup (keyed handles, mirrors) are not lowered.
+fn element_adapter(conv: &Conv) -> Option<(String, bool)> {
+    Some(match conv {
+        Conv::Same => (".copied()".to_owned(), false),
+        Conv::Str => (".map(|value| value.as_str())".to_owned(), false),
+        Conv::Text => (".map(|value| value.as_str().to_owned())".to_owned(), false),
+        Conv::Parse { try_from, borrowed: false } => (format!(".map(|value| {}.map_err(runtime::error))", parse_text("value", *try_from)), true),
+        Conv::Custom { function, borrowed: false } => (format!(".map(runtime::{function})"), true),
+        _ => return None,
+    })
 }
 
 /// Text in `name` parsed into the parameter's type, by inference.
@@ -1304,7 +1345,7 @@ mod tests {
     use super::*;
     use crate::classify::{Custom, Implementations, StructDef, VariantDef};
     use crate::render::tests::{bound, resolved, shared};
-    use rustdoc_types::GenericArg;
+    use rustdoc_types::{AssocItemConstraint, AssocItemConstraintKind, GenericArg, GenericArgs, Id, Term, TraitBoundModifier};
 
     fn renderer() -> Renderer {
         Renderer::from_paths([
@@ -1335,6 +1376,8 @@ mod tests {
             (25, "demo::Opaque"),
             (26, "other::Ext"),
             (27, "demo::Head"),
+            (28, "core::iter::traits::collect::IntoIterator"),
+            (29, "core::convert::Into"),
         ])
     }
 
@@ -1572,6 +1615,32 @@ mod tests {
         assert!(source.contains("Ok(ffi::Option::from(self.inner.repo().head_commit().map(|value| runtime::oid_out(&(value).id))))"), "{source}");
         assert!(source.contains("            let commit = repo.find_commit(runtime::oid(&commit)?).map_err(runtime::error)?;\n            Ok(ffi::String::from_string(repo.describe(&commit).to_string()))\n"), "keyed parameters reuse the handle they were rebuilt from: {source}");
         assert!(facade.dropped.iter().any(|(path, why)| path == "demo::describe" && why.starts_with("takes a keyed handle")), "{:?}", facade.dropped);
+    }
+
+    /// `impl IntoIterator<Item = item>`.
+    fn iterable(item: Type) -> Type {
+        let constraint = AssocItemConstraint { name: "Item".to_owned(), args: None, binding: AssocItemConstraintKind::Equality(Term::Type(item)) };
+        let trait_ = Path { path: "IntoIterator".to_owned(), id: Id(28), args: Some(Box::new(GenericArgs::AngleBracketed { args: Vec::new(), constraints: vec![constraint] })) };
+        Type::ImplTrait(vec![GenericBound::TraitBound { trait_, generic_params: Vec::new(), modifier: TraitBoundModifier::None }])
+    }
+
+    #[test]
+    fn iterables_cross_as_slices_of_their_items() {
+        let ids = iterable(Type::ImplTrait(vec![bound(29, vec![GenericArg::Type(ty(11))])]));
+        let merge = function("demo::Repo::merge", Some("demo::Repo"), Receiver::Shared, vec![("ids", ids)], None);
+        let source = facade(&[merge]).source;
+        assert!(source.contains("pub fn merge(&self, ids: ffi::Slice<ffi::String>)"), "{source}");
+        assert!(source.contains("self.inner.repo().merge(ids.as_slice().iter().map(runtime::oid).collect::<Result<Vec<_>, runtime::Error>>()?)"), "{source}");
+        let renderer = renderer();
+        let types = types();
+        let implementations = Implementations::default();
+        let classifier = Classifier::new(&renderer, &types, &[], &implementations);
+        let context = Context { renderer: &renderer, classifier: &classifier, runtime: "crate::runtime", provenance: "test" };
+        let paths = iterable(Type::ImplTrait(vec![bound(6, vec![GenericArg::Type(ty(7))])]));
+        let add = function("demo::Repo::add", Some("demo::Repo"), Receiver::Shared, vec![("paths", paths)], None);
+        let verdict = verdict(&add, &context);
+        assert_eq!(verdict.class, Class::Decision, "byte items would cross as nested slices");
+        assert!(verdict.reasons[0].detail.contains("an iterable of"), "{:?}", verdict.reasons);
     }
 
     #[test]
