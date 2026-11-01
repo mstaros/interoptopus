@@ -117,8 +117,10 @@ const PRIMITIVES: [&str; 13] = ["bool", "u8", "u16", "u32", "u64", "usize", "i8"
 
 /// Traits satisfied by any value convertible to their type argument; the first two take a
 /// reference.
-const CONVERTING: [&str; 4] = ["core::convert::AsRef", "core::borrow::Borrow", "core::convert::Into", TRY_INTO];
-/// `TryInto`, which a borrowed type that parses text satisfies with `&str`.
+const CONVERTING: [&str; 4] = ["core::convert::AsRef", "core::borrow::Borrow", INTO, TRY_INTO];
+/// `Into` and `TryInto`, which a borrowed target can satisfy with `&str` or `&[u8]`.
+const INTO: &str = "core::convert::Into";
+/// See [`INTO`].
 const TRY_INTO: &str = "core::convert::TryInto";
 
 /// The iterator trait; results implementing it wait for a cursor template.
@@ -831,21 +833,37 @@ impl<'a> Classifier<'a> {
         traits.iter().filter_map(|trait_| self.offered(trait_)).find(|conversion| traits.iter().all(|trait_| self.accepts(trait_, conversion)))
     }
 
-    /// The conversion one bound offers on its own. `TryInto<&T>` takes `&str` when rustdoc shows
-    /// `&T` implementing `TryFrom<&str>`.
+    /// The conversion one bound offers on its own; an `Into` or `TryInto` of a borrowed target
+    /// takes what [`Self::borrowed_target`] picks.
     fn offered(&self, trait_: &Path) -> Option<Conversion> {
         let canonical = self.renderer.path(trait_);
         if CONVERTING.contains(&canonical.as_str()) {
             let arguments = type_args(trait_);
             let [target] = arguments.as_slice() else { return None };
-            if canonical == TRY_INTO && matches!(target, Type::BorrowedRef { is_mutable: false, .. }) {
-                let parses = self.implementations.implements_exactly(&self.renderer.ty(target), TRY_FROM_STR);
-                return parses.then_some(Conversion { mapping: Mapping::String, borrowed: true });
+            if (canonical == INTO || canonical == TRY_INTO)
+                && let Type::BorrowedRef { is_mutable: false, type_: inner, .. } = target
+            {
+                return self.borrowed_target(canonical == TRY_INTO, target, inner);
             }
             let borrowed = CONVERTING[..2].contains(&canonical.as_str());
             return self.carrier(target).map(|mapping| Conversion { mapping, borrowed });
         }
         self.implemented(&canonical)
+    }
+
+    /// The value an `Into<&T>` or `TryInto<&T>` bound takes: `&str` for `TryInto<&T>` when rustdoc
+    /// shows `&T` implementing `TryFrom<&str>`, and `&[u8]` when `T` maps to `bytes` and `&T`
+    /// implements `From<&[u8]>`, which a type from a crate without rustdoc, such as bstr's, is
+    /// assumed to.
+    fn borrowed_target(&self, fallible: bool, target: &Type, inner: &Type) -> Option<Conversion> {
+        let rendered = self.renderer.ty(target);
+        if fallible && self.implementations.implements_exactly(&rendered, TRY_FROM_STR) {
+            return Some(Conversion { mapping: Mapping::String, borrowed: true });
+        }
+        let Type::ResolvedPath(path) = inner else { return None };
+        let canonical = self.renderer.path(path);
+        let from_bytes = !self.implementations.documents(&canonical) || self.implementations.implements_exactly(&rendered, FROM_BYTES);
+        (self.types.get(&canonical) == Some(&Mapping::Bytes) && from_bytes).then_some(Conversion { mapping: Mapping::Bytes, borrowed: true })
     }
 
     /// Whether `trait_` holds for the value `conversion` passes.
@@ -1422,6 +1440,7 @@ mod tests {
             (28, "core::convert::TryInto"),
             (29, "core::clone::Clone"),
             (30, "demo::Name"),
+            (31, "core::convert::Into"),
         ])
     }
 
@@ -1760,6 +1779,18 @@ mod tests {
         assert_eq!(classifier.conversion(&[try_into(30)]), text, "&demo::Name implements TryFrom<&str>");
         assert_eq!(classifier.conversion(&[try_into(30), bound(29, Vec::new())]), text, "&str is Clone");
         assert_eq!(classifier.conversion(&[try_into(7)]), None, "&demo::Error does not parse text");
+    }
+
+    #[test]
+    fn borrowed_byte_targets_take_bytes() {
+        let renderer = renderer();
+        let implementations = Implementations::default();
+        let types = BTreeMap::from([("bstr::bstr::BStr".to_owned(), Mapping::Bytes)]);
+        let classifier = Classifier::new(&renderer, &types, &[], &implementations);
+        let into = |id: u32| bound(31, vec![GenericArg::Type(shared(resolved(id, Vec::new())))]);
+        let bytes = Some(Conversion { mapping: Mapping::Bytes, borrowed: true });
+        assert_eq!(classifier.conversion(&[into(2)]), bytes, "bstr has no rustdoc, so &BStr is assumed to convert from &[u8]");
+        assert_eq!(classifier.conversion(&[into(30)]), None, "demo::Name is not mapped");
     }
 
     #[test]
