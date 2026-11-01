@@ -9,7 +9,7 @@ use std::fmt;
 
 use rustdoc_types::{
     AssocItemConstraintKind, Attribute, Crate, Enum, GenericArg, GenericArgs, GenericBound, GenericParamDefKind, Id, Impl, Item, ItemEnum,
-    ItemKind, Path, Struct, StructKind, Term, Type, Union, VariantKind,
+    ItemKind, Path, Struct, StructKind, Term, TraitBoundModifier, Type, Union, VariantKind,
 };
 use serde::{Deserialize, Serialize};
 
@@ -813,20 +813,29 @@ impl<'a> Classifier<'a> {
     }
 
     /// How a generic parameter's bounds are satisfied: a converting trait whose target is mapped,
-    /// or a trait rustdoc lists a mapped type as implementing.
+    /// or a trait rustdoc lists a mapped type as implementing. The value must satisfy every bound,
+    /// so a conversion counts only when each bound offers the same one; `?Sized` relaxes rather
+    /// than constrains and is skipped.
     #[must_use]
     pub fn conversion(&self, bounds: &[GenericBound]) -> Option<Conversion> {
-        bounds.iter().find_map(|bound| {
-            let GenericBound::TraitBound { trait_, .. } = bound else { return None };
-            let canonical = self.renderer.path(trait_);
-            if CONVERTING.contains(&canonical.as_str()) {
-                let arguments = type_args(trait_);
-                let [target] = arguments.as_slice() else { return None };
-                let borrowed = CONVERTING[..2].contains(&canonical.as_str());
-                return self.carrier(target).map(|mapping| Conversion { mapping, borrowed });
-            }
-            self.implemented(&canonical)
-        })
+        let mut offers = bounds.iter().filter_map(|bound| match bound {
+            GenericBound::TraitBound { trait_, modifier, .. } if *modifier != TraitBoundModifier::Maybe => Some(self.offered(trait_)),
+            _ => None,
+        });
+        let conversion = offers.next().flatten()?;
+        offers.all(|offer| offer.as_ref() == Some(&conversion)).then_some(conversion)
+    }
+
+    /// The conversion one bound offers on its own.
+    fn offered(&self, trait_: &Path) -> Option<Conversion> {
+        let canonical = self.renderer.path(trait_);
+        if CONVERTING.contains(&canonical.as_str()) {
+            let arguments = type_args(trait_);
+            let [target] = arguments.as_slice() else { return None };
+            let borrowed = CONVERTING[..2].contains(&canonical.as_str());
+            return self.carrier(target).map(|mapping| Conversion { mapping, borrowed });
+        }
+        self.implemented(&canonical)
     }
 
     /// The mapping of the type a converting bound targets.
@@ -1383,6 +1392,7 @@ mod tests {
             (24, "demo::Res"),
             (25, "core::io::error::Result"),
             (26, "demo::Counted"),
+            (27, "core::marker::Sized"),
         ])
     }
 
@@ -1702,6 +1712,13 @@ mod tests {
         let implementations = implementations();
         let classifier = Classifier::new(&renderer, &BTreeMap::new(), &[], &implementations);
         assert_eq!(classifier.conversion(&bytes_like), Some(Conversion { mapping: Mapping::Bytes, borrowed: true }));
+        let as_str = bound(3, vec![GenericArg::Type(Type::Primitive("str".to_owned()))]);
+        assert_eq!(classifier.conversion(&[bytes_like[0].clone(), as_str]), None, "bytes satisfy AsBytes but not AsRef<str>");
+        let as_error = bound(3, vec![GenericArg::Type(resolved(7, Vec::new()))]);
+        assert_eq!(classifier.conversion(&[as_error, bytes_like[0].clone()]), None, "nothing satisfies AsRef<demo::Error>, so bytes do not either");
+        let GenericBound::TraitBound { trait_, generic_params, .. } = bound(27, Vec::new()) else { unreachable!("a trait bound") };
+        let maybe_sized = GenericBound::TraitBound { trait_, generic_params, modifier: TraitBoundModifier::Maybe };
+        assert_eq!(classifier.conversion(&[bytes_like[0].clone(), maybe_sized]), Some(Conversion { mapping: Mapping::Bytes, borrowed: true }), "?Sized does not constrain");
     }
 
     #[test]
