@@ -117,7 +117,9 @@ const PRIMITIVES: [&str; 13] = ["bool", "u8", "u16", "u32", "u64", "usize", "i8"
 
 /// Traits satisfied by any value convertible to their type argument; the first two take a
 /// reference.
-const CONVERTING: [&str; 4] = ["core::convert::AsRef", "core::borrow::Borrow", "core::convert::Into", "core::convert::TryInto"];
+const CONVERTING: [&str; 4] = ["core::convert::AsRef", "core::borrow::Borrow", "core::convert::Into", TRY_INTO];
+/// `TryInto`, which a borrowed type that parses text satisfies with `&str`.
+const TRY_INTO: &str = "core::convert::TryInto";
 
 /// The iterator trait; results implementing it wait for a cursor template.
 const ITERATOR: &str = "core::iter::traits::iterator::Iterator";
@@ -814,28 +816,41 @@ impl<'a> Classifier<'a> {
 
     /// How a generic parameter's bounds are satisfied: a converting trait whose target is mapped,
     /// or a trait rustdoc lists a mapped type as implementing. The value must satisfy every bound,
-    /// so a conversion counts only when each bound offers the same one; `?Sized` relaxes rather
-    /// than constrains and is skipped.
+    /// so a conversion one bound offers counts only when each other bound offers the same one or
+    /// is a std trait its std carrier implements; `?Sized` relaxes rather than constrains and is
+    /// skipped.
     #[must_use]
     pub fn conversion(&self, bounds: &[GenericBound]) -> Option<Conversion> {
-        let mut offers = bounds.iter().filter_map(|bound| match bound {
-            GenericBound::TraitBound { trait_, modifier, .. } if *modifier != TraitBoundModifier::Maybe => Some(self.offered(trait_)),
-            _ => None,
-        });
-        let conversion = offers.next().flatten()?;
-        offers.all(|offer| offer.as_ref() == Some(&conversion)).then_some(conversion)
+        let traits: Vec<&Path> = bounds
+            .iter()
+            .filter_map(|bound| match bound {
+                GenericBound::TraitBound { trait_, modifier, .. } if *modifier != TraitBoundModifier::Maybe => Some(trait_),
+                _ => None,
+            })
+            .collect();
+        traits.iter().filter_map(|trait_| self.offered(trait_)).find(|conversion| traits.iter().all(|trait_| self.accepts(trait_, conversion)))
     }
 
-    /// The conversion one bound offers on its own.
+    /// The conversion one bound offers on its own. `TryInto<&T>` takes `&str` when rustdoc shows
+    /// `&T` implementing `TryFrom<&str>`.
     fn offered(&self, trait_: &Path) -> Option<Conversion> {
         let canonical = self.renderer.path(trait_);
         if CONVERTING.contains(&canonical.as_str()) {
             let arguments = type_args(trait_);
             let [target] = arguments.as_slice() else { return None };
+            if canonical == TRY_INTO && matches!(target, Type::BorrowedRef { is_mutable: false, .. }) {
+                let parses = self.implementations.implements_exactly(&self.renderer.ty(target), TRY_FROM_STR);
+                return parses.then_some(Conversion { mapping: Mapping::String, borrowed: true });
+            }
             let borrowed = CONVERTING[..2].contains(&canonical.as_str());
             return self.carrier(target).map(|mapping| Conversion { mapping, borrowed });
         }
         self.implemented(&canonical)
+    }
+
+    /// Whether `trait_` holds for the value `conversion` passes.
+    fn accepts(&self, trait_: &Path, conversion: &Conversion) -> bool {
+        self.offered(trait_).as_ref() == Some(conversion) || carrier_implements(&self.renderer.path(trait_), conversion)
     }
 
     /// The mapping of the type a converting bound targets.
@@ -1351,6 +1366,17 @@ fn is_byte(ty: &Type) -> bool {
     matches!(ty, Type::Primitive(name) if name == "u8")
 }
 
+/// Whether the std carrier a conversion passes implements a std trait: `&str`, `String`,
+/// `&[u8]`, `Vec<u8>` and `PathBuf` are `Clone`, `Send` and `Sync`, and `&str` and `&[u8]` are
+/// `Copy`.
+fn carrier_implements(trait_path: &str, conversion: &Conversion) -> bool {
+    match trait_path {
+        "core::clone::Clone" | "core::marker::Send" | "core::marker::Sync" => matches!(conversion.mapping, Mapping::String | Mapping::Bytes | Mapping::Path),
+        "core::marker::Copy" => conversion.borrowed && matches!(conversion.mapping, Mapping::String | Mapping::Bytes),
+        _ => false,
+    }
+}
+
 /// Whether `path` is `prefix` or lies below it.
 fn is_under(path: &str, prefix: &str) -> bool {
     path.strip_prefix(prefix).is_some_and(|rest| rest.is_empty() || rest.starts_with("::"))
@@ -1393,6 +1419,9 @@ mod tests {
             (25, "core::io::error::Result"),
             (26, "demo::Counted"),
             (27, "core::marker::Sized"),
+            (28, "core::convert::TryInto"),
+            (29, "core::clone::Clone"),
+            (30, "demo::Name"),
         ])
     }
 
@@ -1719,6 +1748,18 @@ mod tests {
         let GenericBound::TraitBound { trait_, generic_params, .. } = bound(27, Vec::new()) else { unreachable!("a trait bound") };
         let maybe_sized = GenericBound::TraitBound { trait_, generic_params, modifier: TraitBoundModifier::Maybe };
         assert_eq!(classifier.conversion(&[bytes_like[0].clone(), maybe_sized]), Some(Conversion { mapping: Mapping::Bytes, borrowed: true }), "?Sized does not constrain");
+    }
+
+    #[test]
+    fn borrowed_targets_take_text_when_they_parse_it() {
+        let renderer = renderer();
+        let implementations = Implementations::from_pairs([("core::convert::TryFrom<&str>", "&demo::Name")]);
+        let classifier = Classifier::new(&renderer, &BTreeMap::new(), &[], &implementations);
+        let text = Some(Conversion { mapping: Mapping::String, borrowed: true });
+        let try_into = |id: u32| bound(28, vec![GenericArg::Type(shared(resolved(id, Vec::new())))]);
+        assert_eq!(classifier.conversion(&[try_into(30)]), text, "&demo::Name implements TryFrom<&str>");
+        assert_eq!(classifier.conversion(&[try_into(30), bound(29, Vec::new())]), text, "&str is Clone");
+        assert_eq!(classifier.conversion(&[try_into(7)]), None, "&demo::Error does not parse text");
     }
 
     #[test]
