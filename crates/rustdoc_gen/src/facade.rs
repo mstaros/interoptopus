@@ -9,11 +9,13 @@
 //!
 //! A keyed type crosses as its key: its members become service methods named `{type}_{method}`
 //! that take the key first and rebuild the value from the handle and the key (`rebuild`); keyed
-//! parameters are rebuilt the same way, and keyed results return their key (`key_of`). Free
-//! functions and constructors taking a keyed handle are dropped, since they have no handle to
-//! rebuild from. A keyless type (a keyed entry without `key`) is rebuilt from the handle alone:
-//! its members become service methods named `{type}_{method}` without a key, and parameters and
-//! results of the type are not generated, since there is no key to cross.
+//! parameters are rebuilt the same way, and keyed results return their key (`key_of`). Members
+//! that return the handle become constructors named the same way, taking the service by
+//! reference before the key. Free functions and constructors taking a keyed handle are dropped,
+//! since they have no handle to rebuild from. A keyless type (a keyed entry without `key`) is
+//! rebuilt from the handle alone: its members become service methods named `{type}_{method}`
+//! without a key, and parameters and results of the type are not generated, since there is no
+//! key to cross.
 //!
 //! A public enum crosses as an `#[ffi]` mirror named after its public path through the root
 //! crate (`RemoteDirection` for `demo::remote::Direction`), with explicit discriminants copied
@@ -322,14 +324,14 @@ impl Emitter<'_> {
         if method && constructor.is_some() && rank == 2 {
             return Ok(Planned::Dropped("converts between handle types".to_owned()));
         }
-        if keyed_owner.is_some() && constructor.is_some() {
-            return Ok(Planned::Dropped("returns the handle it is rebuilt from".to_owned()));
-        }
         if !method && function.receiver != Receiver::None {
             return Err(format!("receiver {:?}", function.receiver));
         }
         let accessor = owner.map(|owner| snake(last_segment(owner)));
         let handle_parameter = snake(&self.service);
+        // Keyed values are rebuilt from the handle the service holds: `self` in methods, the
+        // `&Self` parameter in constructors.
+        let service = if constructor.is_some() { handle_parameter.as_str() } else { "self" };
         let mut declarations = Vec::new();
         let mut setup = Vec::new();
         let mut arguments = Vec::new();
@@ -339,7 +341,7 @@ impl Emitter<'_> {
             let input = self.input(function, ty).map_err(|why| format!("parameter `{name}`: {why}"))?;
             takes_keyed |= is_keyed(&input.conv);
             declarations.push(format!("{name}: {}", input.ffi));
-            arguments.push(argument(&name, &input.conv, &mut setup));
+            arguments.push(argument(&name, &input.conv, service, &mut setup));
         }
         if takes_keyed && (!method || constructor.is_some()) {
             return Ok(Planned::Dropped("takes a keyed handle, which needs the handle to rebuild from".to_owned()));
@@ -355,8 +357,11 @@ impl Emitter<'_> {
             } else {
                 (snake(last_segment(path)), None)
             };
+            if constructor.is_some() {
+                declarations.insert(0, format!("{handle_parameter}: &Self"));
+            }
             let conv = Conv::Keyed { keyed: Box::new(keyed.clone()), key, accessor: snake(last_segment(&keyed.handle)), borrowed: false };
-            let receiver = argument(&parameter, &conv, &mut setup);
+            let receiver = argument(&parameter, &conv, service, &mut setup);
             format!("{receiver}.{}({})", function.name, arguments.join(", "))
         } else {
             match (method, &accessor) {
@@ -376,7 +381,7 @@ impl Emitter<'_> {
         let (place, name, receiver, returns, value) = if let Some(fallible) = constructor {
             let value = if fallible { format!("{call}.map_err(runtime::error)?") } else { call };
             let holder = format!("Self {{ inner: runtime::{}::from({value}) }}", self.service);
-            (Place::Service, escaped(&function.name), "", "Self".to_owned(), holder)
+            (Place::Service, escaped(&member_name), "", "Self".to_owned(), holder)
         } else {
             let unit = Type::Tuple(Vec::new());
             let (returns, value) = self.output(function, function.output.as_ref().unwrap_or(&unit), &call)?;
@@ -1170,8 +1175,10 @@ fn wrapper(place: Place, path: &str, name: &str, parameters: &[String], returns:
     source
 }
 
-/// The Rust argument built from the FFI parameter `name`, adding any statements it needs first.
-fn argument(name: &str, conv: &Conv, setup: &mut Vec<String>) -> String {
+/// The Rust argument built from the FFI parameter `name`, adding any statements it needs first;
+/// keyed values are rebuilt from the handle `service` holds (`self`, or a constructor's `&Self`
+/// parameter).
+fn argument(name: &str, conv: &Conv, service: &str, setup: &mut Vec<String>) -> String {
     match conv {
         Conv::Same => name.to_owned(),
         Conv::Ref => format!("&{name}"),
@@ -1186,9 +1193,9 @@ fn argument(name: &str, conv: &Conv, setup: &mut Vec<String>) -> String {
         Conv::Path { borrowed } => format!("{}runtime::path(&{name})?", if *borrowed { "&" } else { "" }),
         Conv::Custom { function, borrowed } => format!("{}runtime::{function}(&{name})?", if *borrowed { "&" } else { "" }),
         Conv::Keyed { keyed, key, accessor, borrowed } => {
-            let key = key.as_ref().map(|key| argument(name, key, setup));
+            let key = key.as_ref().map(|key| argument(name, key, service, setup));
             // A reference to the holder's temporary, kept alive for the body; `{handle}` names it.
-            let holder = format!("let {accessor} = &self.inner.{accessor}();");
+            let holder = format!("let {accessor} = &{service}.inner.{accessor}();");
             if !setup.contains(&holder) {
                 setup.push(holder);
             }
@@ -1200,8 +1207,8 @@ fn argument(name: &str, conv: &Conv, setup: &mut Vec<String>) -> String {
             setup.push(format!("let {name} = {rebuilt}{fallible};"));
             if *borrowed { format!("&{name}") } else { name.to_owned() }
         }
-        Conv::Boxed(inner) => format!("Box::new({})", argument(name, inner, setup)),
-        Conv::Cow(inner) => format!("std::borrow::Cow::Borrowed({})", argument(name, inner, setup)),
+        Conv::Boxed(inner) => format!("Box::new({})", argument(name, inner, service, setup)),
+        Conv::Cow(inner) => format!("std::borrow::Cow::Borrowed({})", argument(name, inner, service, setup)),
         Conv::Mirror { function, borrowed } => format!("{}{function}(&{name})", if *borrowed { "&" } else { "" }),
         Conv::Slice(element) => {
             let Some((adapter, fallible)) = element_adapter(element) else { unreachable!("only convertible elements pass lowering") };
@@ -1724,6 +1731,15 @@ mod tests {
         let source = facade(&[main]).source;
         assert!(source.contains("    pub fn main(repo: &Self) -> ffi::Result<Self, runtime::Error> {\n"), "{source}");
         assert!(source.contains("runtime::Repo::from(repo.inner.repo().main().map_err(runtime::error)?)"), "{source}");
+    }
+
+    #[test]
+    fn keyed_members_returning_the_handle_become_constructors_taking_it() {
+        let open = function("demo::Commit::open", Some("demo::Commit"), Receiver::Value, Vec::new(), Some(generic(3, vec![ty(4), ty(5)])));
+        let reopen = function("demo::Head::reopen", Some("demo::Head"), Receiver::Shared, Vec::new(), Some(ty(4)));
+        let source = facade(&[open, reopen]).source;
+        assert!(source.contains("    pub fn commit_open(repo: &Self, commit_key: ffi::String) -> ffi::Result<Self, runtime::Error> {\n        finish(|| {\n            let repo = &repo.inner.repo();\n            let commit_key = repo.find_commit(runtime::oid(&commit_key)?).map_err(runtime::error)?;\n            Ok(Self { inner: runtime::Repo::from(commit_key.open().map_err(runtime::error)?) })\n"), "{source}");
+        assert!(source.contains("    pub fn head_reopen(repo: &Self) -> ffi::Result<Self, runtime::Error> {\n        finish(|| {\n            let repo = &repo.inner.repo();\n            let head = repo.head().map_err(runtime::error)?;\n            Ok(Self { inner: runtime::Repo::from(head.reopen()) })\n"), "{source}");
     }
 
     #[test]
