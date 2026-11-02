@@ -11,7 +11,9 @@
 //! that take the key first and rebuild the value from the handle and the key (`rebuild`); keyed
 //! parameters are rebuilt the same way, and keyed results return their key (`key_of`). Members
 //! that return the handle become constructors named the same way, taking the service by
-//! reference before the key. Free functions and constructors taking a keyed handle are dropped,
+//! reference before the key, and a `&mut self` member decided `rebuilt` runs on a mutable
+//! rebuilt value, whose changes end with the call. Free functions and constructors taking a
+//! keyed handle are dropped,
 //! since they have no handle to rebuild from. A keyless type (a keyed entry without `key`) is
 //! rebuilt from the handle alone: its members become service methods named `{type}_{method}`
 //! without a key, and parameters and results of the type are not generated, since there is no
@@ -185,8 +187,8 @@ enum Conv {
     Option(Box<Self>),
     /// A keyed handle rebuilt from its key: `key` converts the FFI key (`None` for a keyless
     /// type), `accessor` names the holder accessor of the handle it is rebuilt from; `borrowed`
-    /// passes a reference.
-    Keyed { keyed: Box<Keyed>, key: Option<Box<Self>>, accessor: String, borrowed: bool },
+    /// passes a reference, and `mutable` binds the rebuilt value mutably.
+    Keyed { keyed: Box<Keyed>, key: Option<Box<Self>>, accessor: String, borrowed: bool, mutable: bool },
     /// A boxed value.
     Boxed(Box<Self>),
     /// A `Cow` borrowing the value.
@@ -250,7 +252,27 @@ pub fn emit(functions: &[&Function], context: &Context<'_>) -> Result<Facade, (S
 /// into a decision (category `lowering`, with the emitter's reason).
 #[must_use]
 pub fn verdict(function: &Function, context: &Context<'_>) -> Verdict {
-    let verdict = context.classifier.classify(function);
+    lowered(function, context, context.classifier.classify(function))
+}
+
+/// The verdict for an item decided `rebuilt`: a `&mut self` method of a keyed type is no longer
+/// blocked for losing its changes, since it runs on the value rebuilt for the call; its other
+/// blockers remain.
+#[must_use]
+pub fn rebuilt_verdict(function: &Function, context: &Context<'_>) -> Verdict {
+    let mut verdict = context.classifier.classify(function);
+    let emitter = Emitter { context, service: service_name(context.classifier), used: RefCell::default() };
+    if function.receiver == Receiver::Exclusive && emitter.keyed_owner(function).is_some() {
+        verdict.reasons.retain(|reason| reason.category != crate::classify::Category::MutHandle);
+        if verdict.class == Class::Decision && verdict.reasons.is_empty() {
+            verdict.class = Class::Automatic;
+        }
+    }
+    lowered(function, context, verdict)
+}
+
+/// `verdict` after the emitter: an automatic function it does not generate becomes a decision.
+fn lowered(function: &Function, context: &Context<'_>, verdict: Verdict) -> Verdict {
     if verdict.class != Class::Automatic {
         return verdict;
     }
@@ -324,7 +346,8 @@ impl Emitter<'_> {
             (Some(_), None) => 2,
         };
         let constructor = function.output.as_ref().and_then(|output| self.handle_result(function, output));
-        let method = function.receiver == Receiver::Shared || (keyed_owner.is_some() && function.receiver == Receiver::Value);
+        // `&mut self` on a keyed type reaches the emitter only when decided `rebuilt`.
+        let method = function.receiver == Receiver::Shared || (keyed_owner.is_some() && matches!(function.receiver, Receiver::Value | Receiver::Exclusive));
         if method && constructor.is_some() && rank == 2 {
             return Ok(Planned::Dropped("converts between handle types".to_owned()));
         }
@@ -364,7 +387,8 @@ impl Emitter<'_> {
             if constructor.is_some() {
                 declarations.insert(0, format!("{handle_parameter}: &Self"));
             }
-            let conv = Conv::Keyed { keyed: Box::new(keyed.clone()), key, accessor: snake(last_segment(&keyed.handle)), borrowed: false };
+            let mutable = function.receiver == Receiver::Exclusive;
+            let conv = Conv::Keyed { keyed: Box::new(keyed.clone()), key, accessor: snake(last_segment(&keyed.handle)), borrowed: false, mutable };
             let receiver = argument(&parameter, &conv, service, &mut setup);
             format!("{receiver}.{}({})", function.name, arguments.join(", "))
         } else {
@@ -1090,7 +1114,7 @@ impl Emitter<'_> {
     fn keyed_input(&self, keyed: &Keyed, borrowed: bool) -> Result<Input, String> {
         let key = self.key_input(keyed)?;
         let accessor = snake(last_segment(&keyed.handle));
-        Ok(Input { ffi: key.ffi, conv: Conv::Keyed { keyed: Box::new(keyed.clone()), key: Some(Box::new(key.conv)), accessor, borrowed } })
+        Ok(Input { ffi: key.ffi, conv: Conv::Keyed { keyed: Box::new(keyed.clone()), key: Some(Box::new(key.conv)), accessor, borrowed, mutable: false } })
     }
 
     /// How a keyed handle's key crosses into Rust; a keyless type has none.
@@ -1270,7 +1294,7 @@ fn argument(name: &str, conv: &Conv, service: &str, setup: &mut Vec<String>) -> 
         Conv::Parse { try_from, borrowed } => format!("{}{}.map_err(runtime::error)?", if *borrowed { "&" } else { "" }, parse_text(name, *try_from)),
         Conv::Path { borrowed } => format!("{}runtime::path(&{name})?", if *borrowed { "&" } else { "" }),
         Conv::Custom { function, borrowed } => format!("{}runtime::{function}(&{name})?", if *borrowed { "&" } else { "" }),
-        Conv::Keyed { keyed, key, accessor, borrowed } => {
+        Conv::Keyed { keyed, key, accessor, borrowed, mutable } => {
             let key = key.as_ref().map(|key| argument(name, key, service, setup));
             // A reference to the holder's temporary, kept alive for the body; `{handle}` names it.
             let holder = format!("let {accessor} = &{service}.inner.{accessor}();");
@@ -1282,7 +1306,7 @@ fn argument(name: &str, conv: &Conv, service: &str, setup: &mut Vec<String>) -> 
                 rebuilt = rebuilt.replace(KEY_PLACEHOLDER, &key);
             }
             let fallible = if keyed.fallible { ".map_err(runtime::error)?" } else { "" };
-            setup.push(format!("let {name} = {rebuilt}{fallible};"));
+            setup.push(format!("let {}{name} = {rebuilt}{fallible};", if *mutable { "mut " } else { "" }));
             if *borrowed { format!("&{name}") } else { name.to_owned() }
         }
         Conv::Boxed(inner) => format!("Box::new({})", argument(name, inner, service, setup)),
@@ -1858,6 +1882,22 @@ mod tests {
         let source = facade(&[open, reopen]).source;
         assert!(source.contains("    pub fn commit_open(repo: &Self, commit_key: ffi::String) -> ffi::Result<Self, runtime::Error> {\n        finish(|| {\n            let repo = &repo.inner.repo();\n            let commit_key = repo.find_commit(runtime::oid(&commit_key)?).map_err(runtime::error)?;\n            Ok(Self { inner: runtime::Repo::from(commit_key.open().map_err(runtime::error)?) })\n"), "{source}");
         assert!(source.contains("    pub fn head_reopen(repo: &Self) -> ffi::Result<Self, runtime::Error> {\n        finish(|| {\n            let repo = &repo.inner.repo();\n            let head = repo.head().map_err(runtime::error)?;\n            Ok(Self { inner: runtime::Repo::from(head.reopen()) })\n"), "{source}");
+    }
+
+    #[test]
+    fn rebuilt_decisions_run_mut_methods_on_the_rebuilt_value() {
+        let renderer = renderer();
+        let types = types();
+        let implementations = Implementations::default();
+        let classifier = Classifier::new(&renderer, &types, &[], &implementations);
+        let context = Context { renderer: &renderer, classifier: &classifier, runtime: "crate::runtime", provenance: "test" };
+        let peel = function("demo::Commit::peel", Some("demo::Commit"), Receiver::Exclusive, Vec::new(), Some(ty(11)));
+        assert_eq!(verdict(&peel, &context).reasons[0].category, crate::classify::Category::MutHandle, "undecided, it loses its changes");
+        assert_eq!(rebuilt_verdict(&peel, &context).class, Class::Automatic);
+        let reload = function("demo::Repo::reload", Some("demo::Repo"), Receiver::Exclusive, Vec::new(), None);
+        assert_eq!(rebuilt_verdict(&reload, &context).class, Class::Decision, "the runtime handle's own `&mut self` still needs its holder");
+        let source = emit(&[&peel], &context).expect("the function lowers").source;
+        assert!(source.contains("            let mut commit_key = repo.find_commit(runtime::oid(&commit_key)?).map_err(runtime::error)?;\n            Ok(runtime::oid_out(&commit_key.peel()))\n"), "{source}");
     }
 
     #[test]
