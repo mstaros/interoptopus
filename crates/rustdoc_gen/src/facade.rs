@@ -12,7 +12,8 @@
 //! parameters are rebuilt the same way, and keyed results return their key (`key_of`). Members
 //! that return the handle become constructors named the same way, taking the service by
 //! reference before the key, and a `&mut self` member decided `rebuilt` runs on a mutable
-//! rebuilt value, whose changes end with the call. Free functions and constructors taking a
+//! rebuilt value, whose changes end with the call; a by-value member decided `rebuilt` that
+//! returns the type returns the key of the value it returns. Free functions and constructors taking a
 //! keyed handle are dropped,
 //! since they have no handle to rebuild from. A keyless type (a keyed entry without `key`) is
 //! rebuilt from the handle alone: its members become service methods named `{type}_{method}`
@@ -23,7 +24,7 @@
 //! crate (`RemoteDirection` for `demo::remote::Direction`), with explicit discriminants copied
 //! and empty tuple or struct variants as unit variants. `to_<mirror>` copies a result into the
 //! mirror, converting payloads from references (primitives, text, bytes, paths, custom mappings,
-//! keys, options and nested mirrors); an open enum's unknown variant becomes
+//! keys, options, nested mirrors and `Cow`s of them); an open enum's unknown variant becomes
 //! `runtime::error(UnknownVariant(..))`. `from_<mirror>` turns a mirror back for parameters,
 //! building payloads as it builds record fields; variants that are `#[non_exhaustive]` cannot be
 //! built.
@@ -266,14 +267,20 @@ pub fn verdict(function: &Function, context: &Context<'_>) -> Verdict {
 }
 
 /// The verdict for an item decided `rebuilt`: a `&mut self` method of a keyed type is no longer
-/// blocked for losing its changes, since it runs on the value rebuilt for the call; its other
-/// blockers remain.
+/// blocked for losing its changes, since it runs on the value rebuilt for the call, and a by-value
+/// method returning the type is no longer blocked as a builder, since it returns the key of the
+/// value it returns; its other blockers remain.
 #[must_use]
 pub fn rebuilt_verdict(function: &Function, context: &Context<'_>) -> Verdict {
     let mut verdict = context.classifier.classify(function);
     let emitter = Emitter { context, service: service_name(context.classifier), used: RefCell::default(), vectors: RefCell::default() };
-    if function.receiver == Receiver::Exclusive && emitter.keyed_owner(function).is_some() {
-        verdict.reasons.retain(|reason| reason.category != crate::classify::Category::MutHandle);
+    let lifted = match function.receiver {
+        Receiver::Exclusive => Some(crate::classify::Category::MutHandle),
+        Receiver::Value => Some(crate::classify::Category::Builder),
+        _ => None,
+    };
+    if let Some(lifted) = lifted.filter(|_| emitter.keyed_owner(function).is_some()) {
+        verdict.reasons.retain(|reason| reason.category != lifted);
         if verdict.class == Class::Decision && verdict.reasons.is_empty() {
             verdict.class = Class::Automatic;
         }
@@ -836,6 +843,8 @@ impl Emitter<'_> {
                 };
                 Ok((format!("ffi::Option<{ffi}>"), format!("ffi::Option::from({mapped})")))
             }
+            // A `Cow` converts like what it borrows; the conversions dereference through it.
+            ("alloc::borrow::Cow", [inner]) => self.payload_out(&borrowed(inner), binding),
             (_, []) => self.mapped_output(&canonical, binding, ty),
             _ => Err(self.rendered(ty)),
         }
@@ -1786,6 +1795,25 @@ mod tests {
     }
 
     #[test]
+    fn cow_payloads_convert_like_what_they_borrow() {
+        let name = EnumDef {
+            public: "demo::Name".to_owned(),
+            variants: vec![
+                VariantDef { fields: VariantFields::Tuple(vec![generic(14, vec![ty(7)])]), ..unit("Symbol") },
+                VariantDef { fields: VariantFields::Tuple(vec![generic(14, vec![Type::Primitive("str".to_owned())])]), ..unit("Url") },
+            ],
+            open: false,
+            generic: false,
+        };
+        let implementations = Implementations::default().with_root("demo").with_enum("demo::Name", name);
+        let remote = function("demo::Repo::remote_name", Some("demo::Repo"), Receiver::Shared, Vec::new(), Some(generic(8, vec![ty(21)])));
+        let source = facade_with(&[remote], &implementations).source;
+        assert!(source.contains("pub enum Name {\n    Symbol(ffi::Vec<u8>),\n    Url(ffi::String),\n}\n"), "{source}");
+        assert!(source.contains("        demo::Name::Symbol(field0, ..) => Name::Symbol(ffi::Vec::from_vec(field0.to_vec())),\n"), "{source}");
+        assert!(source.contains("        demo::Name::Url(field0, ..) => Name::Url(ffi::String::from_string(field0.to_string())),\n"), "{source}");
+    }
+
+    #[test]
     fn records_with_parsed_fields_are_built_back_fallibly() {
         let renderer = renderer();
         let types = types();
@@ -1994,8 +2022,12 @@ mod tests {
         assert_eq!(rebuilt_verdict(&peel, &context).class, Class::Automatic);
         let reload = function("demo::Repo::reload", Some("demo::Repo"), Receiver::Exclusive, Vec::new(), None);
         assert_eq!(rebuilt_verdict(&reload, &context).class, Class::Decision, "the runtime handle's own `&mut self` still needs its holder");
-        let source = emit(&[&peel], &context).expect("the function lowers").source;
+        let peeled = function("demo::Commit::peeled", Some("demo::Commit"), Receiver::Value, Vec::new(), Some(generic(3, vec![Type::Generic("Self".to_owned()), ty(5)])));
+        assert_eq!(verdict(&peeled, &context).reasons[0].category, crate::classify::Category::Builder, "undecided, a by-value method returning the type is a builder");
+        assert_eq!(rebuilt_verdict(&peeled, &context).class, Class::Automatic, "decided, it returns the key of the value it returns");
+        let source = emit(&[&peel, &peeled], &context).expect("the functions lower").source;
         assert!(source.contains("            let mut commit_key = repo.find_commit(runtime::oid(&commit_key)?).map_err(runtime::error)?;\n            Ok(runtime::oid_out(&commit_key.peel()))\n"), "{source}");
+        assert!(source.contains("Ok(runtime::oid_out(&(commit_key.peeled().map_err(runtime::error)?).id))"), "{source}");
     }
 
     #[test]
