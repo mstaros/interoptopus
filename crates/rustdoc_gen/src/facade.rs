@@ -38,8 +38,10 @@
 //! A type mapped to `string` or `bytes` other than `String` (the convert kind) converts through the
 //! traits its crate's rustdoc lists: text in through `FromStr` or `TryFrom<&str>` and out through
 //! `Display`; bytes in through `From<&[u8]>` or `From<Vec<u8>>` and out through a `Deref` to bytes
-//! or `AsRef<[u8]>`. A direction without them is a decision. A type from a crate without rustdoc,
-//! such as bstr's, is assumed to parse and display, and to convert from and dereference to bytes.
+//! or `AsRef<[u8]>`. A direction without them is a decision. A borrowed parameter whose reference
+//! type converts itself, as `&BStr` does from bytes, is built directly rather than borrowed from a
+//! converted value. A type from a crate without rustdoc, such as bstr's, is assumed to parse and
+//! display, and to convert from and dereference to bytes.
 //!
 //! An iterable parameter, `impl IntoIterator<Item = T>`, crosses as an `ffi::Slice` of `T`'s FFI
 //! form and is collected into a `Vec` before the call; items cross as primitives, text, parsed
@@ -641,10 +643,15 @@ impl Emitter<'_> {
         }
     }
 
-    /// Text into a type mapped to `string`: parsed with `FromStr`, or with `TryFrom<&str>`.
-    /// Without rustdoc for its crate, `FromStr` is assumed.
+    /// Text into a type mapped to `string`: parsed with `FromStr`, or with `TryFrom<&str>`. A
+    /// borrowed parameter whose reference type implements `TryFrom<&str>`, as an unsized name's
+    /// does, is built directly: borrowing a parsed value would need the unsized type itself to
+    /// implement it. Without rustdoc for its crate, `FromStr` is assumed.
     fn text_input(&self, canonical: &str, borrowed: bool) -> Result<Input, String> {
         let implementations = self.context.classifier.implementations();
+        if borrowed && implementations.implements_exactly(&format!("&{canonical}"), TRY_FROM_STR) {
+            return Ok(Input::new("ffi::String", Conv::Parse { try_from: true, borrowed: false }));
+        }
         let try_from = if !implementations.documents(canonical) || implementations.implements_reference(canonical, FROM_STR) {
             false
         } else if implementations.implements_reference(canonical, TRY_FROM_STR) {
@@ -1722,6 +1729,7 @@ mod tests {
             ("demo::Chunk", Mapping::Bytes),
             ("demo::Opaque", Mapping::String),
             ("other::Ext", Mapping::String),
+            ("demo::Label", Mapping::String),
         ] {
             types.insert(path.to_owned(), mapping);
         }
@@ -1729,6 +1737,7 @@ mod tests {
             (FROM_STR, "demo::Name"),
             (DISPLAY, "demo::Name"),
             (TRY_FROM_STR, "demo::Tag"),
+            (TRY_FROM_STR, "&demo::Label"),
             (FROM_BYTES, "demo::Blob"),
             (AS_REF_BYTES, "demo::Blob"),
             (FROM_BYTE_VEC, "demo::Chunk"),
@@ -1744,9 +1753,11 @@ mod tests {
             repo("store", vec![("blob", shared(ty(23))), ("chunk", ty(24))], Some(ty(23))),
             repo("chunk", Vec::new(), Some(ty(24))),
             repo("external", vec![("ext", ty(26))], Some(ty(26))),
+            repo("retag", vec![("label", shared(ty(20)))], None),
         ];
         let functions: Vec<&Function> = functions.iter().collect();
         let source = emit(&functions, &context).expect("the functions lower").source;
+        assert!(source.contains("self.inner.repo().retag(TryFrom::try_from(label.as_str()).map_err(runtime::error)?)"), "a reference that parses text itself is built without a borrow: {source}");
         assert!(source.contains("self.inner.repo().relabel(name.as_str().parse().map_err(runtime::error)?, &TryFrom::try_from(tag.as_str()).map_err(runtime::error)?, fallback.as_ref().map(|value| value.as_str().parse().map_err(runtime::error)).transpose()?).to_string()"), "{source}");
         assert!(source.contains("Ok(ffi::Vec::from_vec(AsRef::<[u8]>::as_ref(&self.inner.repo().store(&From::from(blob.as_slice()), From::from(chunk.as_slice().to_vec()))).to_vec()))"), "{source}");
         assert!(source.contains("Ok(ffi::Vec::from_vec(self.inner.repo().chunk().to_vec()))"), "a `Deref` to bytes: {source}");
