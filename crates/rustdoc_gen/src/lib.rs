@@ -274,7 +274,7 @@ pub fn analyze(request: &AnalyzeRequest) -> Result<AnalyzeResult, EngineError> {
     let decisions = manifest.as_ref().map_or(&[][..], |manifest| manifest.decisions.as_slice());
     let runtime = configuration.runtime_module.as_deref().unwrap_or("crate::runtime");
     let lowering = facade::Context { renderer: &renderer, classifier: &classifier, runtime, provenance: "" };
-    let (items, summary) = manifest::items(&functions, &renderer, |function, rebuilt| facade_verdict(function, &lowering, rebuilt), decisions);
+    let (items, summary) = manifest::items(&functions, &renderer, |function, kind| facade_verdict(function, &lowering, kind), decisions);
     let proposals = {
         let pending: std::collections::HashSet<&str> = items
             .iter()
@@ -308,7 +308,8 @@ pub fn analyze(request: &AnalyzeRequest) -> Result<AnalyzeResult, EngineError> {
     })
 }
 
-/// Emits the Rust facade for the manifest's ready automatic items and its items decided `rebuilt`.
+/// Emits the Rust facade for the manifest's ready automatic items and its items decided `rebuilt`
+/// or `collect`.
 ///
 /// # Errors
 ///
@@ -341,15 +342,15 @@ pub fn generate(request: &GenerateRequest) -> Result<GenerateResult, EngineError
     classifier.validate().map_err(|why| EngineError::new(ErrorCode::InvalidRequest, why))?;
     let runtime = configuration.runtime_module.as_deref().unwrap_or("crate::runtime");
     let lowering = facade::Context { renderer: &renderer, classifier: &classifier, runtime, provenance: "" };
-    let (items, _) = manifest::items(&functions, &renderer, |function, rebuilt| facade_verdict(function, &lowering, rebuilt), &manifest.decisions);
+    let (items, _) = manifest::items(&functions, &renderer, |function, kind| facade_verdict(function, &lowering, kind), &manifest.decisions);
     if items != manifest.items {
         return Err(EngineError::new(ErrorCode::StaleManifest, "the manifest items differ from a fresh analysis; run analyze first"));
     }
-    // Automatic items, and items decided `rebuilt` that lower, are generated.
-    let rebuilt = manifest::rebuilt(&manifest.decisions);
+    // Automatic items, and items decided `rebuilt` or `collect` that lower, are generated.
+    let generated = manifest::generated(&manifest.decisions);
     let ready: BTreeSet<&str> = items
         .iter()
-        .filter(|item| item.class == Class::Automatic && (item.status == Status::Ready || rebuilt.contains(item.signature_hash.as_str())))
+        .filter(|item| item.class == Class::Automatic && (item.status == Status::Ready || generated.contains_key(item.signature_hash.as_str())))
         .map(|item| item.path.as_str())
         .collect();
     let settled = manifest::settled(&manifest.decisions);
@@ -384,9 +385,13 @@ pub fn generate(request: &GenerateRequest) -> Result<GenerateResult, EngineError
     })
 }
 
-/// The emitter's verdict on `function`, as decided `rebuilt` or not.
-fn facade_verdict(function: &surface::Function, lowering: &facade::Context<'_>, rebuilt: bool) -> classify::Verdict {
-    if rebuilt { facade::rebuilt_verdict(function, lowering) } else { facade::verdict(function, lowering) }
+/// The emitter's verdict on `function`, as decided `rebuilt`, `collect` or neither.
+fn facade_verdict(function: &surface::Function, lowering: &facade::Context<'_>, kind: Option<DecisionKind>) -> classify::Verdict {
+    match kind {
+        Some(DecisionKind::Rebuilt) => facade::rebuilt_verdict(function, lowering),
+        Some(DecisionKind::Collect) => facade::collect_verdict(function, lowering),
+        _ => facade::verdict(function, lowering),
+    }
 }
 
 /// `worktree` joined with `folder`, which must be relative and stay inside it.
@@ -585,7 +590,7 @@ mod tests {
 
         let first = analyze(&request).expect("the surface is analyzed");
         assert!(first.manifest_updated);
-        assert_eq!((first.public_methods, first.public_free_functions), (21, 1));
+        assert_eq!((first.public_methods, first.public_free_functions), (23, 1));
         let manifest = Manifest::read(&manifest_path).expect("the manifest reads back");
         let state = |path: &str| manifest.items.iter().find(|item| item.path == path).map(|item| (item.class, item.status));
         assert_eq!(state("demo::Repo::name"), Some((Class::Automatic, Status::Ready)));
@@ -594,6 +599,8 @@ mod tests {
         for mirrored in mirrored {
             assert_eq!(state(mirrored), Some((Class::Automatic, Status::Ready)), "{mirrored} crosses through mirrors");
         }
+        assert_eq!(state("demo::Repo::history"), Some((Class::Automatic, Status::Ready)), "a Vec crosses as its items");
+        assert_eq!(state("demo::Repo::branches"), Some((Class::Decision, Status::Unresolved)), "an iterator waits for a `collect` decision");
         assert_eq!(state("demo::Repo::rename"), Some((Class::Decision, Status::Unresolved)));
         assert_eq!(state("demo::Repo::find"), Some((Class::Decision, Status::Unresolved)));
         assert_eq!(state("demo::Item::id"), Some((Class::Decision, Status::Unresolved)));
@@ -673,6 +680,14 @@ mod inner {
 
         pub fn retarget(&self, target: crate::Target) {
             let _ = target;
+        }
+
+        pub fn branches(&self) -> impl Iterator<Item = String> {
+            std::iter::once(String::from("main"))
+        }
+
+        pub fn history(&self) -> Vec<crate::stats::Stats> {
+            Vec::new()
         }
 
         #[deprecated]
@@ -837,6 +852,10 @@ pub fn open(path: impl AsRef<std::path::Path>) -> Result<Repo, std::io::Error> {
         assert_eq!(refresh.reasons, ["mut_handle: &mut self on a keyed handle loses its changes"], "undecided, it loses its changes");
         let decision = Decision { path: refresh.path.clone(), signature_hash: refresh.signature_hash.clone(), kind: DecisionKind::Rebuilt, details: BTreeMap::new() };
         manifest.decisions.push(decision);
+        let branches = manifest.items.iter().find(|item| item.path == "demo::Repo::branches").expect("the iterator is listed");
+        assert_eq!(branches.reasons, ["iterator: impl core::iter::traits::iterator::Iterator<Item = alloc::string::String>"], "undecided, an iterator waits");
+        let decision = Decision { path: branches.path.clone(), signature_hash: branches.signature_hash.clone(), kind: DecisionKind::Collect, details: BTreeMap::new() };
+        manifest.decisions.push(decision);
         manifest.write(&manifest_path).expect("the manifest can be written");
         analyze(&analysis).expect("the decision is analyzed");
         let request = GenerateRequest {
@@ -851,7 +870,7 @@ pub fn open(path: impl AsRef<std::path::Path>) -> Result<Repo, std::io::Error> {
 
         let generated = generate(&request).expect("the facade is generated");
         assert!(generated.written);
-        assert_eq!((generated.emitted, generated.pending), (17, 4), "demo::open, thirteen Repo methods, two keyless Config methods (one decided `rebuilt`) and a constructor from Config; four items await decisions");
+        assert_eq!((generated.emitted, generated.pending), (19, 4), "demo::open, fifteen Repo methods (one decided `collect`), two keyless Config methods (one decided `rebuilt`) and a constructor from Config; four items await decisions");
         let source = fs::read_to_string(&generated.rust_module).expect("the facade reads back");
         assert!(source.contains("pub enum ModeMode {") && source.contains("pub enum Event {"), "mirrors of a fieldless and a data enum: {source}");
         assert!(source.contains("pub struct StatsStats {") && source.contains("fn from_stats_stats("), "a record both ways: {source}");
@@ -865,6 +884,9 @@ pub fn open(path: impl AsRef<std::path::Path>) -> Result<Repo, std::io::Error> {
         assert!(source.contains("        Target::Named(field0) => demo::Target::Named(field0.as_str().parse().map_err(runtime::error)?),\n"), "a payload that parses: {source}");
         assert!(source.contains("    pub fn config_depth(&self) -> ffi::Result<u32, runtime::Error> {\n        finish(|| {\n            let repo = &self.inner.repo();\n            let config = repo.config();\n            Ok(config.depth())\n"), "a keyless method rebuilds from the handle alone: {source}");
         assert!(source.contains("names.as_slice().iter().map(|value| value.as_str()).collect::<Vec<_>>()"), "an iterable crosses as a slice: {source}");
+        assert!(source.contains("Ok(ffi::Vec::from_vec(self.inner.repo().branches().map(|item| ffi::String::from_string(item.to_string())).collect()))"), "a collected iterator: {source}");
+        assert!(source.contains("Ok(ffi::Vec::from_vec(self.inner.repo().history().into_iter().map(|item| Ok::<_, runtime::Error>(to_stats_stats(&item)?)).collect::<Result<Vec<_>, _>>()?))"), "a Vec of records: {source}");
+        assert!(source.contains("        .register(builtins_vec!(StatsStats))\n"), "and the helpers of its element type: {source}");
         assert!(!generate(&request).expect("the facade is generated again").written, "regenerating changes nothing");
         assert!(cargo(&["test", "--offline", "-p", "facade"]), "the generated facade builds and registers with an inventory");
         let clippy = std::process::Command::new("cargo")
@@ -876,7 +898,7 @@ pub fn open(path: impl AsRef<std::path::Path>) -> Result<Repo, std::io::Error> {
         assert!(clippy.success(), "the generated facade passes clippy");
 
         let mut manifest = Manifest::read(&manifest_path).expect("the manifest reads back");
-        let rebuilt = std::mem::take(&mut manifest.decisions);
+        let generated = std::mem::take(&mut manifest.decisions);
         manifest.decisions = manifest
             .items
             .iter()
@@ -884,7 +906,7 @@ pub fn open(path: impl AsRef<std::path::Path>) -> Result<Repo, std::io::Error> {
             .map(|item| Decision { path: item.path.clone(), signature_hash: item.signature_hash.clone(), kind: DecisionKind::Exclude, details: BTreeMap::new() })
             .collect();
         manifest.decisions[0].kind = DecisionKind::Handle;
-        manifest.decisions.extend(rebuilt);
+        manifest.decisions.extend(generated);
         manifest.write(&manifest_path).expect("the manifest can be written");
         assert!(!analyze(&analysis).expect("the decisions are analyzed").summary.ready, "a handle decision is not generated yet");
         assert_eq!(generate(&complete).unwrap_err().code, ErrorCode::NotReady, "the handle decision is pending");
@@ -893,7 +915,7 @@ pub fn open(path: impl AsRef<std::path::Path>) -> Result<Repo, std::io::Error> {
         manifest.write(&manifest_path).expect("the manifest can be written");
         assert!(analyze(&analysis).expect("the decisions are analyzed again").summary.ready, "exclude and manual need no generated code");
         let decided = generate(&complete).expect("a ready manifest generates without partial");
-        assert_eq!((decided.emitted, decided.pending, decided.written), (17, 0, false), "the decided items stay out of the facade");
+        assert_eq!((decided.emitted, decided.pending, decided.written), (19, 0, false), "the decided items stay out of the facade");
 
         let mut manifest = Manifest::read(&manifest_path).expect("the manifest reads back");
         manifest.items[0].status = Status::Excluded;

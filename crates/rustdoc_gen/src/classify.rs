@@ -125,7 +125,8 @@ const INTO: &str = "core::convert::Into";
 /// See [`INTO`].
 const TRY_INTO: &str = "core::convert::TryInto";
 
-/// The iterator trait; results implementing it wait for a cursor template.
+/// The iterator trait: an `impl Iterator` result decided `collect` is collected into a `Vec`, and
+/// the other results implementing it wait for a cursor template.
 const ITERATOR: &str = "core::iter::traits::iterator::Iterator";
 /// `IntoIterator`, whose parameters cross as slices of their items.
 const INTO_ITERATOR: &str = "core::iter::traits::collect::IntoIterator";
@@ -176,7 +177,7 @@ pub enum Category {
     Borrowed,
     /// A generic parameter or result without a conversion.
     Generic,
-    /// A result implementing `Iterator`, until a cursor template exists.
+    /// A result implementing `Iterator`; a `collect` decision collects an `impl Iterator`.
     Iterator,
     /// A callback parameter.
     Callback,
@@ -1154,6 +1155,42 @@ impl<'a> Classifier<'a> {
         })
     }
 
+    /// The `Item` of an `Iterator<Item = ...>` among `bounds`: what a `collect` decision collects.
+    #[must_use]
+    pub fn collected_item<'b>(&self, bounds: &'b [GenericBound]) -> Option<&'b Type> {
+        bounds.iter().find_map(|bound| match bound {
+            GenericBound::TraitBound { trait_, .. } if self.renderer.path(trait_) == ITERATOR => iterator_item(trait_),
+            _ => None,
+        })
+    }
+
+    /// The verdict for an item decided `collect`: an `impl Iterator<Item = T>` result, also inside
+    /// an `Option` or a `Result`, is collected into a `Vec<T>`, which crosses when `T` does, so the
+    /// result is classified by `T`. A named iterator type keeps its blocker.
+    #[must_use]
+    pub fn classify_collected(&self, function: &Function) -> Verdict {
+        let mut collected = function.clone();
+        collected.output = function.output.as_ref().map(|output| self.collected(output));
+        self.classify(&collected)
+    }
+
+    /// `ty` with an `impl Iterator<Item = T>`, also inside an `Option` or a `Result`, replaced by `T`.
+    fn collected(&self, ty: &Type) -> Type {
+        match ty {
+            Type::ImplTrait(bounds) => self.collected_item(bounds).cloned().unwrap_or_else(|| ty.clone()),
+            Type::ResolvedPath(path) if matches!(self.renderer.path(path).as_str(), "core::option::Option" | "core::result::Result") => {
+                let mut path = path.clone();
+                if let Some(GenericArgs::AngleBracketed { args, .. }) = path.args.as_deref_mut()
+                    && let Some(GenericArg::Type(first)) = args.first_mut()
+                {
+                    *first = self.collected(first);
+                }
+                Type::ResolvedPath(path)
+            }
+            _ => ty.clone(),
+        }
+    }
+
     /// The first specific category among the bounds, otherwise `fallback`.
     fn bounds_category(&self, bounds: &[GenericBound], fallback: Category) -> Category {
         bounds
@@ -1377,7 +1414,7 @@ fn trait_category(canonical: &str) -> Option<Category> {
     }
 }
 
-/// The `Item` type of an `IntoIterator<Item = ...>` bound.
+/// The `Item` type of an `Iterator<Item = ...>` or `IntoIterator<Item = ...>` bound.
 fn iterator_item(trait_: &Path) -> Option<&Type> {
     let Some(GenericArgs::AngleBracketed { constraints, .. }) = trait_.args.as_deref() else { return None };
     constraints.iter().find_map(|constraint| match &constraint.binding {

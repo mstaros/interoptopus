@@ -1,7 +1,7 @@
 //! The per-target manifest (design section "Manifest"). People write the configuration and the
 //! decisions; `analyze` rewrites the items and the summary.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -120,6 +120,9 @@ pub enum DecisionKind {
     /// Generate a `&mut self` method of a keyed type on the value rebuilt for the call; the
     /// call's in-memory changes end with it.
     Rebuilt,
+    /// Generate an item whose `impl Iterator` result is collected into a `Vec`, for an iterator
+    /// that ends.
+    Collect,
 }
 
 /// A decision for one item, valid while its signature hash matches.
@@ -280,27 +283,37 @@ pub fn settled(decisions: &[Decision]) -> HashSet<&str> {
         .collect()
 }
 
-/// The signature hashes decided `rebuilt`: items generated on the value rebuilt for the call.
+/// The signature hashes decided with a kind the engine generates, `rebuilt` or `collect`, and that
+/// kind.
 #[must_use]
-pub fn rebuilt(decisions: &[Decision]) -> HashSet<&str> {
-    decisions.iter().filter(|decision| decision.kind == DecisionKind::Rebuilt).map(|decision| decision.signature_hash.as_str()).collect()
+pub fn generated(decisions: &[Decision]) -> HashMap<&str, DecisionKind> {
+    decisions
+        .iter()
+        .filter(|decision| matches!(decision.kind, DecisionKind::Rebuilt | DecisionKind::Collect))
+        .map(|decision| (decision.signature_hash.as_str(), decision.kind))
+        .collect()
 }
 
 /// Classifies the surface, sets each item's status from the decisions and counts the result;
-/// `verdict` learns whether the item is decided `rebuilt`.
+/// `verdict` learns the kind of a decision the engine generates (`rebuilt` or `collect`).
 #[must_use]
-pub fn items(functions: &[Function], renderer: &Renderer, verdict: impl Fn(&Function, bool) -> Verdict, decisions: &[Decision]) -> (Vec<Item>, Summary) {
+pub fn items(
+    functions: &[Function],
+    renderer: &Renderer,
+    verdict: impl Fn(&Function, Option<DecisionKind>) -> Verdict,
+    decisions: &[Decision],
+) -> (Vec<Item>, Summary) {
     let decided: HashSet<&str> = decisions.iter().map(|decision| decision.signature_hash.as_str()).collect();
     let decided_paths: HashSet<&str> = decisions.iter().map(|decision| decision.path.as_str()).collect();
     let settled = settled(decisions);
-    let rebuilt_hashes = rebuilt(decisions);
+    let generated_kinds = generated(decisions);
     let mut unsupported = 0;
     let mut summary = Summary::default();
     let mut items = Vec::with_capacity(functions.len());
     for function in functions {
         let signature = function.signature(renderer);
         let signature_hash = signature_hash(&function.path, &signature);
-        let verdict = verdict(function, rebuilt_hashes.contains(signature_hash.as_str()));
+        let verdict = verdict(function, generated_kinds.get(signature_hash.as_str()).copied());
         let status = match verdict.class {
             _ if decided.contains(signature_hash.as_str()) => Status::Resolved,
             Class::Automatic => Status::Ready,
@@ -316,7 +329,7 @@ pub fn items(functions: &[Function], renderer: &Renderer, verdict: impl Fn(&Func
             Status::Unresolved => summary.unresolved += 1,
             Status::Stale => summary.stale += 1,
         }
-        let generated = rebuilt_hashes.contains(signature_hash.as_str()) && verdict.class == Class::Automatic;
+        let generated = generated_kinds.contains_key(signature_hash.as_str()) && verdict.class == Class::Automatic;
         if status == Status::Resolved && !settled.contains(signature_hash.as_str()) && !generated {
             unsupported += 1;
         }
@@ -422,15 +435,17 @@ mod tests {
         for kind in [DecisionKind::Handle, DecisionKind::Record, DecisionKind::Convert] {
             assert_eq!(ready(kind), (false, 0), "{kind:?} is not generated yet");
         }
-        let rebuilt = |lowers: bool| {
-            let decisions = [Decision { kind: DecisionKind::Rebuilt, ..decision("demo::Repo::decided", hash.clone()) }];
-            let verdict = |function: &Function, rebuilt: bool| {
-                if rebuilt && lowers { Verdict { class: Class::Automatic, reasons: Vec::new() } } else { classifier.classify(function) }
+        let ready_when = |kind: DecisionKind, lowers: bool| {
+            let decisions = [Decision { kind, ..decision("demo::Repo::decided", hash.clone()) }];
+            let verdict = |function: &Function, decided: Option<DecisionKind>| {
+                if decided == Some(kind) && lowers { Verdict { class: Class::Automatic, reasons: Vec::new() } } else { classifier.classify(function) }
             };
             items(&functions, &renderer, verdict, &decisions).1.ready
         };
-        assert!(rebuilt(true), "a rebuilt item that lowers is generated");
-        assert!(!rebuilt(false), "a rebuilt item that does not lower stays pending");
+        for kind in [DecisionKind::Rebuilt, DecisionKind::Collect] {
+            assert!(ready_when(kind, true), "an item decided {kind:?} that lowers is generated");
+            assert!(!ready_when(kind, false), "an item decided {kind:?} that does not lower stays pending");
+        }
     }
 
     #[test]

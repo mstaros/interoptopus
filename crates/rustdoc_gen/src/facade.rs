@@ -44,6 +44,14 @@
 //! form and is collected into a `Vec` before the call; items cross as primitives, text, parsed
 //! text and custom values, not as nested slices or mirrors.
 //!
+//! A `Vec<T>` result crosses as an `ffi::Vec` of `T`'s FFI form, each item converted on its own,
+//! and so does the `impl Iterator<Item = T>` result, also inside an `Option` or a `Result`, of an
+//! item decided `collect`, collected before the call returns. A conversion that can fail, such as
+//! an item that is itself a `Result`, ends the call at the first item that fails. `register` adds
+//! the `builtins_vec!` helpers of the mirrors these `ffi::Vec`s carry, which is why mirrors derive
+//! `Clone`; the target's inventory registers those of std element types, such as `ffi::String`
+//! and `ffi::Vec<u8>`, which its own exports share.
+//!
 //! `verdict` runs the emitter on every function the classifier passes and turns what it does not
 //! generate into a decision, so an automatic item is a generated one by construction.
 //!
@@ -146,6 +154,8 @@ struct Member {
     source: String,
     /// The mirrors it uses, with the conversion each needs.
     mirrors: BTreeSet<(String, Flow)>,
+    /// The FFI element types of its `ffi::Vec` results.
+    vectors: BTreeSet<String>,
 }
 
 /// A function's fate.
@@ -218,7 +228,7 @@ impl Input {
 ///
 /// The path of a function the emitter cannot lower, with the reason.
 pub fn emit(functions: &[&Function], context: &Context<'_>) -> Result<Facade, (String, String)> {
-    let emitter = Emitter { context, service: service_name(context.classifier), used: RefCell::default() };
+    let emitter = Emitter { context, service: service_name(context.classifier), used: RefCell::default(), vectors: RefCell::default() };
     let mut kept: BTreeMap<(Place, String), Member> = BTreeMap::new();
     let mut dropped = Vec::new();
     for function in functions {
@@ -261,7 +271,7 @@ pub fn verdict(function: &Function, context: &Context<'_>) -> Verdict {
 #[must_use]
 pub fn rebuilt_verdict(function: &Function, context: &Context<'_>) -> Verdict {
     let mut verdict = context.classifier.classify(function);
-    let emitter = Emitter { context, service: service_name(context.classifier), used: RefCell::default() };
+    let emitter = Emitter { context, service: service_name(context.classifier), used: RefCell::default(), vectors: RefCell::default() };
     if function.receiver == Receiver::Exclusive && emitter.keyed_owner(function).is_some() {
         verdict.reasons.retain(|reason| reason.category != crate::classify::Category::MutHandle);
         if verdict.class == Class::Decision && verdict.reasons.is_empty() {
@@ -271,12 +281,20 @@ pub fn rebuilt_verdict(function: &Function, context: &Context<'_>) -> Verdict {
     lowered(function, context, verdict)
 }
 
+/// The verdict for an item decided `collect`: its `impl Iterator` result is collected into a
+/// `Vec`, so it is classified by its items (see [`Classifier::classify_collected`]); its other
+/// blockers remain.
+#[must_use]
+pub fn collect_verdict(function: &Function, context: &Context<'_>) -> Verdict {
+    lowered(function, context, context.classifier.classify_collected(function))
+}
+
 /// `verdict` after the emitter: an automatic function it does not generate becomes a decision.
 fn lowered(function: &Function, context: &Context<'_>, verdict: Verdict) -> Verdict {
     if verdict.class != Class::Automatic {
         return verdict;
     }
-    let emitter = Emitter { context, service: service_name(context.classifier), used: RefCell::default() };
+    let emitter = Emitter { context, service: service_name(context.classifier), used: RefCell::default(), vectors: RefCell::default() };
     match emitter.member(function) {
         Ok(Planned::Member(_)) => verdict,
         Ok(Planned::Dropped(why)) | Err(why) => Verdict { class: Class::Decision, reasons: vec![Reason::lowering(why)] },
@@ -298,6 +316,8 @@ struct Emitter<'a> {
     service: String,
     /// The mirrors the member being lowered uses.
     used: RefCell<BTreeSet<(String, Flow)>>,
+    /// The FFI element types of the `ffi::Vec` results of the member being lowered.
+    vectors: RefCell<BTreeSet<String>>,
 }
 
 impl Emitter<'_> {
@@ -336,6 +356,7 @@ impl Emitter<'_> {
     fn member(&self, function: &Function) -> Result<Planned, String> {
         let function = &self.context.classifier.transparent(function);
         self.used.borrow_mut().clear();
+        self.vectors.borrow_mut().clear();
         let owner = self.handle_owner(function);
         // Associated functions of a keyed type have no key to rebuild from; they are free functions.
         let keyed_owner = self.keyed_owner(function).filter(|_| function.receiver != Receiver::None);
@@ -425,7 +446,8 @@ impl Emitter<'_> {
         }
         let source = wrapper(place, &function.path, &name, &parameters, &returns, &setup, &value);
         let mirrors = self.used.take();
-        Ok(Planned::Member(Box::new(Member { place, name, rank, path: function.path.clone(), source, mirrors })))
+        let vectors = self.vectors.take();
+        Ok(Planned::Member(Box::new(Member { place, name, rank, path: function.path.clone(), source, mirrors, vectors })))
     }
 
     fn input(&self, function: &Function, ty: &Type) -> Result<Input, String> {
@@ -549,11 +571,17 @@ impl Emitter<'_> {
                     },
                     ("core::result::Result", [ok, _]) => self.output(function, ok, &format!("{value}.map_err(runtime::error)?")),
                     ("alloc::vec::Vec", [Type::Primitive(byte)]) if byte == "u8" => Ok(bytes_out(value)),
+                    ("alloc::vec::Vec", [item]) => self.collected_output(function, item, &format!("{value}.into_iter()"), Some(value)),
                     ("alloc::boxed::Box", [inner]) => self.output(function, inner, &format!("(*{value})")),
                     ("alloc::borrow::Cow", [inner]) => self.output(function, &borrowed(inner), &format!("(&*{value})")),
                     _ => self.mapped_output(&canonical, value, ty),
                 }
             }
+            // Reached for items decided `collect` only: the classifier blocks other iterators.
+            Type::ImplTrait(bounds) => match self.context.classifier.collected_item(bounds) {
+                Some(item) => self.collected_output(function, item, value, None),
+                None => Err(self.rendered(ty)),
+            },
             _ => Err(self.rendered(ty)),
         }
     }
@@ -677,6 +705,23 @@ impl Emitter<'_> {
             format!("{value}.map(|value| Ok::<_, runtime::Error>({convert})).transpose()?")
         };
         Ok((format!("ffi::Option<{ffi}>"), format!("ffi::Option::from({mapped})")))
+    }
+
+    /// A `Vec` result, or an iterator collected into one, as an `ffi::Vec` of its items' FFI form:
+    /// `items` iterates over the values, and `whole` is the `Vec` itself, passed on unchanged when
+    /// its items cross as they are. A conversion that can fail ends the call at the first item
+    /// that fails.
+    fn collected_output(&self, function: &Function, item: &Type, items: &str, whole: Option<&str>) -> Result<(String, String), String> {
+        let (ffi, convert) = self.output(function, item, "item")?;
+        self.vectors.borrow_mut().insert(ffi.clone());
+        let collected = if convert == "item" {
+            whole.map_or_else(|| format!("{items}.collect()"), str::to_owned)
+        } else if convert.contains('?') {
+            format!("{items}.map(|item| Ok::<_, runtime::Error>({convert})).collect::<Result<Vec<_>, _>>()?")
+        } else {
+            format!("{items}.map(|item| {convert}).collect()")
+        };
+        Ok((format!("ffi::Vec<{ffi}>"), format!("ffi::Vec::from_vec({collected})")))
     }
 
     /// The `Ok` type of a `Result`.
@@ -932,6 +977,7 @@ impl Emitter<'_> {
         let _ = writeln!(out);
         let _ = writeln!(out, "/// Mirrors `{path}`.");
         let _ = writeln!(out, "#[ffi]");
+        let _ = writeln!(out, "#[derive(Clone)]");
         let _ = writeln!(out, "pub struct {name} {{");
         for field in fields {
             let _ = writeln!(out, "{field}");
@@ -994,6 +1040,7 @@ impl Emitter<'_> {
         let _ = writeln!(out);
         let _ = writeln!(out, "/// Mirrors `{path}`.");
         let _ = writeln!(out, "#[ffi]");
+        let _ = writeln!(out, "#[derive(Clone)]");
         let _ = writeln!(out, "pub enum {name} {{");
         for variant in &def.variants {
             let discriminant = variant.discriminant.as_ref().map_or_else(String::new, |value| format!(" = {value}"));
@@ -1163,7 +1210,14 @@ impl Emitter<'_> {
         );
         let _ = writeln!(out);
         let _ = writeln!(out, "use interoptopus::inventory::RustInventory;");
+        // An `ffi::Vec` of a mirror needs helpers only this module can register.
+        let mirrors: BTreeSet<String> =
+            members.iter().flat_map(|member| member.mirrors.iter()).filter_map(|(canonical, _)| self.mirror_name(canonical).ok()).collect();
+        let vectors: BTreeSet<&String> = members.iter().flat_map(|member| member.vectors.iter()).filter(|element| mirrors.contains(*element)).collect();
         let mut imports = vec!["ffi"];
+        if !vectors.is_empty() {
+            imports.insert(0, "builtins_vec");
+        }
         if !free.is_empty() {
             imports.push("function");
         }
@@ -1212,6 +1266,9 @@ impl Emitter<'_> {
         let _ = writeln!(out, "/// Registers the generated items with an inventory.");
         let _ = writeln!(out, "pub fn register(inventory: &mut RustInventory) -> &mut RustInventory {{");
         let _ = writeln!(out, "    inventory");
+        for element in &vectors {
+            let _ = writeln!(out, "        .register(builtins_vec!({element}))");
+        }
         if !service.is_empty() {
             let _ = writeln!(out, "        .register(service!({}))", self.service);
         }
@@ -1487,6 +1544,7 @@ mod tests {
             (27, "demo::Head"),
             (28, "core::iter::traits::collect::IntoIterator"),
             (29, "core::convert::Into"),
+            (30, "core::iter::traits::iterator::Iterator"),
         ])
     }
 
@@ -1615,7 +1673,7 @@ mod tests {
         let set_mode = function("demo::Repo::set_mode", Some("demo::Repo"), Receiver::Shared, vec![("mode", ty(16)), ("fallback", generic(8, vec![ty(16)]))], None);
         let event = function("demo::Repo::last_event", Some("demo::Repo"), Receiver::Shared, Vec::new(), Some(generic(8, vec![ty(17)])));
         let source = facade_with(&[mode, set_mode, event], &enums()).source;
-        assert!(source.contains("/// Mirrors `demo::Mode`.\n#[ffi]\npub enum Mode {\n    Read,\n    Write = 5,\n    Admin,\n}\n"), "{source}");
+        assert!(source.contains("/// Mirrors `demo::Mode`.\n#[ffi]\n#[derive(Clone)]\npub enum Mode {\n    Read,\n    Write = 5,\n    Admin,\n}\n"), "{source}");
         assert!(source.contains("fn to_mode(value: &demo::Mode) -> Result<Mode, runtime::Error> {\n    Ok(match value {\n        demo::Mode::Read => Mode::Read,\n        demo::Mode::Write => Mode::Write,\n        demo::Mode::Admin() => Mode::Admin,\n    })\n}\n"), "{source}");
         assert!(source.contains("fn from_mode(value: &Mode) -> demo::Mode {\n    match value {\n        Mode::Read => demo::Mode::Read,\n        Mode::Write => demo::Mode::Write,\n        Mode::Admin => demo::Mode::Admin(),\n    }\n}\n"), "{source}");
         assert!(source.contains("pub enum Event {\n    Opened(u32, ffi::String),\n    Renamed { from_: ffi::String, type_: Mode },\n    Closed,\n}\n"), "`from` is a name interoptopus forbids: {source}");
@@ -1635,7 +1693,7 @@ mod tests {
         let set_stats = function("demo::Repo::set_stats", Some("demo::Repo"), Receiver::Shared, vec![("stats", ty(19))], None);
         let label = function("demo::Repo::label", Some("demo::Repo"), Receiver::Shared, Vec::new(), Some(ty(20)));
         let source = facade_with(&[stats, set_stats, label], &records()).source;
-        assert!(source.contains("/// Mirrors `demo::Stats`.\n#[ffi]\npub struct Stats {\n    pub count: u32,\n    pub type_: ffi::String,\n    pub mode: Mode,\n    pub note: ffi::Option<ffi::String>,\n}\n"), "{source}");
+        assert!(source.contains("/// Mirrors `demo::Stats`.\n#[ffi]\n#[derive(Clone)]\npub struct Stats {\n    pub count: u32,\n    pub type_: ffi::String,\n    pub mode: Mode,\n    pub note: ffi::Option<ffi::String>,\n}\n"), "{source}");
         assert!(source.contains("fn to_stats(value: &demo::Stats) -> Result<Stats, runtime::Error> {\n    let demo::Stats { count: field0, r#type: field1, mode: field2, note: field3, .. } = value;\n    Ok(Stats { count: *field0, type_: ffi::String::from_string(field1.to_string()), mode: to_mode(&field2)?, note: ffi::Option::from(field3.as_ref().map(|value| ffi::String::from_string(value.to_string()))) })\n}\n"), "{source}");
         assert!(source.contains("fn from_stats(value: &Stats) -> demo::Stats {\n    let Stats { count: field0, type_: field1, mode: field2, note: field3 } = value;\n    demo::Stats { count: *field0, r#type: field1.as_str().to_owned(), mode: from_mode(field2), note: field3.as_ref().map(|value| value.as_str().to_owned()) }\n}\n"), "{source}");
         assert!(source.contains("pub struct Label {\n    pub text: ffi::String,\n    pub data: ffi::Vec<u8>,\n}\n"), "{source}");
@@ -1768,8 +1826,18 @@ mod tests {
 
     /// `impl IntoIterator<Item = item>`.
     fn iterable(item: Type) -> Type {
+        with_item(28, "IntoIterator", item)
+    }
+
+    /// `impl Iterator<Item = item>`.
+    fn iterator(item: Type) -> Type {
+        with_item(30, "Iterator", item)
+    }
+
+    /// `impl Trait<Item = item>`, for the trait the path id `id` names.
+    fn with_item(id: u32, name: &str, item: Type) -> Type {
         let constraint = AssocItemConstraint { name: "Item".to_owned(), args: None, binding: AssocItemConstraintKind::Equality(Term::Type(item)) };
-        let trait_ = Path { path: "IntoIterator".to_owned(), id: Id(28), args: Some(Box::new(GenericArgs::AngleBracketed { args: Vec::new(), constraints: vec![constraint] })) };
+        let trait_ = Path { path: name.to_owned(), id: Id(id), args: Some(Box::new(GenericArgs::AngleBracketed { args: Vec::new(), constraints: vec![constraint] })) };
         Type::ImplTrait(vec![GenericBound::TraitBound { trait_, generic_params: Vec::new(), modifier: TraitBoundModifier::None }])
     }
 
@@ -1790,6 +1858,36 @@ mod tests {
         let verdict = verdict(&add, &context);
         assert_eq!(verdict.class, Class::Decision, "byte items would cross as nested slices");
         assert!(verdict.reasons[0].detail.contains("an iterable of"), "{:?}", verdict.reasons);
+    }
+
+    #[test]
+    fn vecs_and_collected_iterators_cross_as_ffi_vecs() {
+        let renderer = renderer();
+        let types = types();
+        let implementations = records();
+        let classifier = Classifier::new(&renderer, &types, &[], &implementations);
+        let context = Context { renderer: &renderer, classifier: &classifier, runtime: "crate::runtime", provenance: "test" };
+        let names = function("demo::Repo::names", Some("demo::Repo"), Receiver::Shared, Vec::new(), Some(generic(15, vec![ty(1)])));
+        let history = function("demo::Repo::history", Some("demo::Repo"), Receiver::Shared, Vec::new(), Some(generic(15, vec![ty(19)])));
+        let parents = function("demo::Commit::parents", Some("demo::Commit"), Receiver::Shared, Vec::new(), Some(iterator(ty(12))));
+        let results = iterator(generic(3, vec![Type::Primitive("u32".to_owned()), ty(5)]));
+        let sizes = function("demo::Repo::sizes", Some("demo::Repo"), Receiver::Shared, Vec::new(), Some(generic(3, vec![generic(8, vec![results]), ty(5)])));
+        let chunks = function("demo::Repo::chunks", Some("demo::Repo"), Receiver::Shared, Vec::new(), Some(iterator(ty(24))));
+        assert_eq!(verdict(&names, &context).class, Class::Automatic, "a Vec needs no decision");
+        assert_eq!(verdict(&parents, &context).reasons[0].category, crate::classify::Category::Iterator, "undecided, an iterator waits");
+        for collected in [&parents, &sizes] {
+            assert_eq!(collect_verdict(collected, &context).class, Class::Automatic, "{} is collected", collected.path);
+        }
+        assert_eq!(collect_verdict(&chunks, &context).reasons[0].category, crate::classify::Category::Unmapped, "items that do not cross keep it blocked");
+        let source = emit(&[&names, &history, &parents, &sizes], &context).expect("the functions lower").source;
+        assert!(source.contains("    pub fn names(&self) -> ffi::Result<ffi::Vec<ffi::String>, runtime::Error> {\n"), "{source}");
+        assert!(source.contains("Ok(ffi::Vec::from_vec(self.inner.repo().names().into_iter().map(|item| ffi::String::from_string(item.to_string())).collect()))"), "{source}");
+        assert!(source.contains("Ok(ffi::Vec::from_vec(self.inner.repo().history().into_iter().map(|item| Ok::<_, runtime::Error>(to_stats(&item)?)).collect::<Result<Vec<_>, _>>()?))"), "a conversion that can fail stops at the first failure: {source}");
+        assert!(source.contains("Ok(ffi::Vec::from_vec(commit_key.parents().map(|item| runtime::oid_out(&(item).id)).collect()))"), "a collected iterator returns keys: {source}");
+        assert!(source.contains("    pub fn sizes(&self) -> ffi::Result<ffi::Option<ffi::Vec<u32>>, runtime::Error> {\n"), "{source}");
+        assert!(source.contains("ffi::Vec::from_vec(value.map(|item| Ok::<_, runtime::Error>(item.map_err(runtime::error)?)).collect::<Result<Vec<_>, _>>()?)"), "items that are results: {source}");
+        assert!(source.contains("use interoptopus::{builtins_vec, ffi, service};\n"), "{source}");
+        assert!(source.contains("    inventory\n        .register(builtins_vec!(Stats))\n        .register(service!(Repo))\n"), "a Vec of a mirror registers its helpers, and std element types are the target's: {source}");
     }
 
     #[test]
@@ -1832,9 +1930,9 @@ mod tests {
         let implementations = Implementations::default();
         let classifier = Classifier::new(&renderer, &types, &[], &implementations);
         let context = Context { renderer: &renderer, classifier: &classifier, runtime: "crate::runtime", provenance: "test" };
-        let names = function("demo::Repo::names", Some("demo::Repo"), Receiver::Shared, Vec::new(), Some(generic(15, vec![ty(1)])));
-        assert_eq!(classifier.classify(&names).class, Class::Automatic, "the classifier passes a Vec of text");
-        let verdict = verdict(&names, &context);
+        let heads = function("demo::Repo::heads", Some("demo::Repo"), Receiver::Shared, Vec::new(), Some(generic(15, vec![ty(27)])));
+        assert_eq!(classifier.classify(&heads).class, Class::Automatic, "the classifier passes a Vec of a keyless type");
+        let verdict = verdict(&heads, &context);
         assert_eq!(verdict.class, Class::Decision);
         assert_eq!(verdict.reasons[0].category, crate::classify::Category::Lowering);
         let git_dir = function("demo::Repo::git_dir", Some("demo::Repo"), Receiver::Shared, Vec::new(), Some(shared(ty(2))));
