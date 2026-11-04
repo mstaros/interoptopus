@@ -74,7 +74,9 @@ pub struct Keyed {
     /// Whether `rebuild` returns a `Result`.
     #[serde(default)]
     pub fallible: bool,
-    /// Rust expression producing the key from `{value}`; absent for a keyless type.
+    /// Rust expression producing the key from `{value}`, which it names exactly once: `{value}`
+    /// stands for the expression producing the value, often the wrapped call itself. Absent for a
+    /// keyless type.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key_of: Option<String>,
     /// The type's path as the type map writes it; set when the type map is resolved.
@@ -779,8 +781,9 @@ impl<'a> Classifier<'a> {
     }
 
     /// Checks the type map's keyed mappings: their placeholders, a handle behind `handle`, and a
-    /// primitive key or one with a mapping that is neither a handle nor keyed (E4). A keyless entry
-    /// has neither `key` nor `key_of`, and its `rebuild` has no `{key}`.
+    /// primitive key or one with a mapping that is neither a handle nor keyed (E4), and a `key_of`
+    /// that names `{value}` exactly once. A keyless entry has neither `key` nor `key_of`, and its
+    /// `rebuild` has no `{key}`.
     ///
     /// # Errors
     ///
@@ -795,8 +798,8 @@ impl<'a> Classifier<'a> {
                 Some("`rebuild` needs `{handle}` and `{key}`".to_owned())
             } else if keyless && keyed.key_of.is_some() {
                 Some("`key_of` needs `key`".to_owned())
-            } else if !keyless && !keyed.key_of.as_deref().is_some_and(|key_of| key_of.contains(VALUE_PLACEHOLDER)) {
-                Some("`key_of` needs `{value}`".to_owned())
+            } else if !keyless && keyed.key_of.as_deref().is_none_or(|key_of| key_of.matches(VALUE_PLACEHOLDER).count() != 1) {
+                Some("`key_of` needs `{value}` exactly once: it stands for the expression producing the value".to_owned())
             } else if self.types.get(&keyed.handle) != Some(&Mapping::Handle) {
                 Some(format!("`handle` names `{}`, which is not mapped as `handle`", keyed.handle))
             } else {
@@ -1700,6 +1703,20 @@ mod tests {
         overrides.insert("demo::Repo".to_owned(), Mapping::Bytes);
         let wrong_repo = Classifier::new(&renderer, &overrides, &[], &implementations).validate();
         assert!(wrong_repo.is_err_and(|why| why.contains("not mapped as `handle`")));
+        let with_key_of = |key_of: &str| {
+            let keyed = Keyed {
+                handle: "demo::Repo".to_owned(),
+                key: Some("u64".to_owned()),
+                rebuild: "{handle}.find({key})".to_owned(),
+                fallible: true,
+                key_of: Some(key_of.to_owned()),
+                name: "demo::Commit".to_owned(),
+            };
+            let overrides = BTreeMap::from([("demo::Repo".to_owned(), Mapping::Handle), ("demo::Commit".to_owned(), Mapping::Keyed(keyed))]);
+            Classifier::new(&renderer, &overrides, &[], &implementations).validate()
+        };
+        assert!(with_key_of("{value}.id.max({value}.id)").is_err_and(|why| why.contains("exactly once")), "a second use would evaluate the value twice");
+        assert!(with_key_of("7").is_err_and(|why| why.contains("exactly once")));
     }
 
     #[test]
